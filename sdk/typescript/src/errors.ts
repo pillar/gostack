@@ -3,6 +3,8 @@ export class GoStackError extends Error {
   readonly status: number;
   readonly requestId: string | undefined;
   readonly details: Record<string, unknown> | undefined;
+  /** From the Retry-After header of a 429/503 response, when present. */
+  retryAfterMs: number | undefined;
   constructor(
     code: string,
     message: string,
@@ -52,5 +54,21 @@ export function errorFromResponse(status: number, headers: Record<string, string
   }
   requestId = requestId ?? headers['x-request-id'];
   if (code === 'revision_conflict' && status === 409) return new RevisionConflictError(message, requestId, details);
-  return new GoStackError(code, message, status, requestId, details);
+  const err = new GoStackError(code, message, status, requestId, details);
+  const ra = Number(headers['retry-after']);
+  if (headers['retry-after'] && isFinite(ra) && ra >= 0) err.retryAfterMs = ra * 1000;
+  return err;
+}
+
+export type RedeemReason = 'invalid_code' | 'already_redeemed' | 'rate_limited' | 'other';
+
+/** Redeem failures: 400 invalid_code (unknown/expired/exhausted, deliberately indistinguishable), 409 already_redeemed, 429 rate_limited. */
+export class RedeemError extends GoStackError {
+  readonly reason: RedeemReason;
+  constructor(cause: GoStackError) {
+    super(cause.code, cause.message, cause.status, cause.requestId, cause.details);
+    this.name = 'RedeemError';
+    this.retryAfterMs = cause.retryAfterMs;
+    this.reason = cause.code === 'invalid_code' || cause.code === 'already_redeemed' || cause.code === 'rate_limited' ? cause.code : 'other';
+  }
 }

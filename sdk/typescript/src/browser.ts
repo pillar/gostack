@@ -1,3 +1,4 @@
+import type { SocketFactory } from './realtime.js';
 import type { KeyValueStorage, Lifecycle, Transport, TransportResponse } from './types.js';
 
 type FetchLike = (url: string, init: {
@@ -75,4 +76,32 @@ export function browserLifecycle(doc?: DocLike, win?: Listenable): Lifecycle {
     };
   };
   return { onHide: sub(false, 'pagehide'), onShow: sub(true, 'pageshow') };
+}
+
+interface WebSocketLike {
+  send(data: string): void;
+  close(code?: number, reason?: string): void;
+  onopen: (() => void) | null;
+  onmessage: ((ev: { data: unknown }) => void) | null;
+  onclose: ((ev: { code: number; reason: string }) => void) | null;
+  onerror: (() => void) | null;
+}
+
+/** Realtime socket factory over the browser (or any compatible) WebSocket constructor. */
+export function browserSocketFactory(ctor?: new (url: string) => WebSocketLike): SocketFactory {
+  return (url) => {
+    const C = ctor ?? (globalThis as unknown as { WebSocket: new (url: string) => WebSocketLike }).WebSocket;
+    const ws = new C(url);
+    return {
+      send: (d) => ws.send(d),
+      close: (c, r) => ws.close(c, r),
+      onOpen: (cb) => void (ws.onopen = () => cb()),
+      onMessage: (cb) =>
+        void (ws.onmessage = (ev) => {
+          if (typeof ev.data === 'string') cb(ev.data); // binary frames are invalid for this protocol
+        }),
+      onClose: (cb) => void (ws.onclose = (ev) => cb(ev.code, ev.reason)),
+      onError: (cb) => void (ws.onerror = () => cb('websocket error')),
+    };
+  };
 }

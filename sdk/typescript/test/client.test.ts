@@ -200,7 +200,7 @@ test('config: ETag revalidation, cache, offline fallback, defaults', async () =>
   );
   const first = await a.client.config.get();
   assert.deepEqual(first, { revision: 3, data: { x: 1, y: 2 }, source: 'network' });
-  assert.equal(a.calls[0]!.url, 'https://api.test/v1/games/demo/config?client_version=1.0.0');
+  assert.equal(a.calls[0]!.url, 'https://api.test/v1/games/demo/config?client_version=1.0.0&platform=web');
   assert.equal(a.calls[0]!.headers['If-None-Match'], undefined);
   const second = await a.client.config.get();
   assert.equal(a.calls[1]!.headers['If-None-Match'], '"3"');

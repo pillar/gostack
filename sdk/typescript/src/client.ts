@@ -2,11 +2,14 @@ import { Analytics } from './analytics.js';
 import { GoStackError } from './errors.js';
 import { Http } from './http.js';
 import type { Spec } from './http.js';
+import { createApis } from './modules.js';
+import type { Apis } from './modules.js';
 import { memoryStorage, randomHex } from './util.js';
 import type {
   BoardGetOptions,
   BoardPage,
   ClaimResult,
+  ConfigGetOptions,
   ConfigResult,
   GameClientOptions,
   IdempotentOptions,
@@ -16,6 +19,8 @@ import type {
   SaveRecord,
   ScoreResult,
   Session,
+  SubmitScoreOptions,
+  TransportResponse,
   Wallet,
   AnalyticsStats,
 } from './types.js';
@@ -23,7 +28,7 @@ import type {
 type J = Record<string, any>;
 type AuthMode = 'required' | 'optional' | 'none';
 
-export interface GameClient {
+export interface GameClient extends Apis {
   readonly sessionId: string;
   auth: {
     loginGuest(opts?: { rotate?: boolean }): Promise<Session>;
@@ -31,18 +36,20 @@ export interface GameClient {
     bind(platform: string, code: string): Promise<{ playerId: string; platform: string }>;
     logout(opts?: { forgetGuest?: boolean }): Promise<void>;
     me(): Promise<Me>;
+    /** A valid access token (refreshing a guest session if needed), e.g. for the realtime client's first auth message. */
+    accessToken(): Promise<string>;
   };
-  saves: {
+  saves: Apis['saves'] & {
     get<T = unknown>(slot: string): Promise<SaveRecord<T> | null>;
     put<T = unknown>(slot: string, payload: T, opts: PutSaveOptions): Promise<SaveRecord<T>>;
   };
-  boards: {
+  boards: Apis['boards'] & {
     get(board: string, opts?: BoardGetOptions): Promise<BoardPage>;
-    submit(board: string, score: number, opts?: IdempotentOptions): Promise<ScoreResult>;
+    submit(board: string, score: number, opts?: SubmitScoreOptions): Promise<ScoreResult>;
   };
   wallet: { get(): Promise<Wallet> };
   rewards: { claim(reward: string, opts?: IdempotentOptions): Promise<ClaimResult> };
-  config: { get<T = Record<string, unknown>>(opts?: { defaults?: Record<string, unknown> }): Promise<ConfigResult<T>> };
+  config: { get<T = Record<string, unknown>>(opts?: ConfigGetOptions): Promise<ConfigResult<T>> };
   analytics: {
     track(name: string, props?: Record<string, unknown>): void;
     flush(): Promise<void>;
@@ -170,19 +177,20 @@ export function createGameClient(o: GameClientOptions): GameClient {
     throw new GoStackError('not_logged_in', 'no active session; call auth.loginGuest() first', 0);
   };
 
-  const call = async (spec: Spec, auth: AuthMode = 'required', refresh = true): Promise<string> => {
+  const callRes = async (spec: Spec, auth: AuthMode = 'required', refresh = true): Promise<TransportResponse> => {
     if (auth === 'required') await ensureSession();
     const useToken = auth !== 'none' && token && (auth === 'required' || expiresAt > now());
     try {
-      return (await http.send(spec, useToken ? token : undefined)).body;
+      return await http.send(spec, useToken ? token : undefined);
     } catch (err) {
       if (!(err instanceof GoStackError) || err.status !== 401 || auth === 'none') throw err;
-      if (auth === 'optional') return (await http.send(spec)).body; // stale token: retry anonymously
+      if (auth === 'optional') return await http.send(spec); // stale token: retry anonymously
       if (!refresh || via === 'platform' || !(await readGuest())) throw err;
       await loginGuest(); // 401 means rejected before processing, so replaying is safe
-      return (await http.send(spec, token)).body;
+      return await http.send(spec, token);
     }
   };
+  const call = async (spec: Spec, auth: AuthMode = 'required', refresh = true): Promise<string> => (await callRes(spec, auth, refresh)).body;
 
   // ---- analytics ----
   const scheduler = o.scheduler ?? {
@@ -208,27 +216,44 @@ export function createGameClient(o: GameClientOptions): GameClient {
     },
   });
 
+  const apis = createApis({
+    call,
+    parse,
+    key: () => newKey(random),
+    sleep: o.sleep ?? defaultSleep,
+    now,
+    random,
+    scheduler,
+    platform,
+    clientVersion: o.clientVersion,
+  });
+
   const unsubs: Array<() => void> = [];
   if (o.lifecycle) {
-    const a = o.lifecycle.onHide(() => void analytics.flush());
+    const a = o.lifecycle.onHide(() => {
+      void analytics.flush();
+      void apis.experiments.flush().catch(() => undefined);
+    });
     const b = o.lifecycle.onShow(() => void analytics.flush());
     if (a) unsubs.push(a);
     if (b) unsubs.push(b);
   }
 
   // ---- config ----
-  const readCache = async (): Promise<{ etag: string; revision: number; data: J } | null> => {
+  const readCache = async (params: string): Promise<{ etag: string; revision: number; data: J; rollouts: string[] } | null> => {
     const raw = await safe(() => storage.get(configKey));
     if (!raw) return null;
     try {
       const j = JSON.parse(raw);
-      return j && typeof j.revision === 'number' && j.data && typeof j.data === 'object' ? j : null;
+      if (!(j && typeof j.revision === 'number' && j.data && typeof j.data === 'object' && j.params === params)) return null;
+      return { ...j, rollouts: Array.isArray(j.rollouts) ? j.rollouts : [] };
     } catch {
       return null;
     }
   };
 
   return {
+    ...apis,
     sessionId,
     auth: {
       loginGuest,
@@ -258,8 +283,13 @@ export function createGameClient(o: GameClientOptions): GameClient {
         const j = parse(await call({ method: 'GET', path: '/me' }));
         return { playerId: j.player_id, gameId: j.game_id, createdAt: j.created_at, identities: j.identities ?? [] };
       },
+      async accessToken() {
+        await ensureSession();
+        return token;
+      },
     },
     saves: {
+      ...apis.saves,
       async get<T>(slot: string) {
         try {
           const j = parse(await call({ method: 'GET', path: '/saves/' + e(slot) }));
@@ -274,7 +304,13 @@ export function createGameClient(o: GameClientOptions): GameClient {
           await call({
             method: 'PUT',
             path: '/saves/' + e(slot),
-            body: { expected_revision: opts.expectedRevision, schema_version: opts.schemaVersion ?? 1, payload },
+            body: {
+              expected_revision: opts.expectedRevision,
+              schema_version: opts.schemaVersion ?? 1,
+              payload,
+              ...(opts.checksum ? { checksum: opts.checksum } : {}),
+              ...(opts.merge ? { merge: true } : {}),
+            },
             idempotencyKey: opts.idempotencyKey ?? newKey(random),
           }),
         );
@@ -282,6 +318,7 @@ export function createGameClient(o: GameClientOptions): GameClient {
       },
     },
     boards: {
+      ...apis.boards,
       async get(board, opts) {
         const j = parse(
           await call(
@@ -302,7 +339,11 @@ export function createGameClient(o: GameClientOptions): GameClient {
           await call({
             method: 'POST',
             path: '/boards/' + e(board) + '/scores',
-            body: { score },
+            body: {
+              score,
+              ...(opts?.ruleVersion !== undefined ? { rule_version: opts.ruleVersion } : {}),
+              ...(opts?.runToken ? { run_token: opts.runToken } : {}),
+            },
             idempotencyKey: opts?.idempotencyKey ?? newKey(random),
           }),
         );
@@ -328,26 +369,34 @@ export function createGameClient(o: GameClientOptions): GameClient {
       },
     },
     config: {
-      async get<T = Record<string, unknown>>(opts?: { defaults?: Record<string, unknown> }): Promise<ConfigResult<T>> {
+      async get<T = Record<string, unknown>>(opts?: ConfigGetOptions): Promise<ConfigResult<T>> {
         const defaults: J = { ...o.defaults, ...opts?.defaults };
-        const cached = await readCache();
+        const query = {
+          client_version: opts?.clientVersion ?? o.clientVersion,
+          platform: opts?.platform ?? platform,
+          bucket_key: opts?.bucketKey,
+        };
+        // The cache is only valid for the request parameters that produced it (rollouts depend on them).
+        const params = JSON.stringify([query.client_version, query.platform, query.bucket_key]);
+        const cached = await readCache(params);
         const fallback = (): ConfigResult<T> =>
           cached
-            ? { revision: cached.revision, data: { ...defaults, ...cached.data } as T, source: 'cache' }
+            ? { revision: cached.revision, data: { ...defaults, ...cached.data } as T, source: 'cache', ...(cached.rollouts.length ? { rollouts: cached.rollouts } : {}) }
             : { revision: 0, data: { ...defaults } as T, source: 'default' };
         try {
           const headers: Record<string, string> = {};
           if (cached?.etag) headers['If-None-Match'] = cached.etag;
-          const res = await http.send({ method: 'GET', path: '/config', query: { client_version: o.clientVersion }, headers });
+          const res = await callRes({ method: 'GET', path: '/config', query, headers }, 'optional');
           if (res.status === 304) {
             const f = fallback();
             return f.source === 'cache' ? { ...f, source: 'network' } : f;
           }
           const j = parse(res.body);
           const data: J = j.data && typeof j.data === 'object' ? j.data : {};
+          const rollouts: string[] = Array.isArray(j.rollouts) ? j.rollouts : [];
           const etag = res.headers['etag'] ?? `"${j.revision}"`;
-          await safe(() => storage.set(configKey, JSON.stringify({ etag, revision: j.revision, data })));
-          return { revision: j.revision, data: { ...defaults, ...data } as T, source: 'network' };
+          await safe(() => storage.set(configKey, JSON.stringify({ etag, revision: j.revision, data, rollouts, params })));
+          return { revision: j.revision, data: { ...defaults, ...data } as T, source: 'network', ...(rollouts.length ? { rollouts } : {}) };
         } catch {
           return fallback();
         }
@@ -362,6 +411,7 @@ export function createGameClient(o: GameClientOptions): GameClient {
       if (closed) return;
       closed = true;
       analytics.close();
+      apis.close();
       for (const u of unsubs.splice(0)) safe(async () => u());
       for (const s of sleepers) {
         clearTimeout(s.t);
@@ -380,5 +430,6 @@ function toSave<T>(j: J): SaveRecord<T> {
     checksum: j.checksum,
     payload: j.payload as T,
     updatedAt: j.updated_at,
+    ...(j.merged ? { merged: true } : {}),
   };
 }

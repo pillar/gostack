@@ -11,7 +11,8 @@
   "exports": {
     ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
     "./browser": { "types": "./dist/browser.d.ts", "default": "./dist/browser.js" },
-    "./wechat": { "types": "./dist/wechat.d.ts", "default": "./dist/wechat.js" }
+    "./wechat": { "types": "./dist/wechat.d.ts", "default": "./dist/wechat.js" },
+    "./realtime": { "types": "./dist/realtime.d.ts", "default": "./dist/realtime.js" }
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",

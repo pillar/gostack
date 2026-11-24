@@ -101,6 +101,8 @@ export interface SaveRecord<T = unknown> {
   checksum: string;
   payload: T;
   updatedAt: number;
+  /** True when the server merged this write with a newer revision (payload is the merged value). */
+  merged?: boolean;
 }
 
 export interface PutSaveOptions {
@@ -108,6 +110,10 @@ export interface PutSaveOptions {
   expectedRevision: number;
   schemaVersion?: number;
   idempotencyKey?: string;
+  /** Optional sha256 hex of the raw payload JSON bytes. */
+  checksum?: string;
+  /** Ask the server to merge on revision conflict (only if the app configured a merge function). */
+  merge?: boolean;
 }
 
 export interface BoardEntry {
@@ -152,8 +158,27 @@ export interface IdempotentOptions {
   idempotencyKey?: string;
 }
 
+export interface ConfigGetOptions {
+  defaults?: Record<string, unknown>;
+  /** Overrides the client's platform for rollout targeting. */
+  platform?: string;
+  /** Overrides the client's clientVersion (1-4 dotted integers). */
+  clientVersion?: string;
+  /** Stable anonymous bucketing key (e.g. install id); the server ignores it when a session token is valid. */
+  bucketKey?: string;
+}
+
+export interface SubmitScoreOptions extends IdempotentOptions {
+  /** From boards.startRun(); required when the board has require_run. */
+  runToken?: string;
+  /** Must equal the board's rule_version when that is > 0. */
+  ruleVersion?: number;
+}
+
 export interface ConfigResult<T = Record<string, unknown>> {
   revision: number;
+  /** Ids of rollouts that matched this request ; absent when none matched. */
+  rollouts?: string[];
   data: T;
   /** network: fresh or 304-validated; cache: last stored value; default: built-in defaults. */
   source: 'network' | 'cache' | 'default';
