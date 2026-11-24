@@ -1,0 +1,8 @@
+# AGENTS.md — {{.Name}}
+
+- Build: `go build ./...`; test: `go test -race ./...`; vet: `go vet ./...`.
+- Run locally: `go run . --config gostack.yaml serve`.
+- Framework: GoStack (github.com/pillar/gostack). Do not copy framework source into this repo; upgrade via the module version.
+- Data rules: integer money, no network calls inside DB transactions, idempotency keys on mutating endpoints, game/tenant scope from the authenticated session only.
+- Never edit applied migrations; add a new numbered file.
+- Do not fabricate benchmark numbers; record raw output with the environment.

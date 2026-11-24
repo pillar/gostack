@@ -1,0 +1,9 @@
+module {{.Module}}
+
+go 1.27
+{{if .GoStackVersion}}
+require github.com/pillar/gostack {{.GoStackVersion}}
+{{end}}{{if .Replace}}
+// Local GoStack checkout for framework development; remove to use the published module.
+replace github.com/pillar/gostack => {{.Replace}}
+{{end}}

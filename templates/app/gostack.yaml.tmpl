@@ -1,0 +1,36 @@
+# {{.Name}} configuration. Precedence: defaults < this file < GOSTACK_* env < --set.
+# Restart required for every key in this version (no hot reload yet).
+profile: lite
+environment: development
+http:
+  listen: 127.0.0.1:8080
+  # internal_listen: 127.0.0.1:9090   # /metrics and pprof; never expose publicly
+  max_body_bytes: 1048576
+  request_timeout: 10s
+database:
+  driver: sqlite
+  path: data/app.db
+  analytics_path: data/analytics.db
+  read_connections: 2
+  write_connections: 1
+  synchronous: FULL
+  busy_timeout: 5s
+cache:
+  driver: memory
+  max_bytes: 33554432
+queue:
+  driver: sqlite
+  workers: 2
+backup:
+  enabled: false
+  driver: litestream
+log:
+  level: info
+  format: json
+{{if .Game}}kits: [game]
+game:
+  session_ttl: 24h
+  save_max_bytes: 65536
+  save_slots_per_player: 5
+{{else}}kits: []
+{{end}}

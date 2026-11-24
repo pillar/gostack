@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "outDir": ".test-build", "rootDir": ".", "declaration": false, "moduleResolution": "Bundler" },
+  "include": ["src", "test"]
+}

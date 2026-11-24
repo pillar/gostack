@@ -1,0 +1,26 @@
+{
+  "name": "@pillar/gostack-game-sdk",
+  "version": "0.1.0",
+  "description": "GoStack GameKit TypeScript SDK (engine-agnostic core with browser and WeChat adapters)",
+  "type": "module",
+  "license": "UNLICENSED",
+  "sideEffects": false,
+  "files": ["dist", "README.md"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./browser": { "types": "./dist/browser.d.ts", "default": "./dist/browser.js" },
+    "./wechat": { "types": "./dist/wechat.d.ts", "default": "./dist/wechat.js" }
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit && node --check examples/e2e.mjs",
+    "test": "rm -rf .test-build && tsc -p tsconfig.test.json && node --test \".test-build/test/*.test.js\"",
+    "size": "node scripts/size.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.0"
+  }
+}

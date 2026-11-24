@@ -1,0 +1,12 @@
+/bin/
+/data/
+*.db
+*.db-wal
+*.db-shm
+*.lock
+sdk/typescript/node_modules/
+sdk/typescript/dist/
+sdk/typescript/.test-build/
+# Product requirement documents are kept local, not published.
+/docs/GoStack_PRD_*.md
+/docs/PRD_*.md

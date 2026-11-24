@@ -1,0 +1,23 @@
+// Command {{.Name}} is a GoStack application (profile: lite{{if .Game}}, kit: game{{end}}).
+package main
+
+import (
+	"net/http"
+	"os"
+
+	"github.com/pillar/gostack/app"
+	"github.com/pillar/gostack/core/httpx"
+)
+
+func main() {
+	hooks := app.Hooks{
+		// Add your own routes here. Keep handlers thin; put business rules in packages.
+		Routes: func(mux *http.ServeMux, a *app.App) {
+			mux.Handle("GET /v1/hello", httpx.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
+				httpx.WriteJSON(w, http.StatusOK, map[string]string{"hello": "{{.Name}}"})
+				return nil
+			}))
+		},
+	}
+	os.Exit(app.Main(os.Args[1:], hooks, app.Env{}))
+}

@@ -1,0 +1,18 @@
+# Litestream config for {{.Name}}. Pin the Litestream version you validated and
+# check this file against that version's documentation before use.
+# Credentials come from the environment of the litestream service, NOT from the
+# application: LITESTREAM_ACCESS_KEY_ID / LITESTREAM_SECRET_ACCESS_KEY (R2 token
+# scoped to this bucket only).
+dbs:
+  - path: /var/lib/{{.Name}}/app.db
+    replicas:
+      - type: s3
+        bucket: {{.Name}}-backup
+        path: app
+        endpoint: https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+        region: auto
+        sync-interval: 10s      # replication cadence, not an RPO guarantee
+        retention: 168h
+# analytics.db is best-effort data and is intentionally not replicated.
+# If you set database.wal_autocheckpoint: 0 in gostack.yaml, verify Litestream's
+# checkpoint management for your pinned version and document the runbook.
