@@ -32,7 +32,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/auth"
 	"github.com/pillar/gostack/core/config"
 	"github.com/pillar/gostack/core/httpx"
@@ -41,7 +41,7 @@ import (
 
 // Module is the web auth feature. Set the fields, call Init, then Routes.
 type Module struct {
-	DB  *sqlite.DB
+	DB  *store.DB
 	Cfg config.WebAuthConfig
 	// Secure enables the Secure flag and the __Host- cookie prefix. The app sets
 	// it for environment=production; HTTPS is then mandatory for browsers.
@@ -352,7 +352,7 @@ func (m *Module) signup(w http.ResponseWriter, r *http.Request) error {
 		}
 		return ns.insert(r.Context(), tx)
 	})
-	if sqlite.IsUniqueViolation(err) {
+	if store.IsUniqueViolation(err) {
 		return httpx.Conflict("email_taken", "an account with this email already exists")
 	}
 	if err != nil {
@@ -550,7 +550,7 @@ func (m *Module) clearCookie(w http.ResponseWriter) {
 }
 
 func mapWriteErr(err error) error {
-	if errors.Is(err, sqlite.ErrOverloaded) {
+	if errors.Is(err, store.ErrOverloaded) {
 		return httpx.Overloaded("write queue full")
 	}
 	return err

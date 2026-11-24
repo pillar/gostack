@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/httpx"
 	"github.com/pillar/gostack/kits/game"
 	"github.com/pillar/gostack/modules/idempotency"
@@ -131,7 +131,7 @@ func (m *Module) adminCreateBatch(w http.ResponseWriter, r *http.Request) error 
 		defer st.Close()
 		for _, c := range codes {
 			if _, err := st.ExecContext(ctx, g.ID, hashCode(g.ID, normalizeCode(c)), batch); err != nil {
-				if sqlite.IsUniqueViolation(err) {
+				if store.IsUniqueViolation(err) {
 					return httpx.Conflict("code_exists", "a code with this value already exists")
 				}
 				return err
@@ -151,7 +151,7 @@ func (m *Module) adminListBatches(w http.ResponseWriter, r *http.Request) error 
 	rows, err := m.DB.Read.QueryContext(r.Context(), `SELECT b.batch_id,b.label,b.shared,b.max_redemptions,b.grants,b.expires_at,b.disabled,b.created_at,
 		count(c.code_hash), coalesce(sum(c.redeemed),0)
 		FROM ops_redeem_batches b LEFT JOIN ops_redeem_codes c ON c.game_id=b.game_id AND c.batch_id=b.batch_id
-		WHERE b.game_id=? GROUP BY b.batch_id ORDER BY b.created_at DESC, b.batch_id LIMIT 200`, g.ID)
+		WHERE b.game_id=? GROUP BY b.game_id, b.batch_id ORDER BY b.created_at DESC, b.batch_id LIMIT 200`, g.ID)
 	if err != nil {
 		return err
 	}

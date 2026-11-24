@@ -18,6 +18,13 @@ database:
   write_connections: 1
   synchronous: FULL
   busy_timeout: 5s
+# Profile scale (several instances, PostgreSQL; see GoStack docs/adr/0003-postgres-scale.md):
+#   profile: scale
+#   database: {driver: postgres, dsn_ref: "env:DATABASE_URL", max_open_connections: 10, read_connections: 4}
+#   queue: {driver: postgres}
+#   rate_limit: {accept_per_instance: true}   # limiters are per instance; no global limiter yet
+# The PostgreSQL database must use LC_COLLATE 'C'. Copy existing SQLite data with
+# `migrate to-postgres --from data/app.db --to-dsn-ref env:DATABASE_URL`.
 cache:
   driver: memory
   max_bytes: 33554432

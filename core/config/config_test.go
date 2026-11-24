@@ -34,15 +34,16 @@ func TestRejectsUnknownKeysAndUnimplemented(t *testing.T) {
 		t.Fatal("unknown key accepted")
 	}
 	for name, mut := range map[string]func(*config.Config){
-		"profile scale":      func(c *config.Config) { c.Profile = "scale" },
-		"postgres":           func(c *config.Config) { c.Database.Driver = "postgres" },
-		"valkey":             func(c *config.Config) { c.Cache.Driver = "valkey" },
-		"two writers":        func(c *config.Config) { c.Database.WriteConnections = 2 },
-		"shared analytics":   func(c *config.Config) { c.Database.AnalyticsPath = c.Database.Path },
-		"checkpoint off":     func(c *config.Config) { c.Database.WALAutocheckpoint = 0 },
-		"agent kit":          func(c *config.Config) { c.Kits = []string{"agent"} },
-		"prod public listen": func(c *config.Config) { c.Environment = "production"; c.HTTP.Listen = "0.0.0.0:80" },
-		"prod normal sync":   func(c *config.Config) { c.Environment = "production"; c.Database.Synchronous = "NORMAL" },
+		"profile distributed": func(c *config.Config) { c.Profile = "distributed" },
+		"scale on sqlite":     func(c *config.Config) { c.Profile = "scale" },
+		"postgres under lite": func(c *config.Config) { c.Database.Driver = "postgres"; c.Database.DSNRef = "env:X" },
+		"valkey":              func(c *config.Config) { c.Cache.Driver = "valkey" },
+		"two writers":         func(c *config.Config) { c.Database.WriteConnections = 2 },
+		"shared analytics":    func(c *config.Config) { c.Database.AnalyticsPath = c.Database.Path },
+		"checkpoint off":      func(c *config.Config) { c.Database.WALAutocheckpoint = 0 },
+		"agent kit":           func(c *config.Config) { c.Kits = []string{"agent"} },
+		"prod public listen":  func(c *config.Config) { c.Environment = "production"; c.HTTP.Listen = "0.0.0.0:80" },
+		"prod normal sync":    func(c *config.Config) { c.Environment = "production"; c.Database.Synchronous = "NORMAL" },
 		"plain secret": func(c *config.Config) {
 			c.Game.Platforms = map[string]config.PlatformConfig{"wechat": {Apps: map[string]config.PlatformApp{"g": {AppID: "a", AppSecretRef: "literal"}}}}
 		},
@@ -62,5 +63,65 @@ func TestRejectsUnknownKeysAndUnimplemented(t *testing.T) {
 	c.Backup.Enabled, c.Database.WALAutocheckpoint = true, 0
 	if err := c.Validate(); err != nil {
 		t.Fatalf("litestream-managed checkpoint rejected: %v", err)
+	}
+}
+
+func scale() config.Config {
+	c := config.Defaults()
+	c.Profile = "scale"
+	c.Database.Driver = "postgres"
+	c.Database.DSNRef = "env:GOSTACK_DSN"
+	c.Queue.Driver = "postgres"
+	c.RateLimit.AcceptPerInstance = true
+	return c
+}
+
+func TestScaleProfile(t *testing.T) {
+	c := scale()
+	if err := c.Validate(); err != nil {
+		t.Fatalf("valid scale config rejected: %v", err)
+	}
+	c.Database.AnalyticsDSNRef, c.Database.MaxOpenConnections = "file:/run/secrets/an", 40
+	c.Kits, c.Game.Modules = []string{"game"}, []string{"ops", "match"}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("scale with analytics dsn and modules rejected: %v", err)
+	}
+	for name, mut := range map[string]func(*config.Config){
+		"no dsn":              func(c *config.Config) { c.Database.DSNRef = "" },
+		"literal dsn":         func(c *config.Config) { c.Database.DSNRef = "postgres://u:p@h/db" },
+		"literal analytics":   func(c *config.Config) { c.Database.AnalyticsDSNRef = "postgres://h/db" },
+		"sqlite queue":        func(c *config.Config) { c.Queue.Driver = "sqlite" },
+		"sqlite driver":       func(c *config.Config) { c.Database.Driver = "sqlite" },
+		"local rate limits":   func(c *config.Config) { c.RateLimit.AcceptPerInstance = false },
+		"realtime":            func(c *config.Config) { c.Kits, c.Game.Modules = []string{"game"}, []string{"realtime"} },
+		"litestream":          func(c *config.Config) { c.Backup.Enabled = true },
+		"local storage":       func(c *config.Config) { c.Storage.Driver = "local" },
+		"sqlite sync risk":    func(c *config.Config) { c.Database.AcceptNormalSyncRisk = true },
+		"too many conns":      func(c *config.Config) { c.Database.MaxOpenConnections = 501 },
+		"postgres queue lite": func(c *config.Config) { c.Profile = "lite" },
+	} {
+		c := scale()
+		mut(&c)
+		if err := c.Validate(); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	// Lite rejects PostgreSQL-only settings instead of ignoring them.
+	l := config.Defaults()
+	l.Database.DSNRef = "env:X"
+	if err := l.Validate(); err == nil {
+		t.Error("dsn_ref accepted under lite")
+	}
+	l = config.Defaults()
+	l.Queue.Driver = "postgres"
+	if err := l.Validate(); err == nil {
+		t.Error("postgres queue accepted under lite")
+	}
+	// Environment overrides reach the new keys.
+	got, err := config.Load("", env(map[string]string{"GOSTACK_PROFILE": "scale", "GOSTACK_DATABASE_DRIVER": "postgres",
+		"GOSTACK_DATABASE_DSN_REF": "env:D", "GOSTACK_QUEUE_DRIVER": "postgres", "GOSTACK_RATE_LIMIT_ACCEPT_PER_INSTANCE": "true",
+		"GOSTACK_DATABASE_MAX_OPEN_CONNECTIONS": "20"}), nil)
+	if err != nil || got.Database.MaxOpenConnections != 20 || got.Database.DSNRef != "env:D" {
+		t.Fatalf("env scale config: %+v %v", got.Database, err)
 	}
 }

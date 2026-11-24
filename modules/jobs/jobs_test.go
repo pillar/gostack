@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pillar/gostack/adapters/pgtest"
 	"github.com/pillar/gostack/adapters/sqlite"
-	"github.com/pillar/gostack/migrations"
 	"github.com/pillar/gostack/modules/jobs"
 )
 
@@ -25,18 +25,7 @@ func newQueue(t *testing.T) (*jobs.Queue, *clock) {
 	t.Helper()
 	o := sqlite.Options{Path: filepath.Join(t.TempDir(), "app.db"), ReadConnections: 2, Synchronous: "FULL",
 		BusyTimeout: time.Second, WALAutocheckpoint: 1000, WriteQueue: 64}
-	db, err := sqlite.Open(o)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { db.Close() })
-	ms, _ := sqlite.LoadMigrations(migrations.SQLite, "sqlite")
-	if _, err := db.Migrate(context.Background(), ms); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.OpenReaders(o); err != nil {
-		t.Fatal(err)
-	}
+	db := pgtest.Open(t, o)
 	c := &clock{t: time.UnixMilli(1_700_000_000_000)}
 	return &jobs.Queue{DB: db, Now: c.Now}, c
 }

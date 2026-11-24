@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pillar/gostack/adapters/pgtest"
 	"github.com/pillar/gostack/adapters/sqlite"
 	"github.com/pillar/gostack/core/auth"
 	"github.com/pillar/gostack/core/httpx"
-	"github.com/pillar/gostack/migrations"
 	"github.com/pillar/gostack/modules/billing"
 )
 
@@ -33,21 +33,7 @@ func newService(t *testing.T) (*billing.Service, *clock) {
 	t.Helper()
 	o := sqlite.Options{Path: filepath.Join(t.TempDir(), "app.db"), ReadConnections: 2, Synchronous: "FULL",
 		BusyTimeout: time.Second, WALAutocheckpoint: 1000, WriteQueue: 256}
-	db, err := sqlite.Open(o)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { db.Close() })
-	ms, err := sqlite.LoadMigrations(migrations.SQLite, "sqlite")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Migrate(context.Background(), ms); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.OpenReaders(o); err != nil {
-		t.Fatal(err)
-	}
+	db := pgtest.Open(t, o)
 	c := &clock{t: time.UnixMilli(1_700_000_000_000)}
 	return &billing.Service{DB: db, Now: c.Now}, c
 }

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/auth"
 	"github.com/pillar/gostack/core/config"
 	"github.com/pillar/gostack/kits/game"
@@ -44,9 +45,11 @@ func (e CheckFailed) Error() string { return e.Msg }
 const appUsage = `Application commands:
   serve                                  run the HTTP server (SIGHUP reloads hot config keys)
   migrate status|up                      show or apply schema migrations
+  migrate to-postgres --from APP.DB --to-dsn-ref env:NAME [--analytics-from ANALYTICS.DB]
+                                         copy a stopped SQLite deployment into an empty PostgreSQL database (verified)
   config validate                        validate configuration and list hot-reloadable keys
   config diff <other.yaml>               compare running sources with another file (hot vs restart)
-  backup snapshot --to FILE              consistent online copy of the main database (VACUUM INTO)
+  backup snapshot --to FILE              consistent online copy of the main database (VACUUM INTO; SQLite only)
   backup verify FILE                     integrity, schema compatibility and ledger reconcile
   backup restore --from FILE --to PATH   verify, then restore to a new path (never overwrites)
   doctor                                check environment, storage and configuration
@@ -262,26 +265,35 @@ func configDiff(g globals, cur config.Config, curErr error, other string, env En
 // openAdmin opens the database for short administrative writes while a server
 // may be running. It skips the instance lock (SQLite file locking still
 // serialises writers) and refuses to run against a schema it does not match.
-func openAdmin(ctx context.Context, cfg config.Config) (*sqlite.DB, error) {
-	o := storageOptions(cfg.Database, cfg.Database.Path, false)
-	if _, err := os.Stat(o.Path); err != nil {
-		return nil, fmt.Errorf("database %s: %w (run `migrate up` or `serve` first)", o.Path, err)
+func openAdmin(ctx context.Context, cfg config.Config) (*store.DB, error) {
+	var db *store.DB
+	var o sqlite.Options
+	var err error
+	if cfg.Database.Driver == store.Postgres {
+		if db, err = openPostgres(ctx, cfg.Database, cfg.Database.DSNRef, "", false); err != nil {
+			return nil, err
+		}
+	} else {
+		o = storageOptions(cfg.Database, cfg.Database.Path, false)
+		if _, err := os.Stat(o.Path); err != nil {
+			return nil, fmt.Errorf("database %s: %w (run `migrate up` or `serve` first)", o.Path, err)
+		}
+		if db, err = sqlite.Open(o); err != nil {
+			return nil, err
+		}
 	}
-	db, err := sqlite.Open(o)
-	if err != nil {
-		return nil, err
-	}
-	ms, err := sqlite.LoadMigrations(migrations.SQLite, "sqlite")
+	fsys, dir := migrations.Main(db.Dialect)
+	ms, err := store.LoadMigrations(fsys, dir)
 	if err != nil {
 		db.Close()
 		return nil, err
 	}
-	st, err := sqlite.MigrationStatusOf(ctx, db.Write, ms)
-	if err == nil && sqlite.Pending(st) {
+	st, err := db.MigrationStatus(ctx, ms)
+	if err == nil && store.Pending(st) {
 		err = errors.New("database schema does not match this binary; run `migrate status`")
 	}
-	if err == nil {
-		err = db.OpenReaders(o)
+	if err == nil && db.Dialect == store.SQLite {
+		err = sqlite.OpenReaders(db, o)
 	}
 	if err != nil {
 		db.Close()
@@ -291,15 +303,23 @@ func openAdmin(ctx context.Context, cfg config.Config) (*sqlite.DB, error) {
 }
 
 func migrate(ctx context.Context, cfg config.Config, args []string, asJSON bool, env Env) error {
-	if len(args) != 1 || (args[0] != "status" && args[0] != "up") {
-		return UsageError{"usage: migrate status|up"}
+	if len(args) >= 1 && args[0] == "to-postgres" {
+		return migrateToPostgres(ctx, args[1:], env)
 	}
-	ms, err := sqlite.LoadMigrations(migrations.SQLite, "sqlite")
+	if len(args) != 1 || (args[0] != "status" && args[0] != "up") {
+		return UsageError{"usage: migrate status|up | migrate to-postgres --from APP.DB --to-dsn-ref env:NAME [--analytics-from ANALYTICS.DB]"}
+	}
+	fsys, dir := migrations.Main(cfg.Database.Driver)
+	ms, err := store.LoadMigrations(fsys, dir)
 	if err != nil {
 		return err
 	}
-	o := storageOptions(cfg.Database, cfg.Database.Path, args[0] == "up")
-	db, err := sqlite.Open(o)
+	var db *store.DB
+	if cfg.Database.Driver == store.Postgres {
+		db, err = openPostgres(ctx, cfg.Database, cfg.Database.DSNRef, "", false)
+	} else {
+		db, err = sqlite.Open(storageOptions(cfg.Database, cfg.Database.Path, args[0] == "up"))
+	}
 	if err != nil {
 		if errors.Is(err, sqlite.ErrLocked) {
 			return fmt.Errorf("%w; stop the running server before `migrate up`", err)
@@ -313,7 +333,7 @@ func migrate(ctx context.Context, cfg config.Config, args []string, asJSON bool,
 			return err
 		}
 	}
-	st, err := sqlite.MigrationStatusOf(ctx, db.Write, ms)
+	st, err := db.MigrationStatus(ctx, ms)
 	if err != nil {
 		return err
 	}
@@ -321,7 +341,7 @@ func migrate(ctx context.Context, cfg config.Config, args []string, asJSON bool,
 		ss := summarize(st, ms)
 		// Top-level "drift"/"unknown_versions" are what deploy/rollback.sh checks:
 		// a database with versions this binary does not know must not be served by it.
-		PrintJSON(env.Stdout, map[string]any{"applied_now": applied, "migrations": st, "pending": sqlite.Pending(st),
+		PrintJSON(env.Stdout, map[string]any{"applied_now": applied, "migrations": st, "pending": store.Pending(st),
 			"drift": ss.Drift, "unknown_versions": ss.Unknown, "pending_versions": ss.Pending})
 	} else {
 		for _, s := range st {
@@ -335,7 +355,7 @@ func migrate(ctx context.Context, cfg config.Config, args []string, asJSON bool,
 			fmt.Fprintf(env.Stdout, "%04d %-8s %s\n", s.Version, state, s.Name)
 		}
 	}
-	if args[0] == "status" && sqlite.Pending(st) {
+	if args[0] == "status" && store.Pending(st) {
 		return CheckFailed{"migrations pending or drifted"}
 	}
 	return nil
@@ -480,46 +500,10 @@ func doctor(ctx context.Context, cfg config.Config, cfgErr error, asJSON bool, e
 		add("config", false, cfgErr.Error())
 	} else {
 		add("config", true, "profile="+cfg.Profile+" environment="+cfg.Environment)
-		dir := filepath.Dir(cfg.Database.Path)
-		if err := os.MkdirAll(dir, 0o750); err != nil {
-			add("data_dir", false, err.Error())
-		} else if f, err := os.CreateTemp(dir, ".doctor-*"); err != nil {
-			add("data_dir", false, "not writable: "+err.Error())
+		if cfg.Database.Driver == store.Postgres {
+			doctorPostgres(ctx, cfg, add)
 		} else {
-			f.Close()
-			os.Remove(f.Name())
-			add("data_dir", true, dir)
-		}
-		var st syscall.Statfs_t
-		if err := syscall.Statfs(dir, &st); err == nil {
-			free := int64(st.Bavail) * int64(st.Bsize)
-			add("disk_free", free > 1<<30, fmt.Sprintf("%d MiB free (warn below 1024 MiB)", free>>20))
-		}
-		o := storageOptions(cfg.Database, cfg.Database.Path, false)
-		if _, err := os.Stat(o.Path); err != nil {
-			add("database", true, "not created yet (created by migrate up / serve)")
-		} else if db, err := sqlite.Open(o); err != nil {
-			add("database", false, err.Error())
-		} else {
-			var ver string
-			_ = db.Write.QueryRowContext(ctx, "SELECT sqlite_version()").Scan(&ver)
-			var fts int
-			_ = db.Write.QueryRowContext(ctx, "SELECT sqlite_compileoption_used('ENABLE_FTS5')").Scan(&fts)
-			add("sqlite", true, fmt.Sprintf("version %s, fts5=%v", ver, fts == 1))
-			c, cancel := context.WithTimeout(ctx, 30*time.Second)
-			err := db.IntegrityCheck(c)
-			cancel()
-			add("integrity_check", err == nil, errString(err, "ok"))
-			ms, _ := sqlite.LoadMigrations(migrations.SQLite, "sqlite")
-			s, err := sqlite.MigrationStatusOf(ctx, db.Write, ms)
-			// Pending migrations are applied by `migrate up` / `serve`, so they are
-			// reported, not failed (an upgrade preflight runs doctor before them).
-			// Drift or versions unknown to this binary fail.
-			ss := summarize(s, ms)
-			add("migrations", err == nil && !ss.Drift, errString(err, fmt.Sprintf("%d known, %d applied, pending=%v unknown=%v drifted=%v",
-				ss.Known, ss.Applied, ss.Pending, ss.Unknown, ss.Drifted)))
-			add("wal_bytes", true, strconv.FormatInt(db.Stats().WALBytes, 10))
-			db.Close()
+			doctorSQLite(ctx, cfg, add)
 		}
 	}
 	failed := 0
@@ -550,4 +534,68 @@ func errString(err error, ok string) string {
 		return err.Error()
 	}
 	return ok
+}
+
+func doctorSQLite(ctx context.Context, cfg config.Config, add func(string, bool, string)) {
+	dir := filepath.Dir(cfg.Database.Path)
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		add("data_dir", false, err.Error())
+	} else if f, err := os.CreateTemp(dir, ".doctor-*"); err != nil {
+		add("data_dir", false, "not writable: "+err.Error())
+	} else {
+		f.Close()
+		os.Remove(f.Name())
+		add("data_dir", true, dir)
+	}
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(dir, &st); err == nil {
+		free := int64(st.Bavail) * int64(st.Bsize)
+		add("disk_free", free > 1<<30, fmt.Sprintf("%d MiB free (warn below 1024 MiB)", free>>20))
+	}
+	o := storageOptions(cfg.Database, cfg.Database.Path, false)
+	if _, err := os.Stat(o.Path); err != nil {
+		add("database", true, "not created yet (created by migrate up / serve)")
+	} else if db, err := sqlite.Open(o); err != nil {
+		add("database", false, err.Error())
+	} else {
+		var ver string
+		_ = db.Write.QueryRowContext(ctx, "SELECT sqlite_version()").Scan(&ver)
+		var fts int
+		_ = db.Write.QueryRowContext(ctx, "SELECT sqlite_compileoption_used('ENABLE_FTS5')").Scan(&fts)
+		add("sqlite", true, fmt.Sprintf("version %s, fts5=%v", ver, fts == 1))
+		c, cancel := context.WithTimeout(ctx, 30*time.Second)
+		err := sqlite.IntegrityCheck(c, db)
+		cancel()
+		add("integrity_check", err == nil, errString(err, "ok"))
+		ms, _ := store.LoadMigrations(migrations.SQLite, "sqlite")
+		s, err := db.MigrationStatus(ctx, ms)
+		// Pending migrations are applied by `migrate up` / `serve`, so they are
+		// reported, not failed (an upgrade preflight runs doctor before them).
+		// Drift or versions unknown to this binary fail.
+		ss := summarize(s, ms)
+		add("migrations", err == nil && !ss.Drift, errString(err, fmt.Sprintf("%d known, %d applied, pending=%v unknown=%v drifted=%v",
+			ss.Known, ss.Applied, ss.Pending, ss.Unknown, ss.Drifted)))
+		add("wal_bytes", true, strconv.FormatInt(db.Stats().WALBytes, 10))
+		db.Close()
+	}
+}
+
+func doctorPostgres(ctx context.Context, cfg config.Config, add func(string, bool, string)) {
+	c, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	db, err := openPostgres(c, cfg.Database, cfg.Database.DSNRef, "", false)
+	if err != nil {
+		add("database", false, err.Error())
+		return
+	}
+	defer db.Close()
+	var ver string
+	_ = db.Write.QueryRowContext(c, "SHOW server_version").Scan(&ver)
+	add("postgres", true, "server "+ver+", collation bytewise (C)")
+	fsys, dir := migrations.Main(store.Postgres)
+	ms, _ := store.LoadMigrations(fsys, dir)
+	s, err := db.MigrationStatus(c, ms)
+	ss := summarize(s, ms)
+	add("migrations", err == nil && !ss.Drift, errString(err, fmt.Sprintf("%d known, %d applied, pending=%v unknown=%v drifted=%v",
+		ss.Known, ss.Applied, ss.Pending, ss.Unknown, ss.Drifted)))
 }

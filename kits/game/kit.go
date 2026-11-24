@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/auth"
 	"github.com/pillar/gostack/core/config"
 	"github.com/pillar/gostack/core/httpx"
@@ -35,7 +35,7 @@ var (
 
 // Kit wires GameKit handlers to storage.
 type Kit struct {
-	DB        *sqlite.DB
+	DB        *store.DB
 	Analytics *Analytics
 	Cfg       config.GameConfig
 	ClientIP  *httpx.ClientIP

@@ -13,6 +13,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/pillar/gostack/adapters/pgtest"
 	"github.com/pillar/gostack/core/auth"
 	"github.com/pillar/gostack/core/config"
 	"github.com/pillar/gostack/kits/game"
@@ -22,6 +23,11 @@ func allModulesConfig(t *testing.T) config.Config {
 	c := testConfig(t)
 	c.Game.Modules = []string{"ops", "experiments", "social", "match", "commerce", "realtime"}
 	c.Billing.Enabled = true
+	if pgtest.Enabled() {
+		// Profile scale rejects the in-process realtime hub and local object storage.
+		c.Game.Modules = c.Game.Modules[:5]
+		return c
+	}
 	c.Storage.Driver = "local"
 	c.Storage.Local.Root = filepath.Join(t.TempDir(), "objects")
 	c.Storage.Local.PublicURL = "/v1/files"
@@ -83,11 +89,18 @@ func TestModulesWiredByConfig(t *testing.T) {
 		{"GET", "/v1/files/x", "", 403},                                // local storage presign handler (unsigned → 403)
 		{"GET", "/v1/games/demo/inventory", guest.Token, 200},          // core GameKit P0
 	} {
+		if pgtest.Enabled() && c.path == "/v1/files/x" {
+			continue // no local storage under profile scale
+		}
 		if got := do(c.method, c.path, c.token); got != c.want {
 			t.Errorf("%s %s = %d, want %d", c.method, c.path, got, c.want)
 		}
 	}
-	if a.Mod.Ops == nil || a.Mod.Realtime == nil || a.Mod.Billing == nil || a.Mod.Storage == nil {
+	if pgtest.Enabled() {
+		if a.Mod.Ops == nil || a.Mod.Match == nil || a.Mod.Billing == nil || a.Mod.Realtime != nil {
+			t.Fatal("modules not constructed as configured for profile scale")
+		}
+	} else if a.Mod.Ops == nil || a.Mod.Realtime == nil || a.Mod.Billing == nil || a.Mod.Storage == nil {
 		t.Fatal("modules not constructed")
 	}
 
@@ -125,6 +138,7 @@ func TestModuleConfigValidation(t *testing.T) {
 
 // Serve closes realtime connections (1001) on shutdown and runs module loops.
 func TestServeWithModulesShutsDownRealtime(t *testing.T) {
+	pgtest.SkipIfPostgres(t, "the realtime module is rejected under profile scale (in-process hub)")
 	c := allModulesConfig(t)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

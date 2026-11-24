@@ -29,7 +29,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/httpx"
 	"github.com/pillar/gostack/kits/game"
 )
@@ -39,7 +39,7 @@ const layerSlots = 10000
 // Module wires the experiments feature package.
 type Module struct {
 	Kit *game.Kit
-	DB  *sqlite.DB
+	DB  *store.DB
 	Now func() time.Time // defaults to time.Now
 }
 
@@ -313,7 +313,7 @@ func (m *Module) postExposures(w http.ResponseWriter, r *http.Request) error {
 			if !ok || a.Stopped {
 				continue
 			}
-			if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO exp_exposures(game_id,experiment_id,player_id,variant,created_at) VALUES(?,?,?,?,?)`,
+			if _, err := tx.ExecContext(ctx, `INSERT INTO exp_exposures(game_id,experiment_id,player_id,variant,created_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`,
 				s.GameID, id, s.PlayerID, a.Variant, now); err != nil {
 				return err
 			}

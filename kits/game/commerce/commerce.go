@@ -21,7 +21,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/httpx"
 	"github.com/pillar/gostack/kits/game"
 	"github.com/pillar/gostack/modules/jobs"
@@ -52,7 +52,7 @@ func ValidateProviders(iap, adKinds []string) error {
 // Module serves the commerce API.
 type Module struct {
 	Kit *game.Kit
-	DB  *sqlite.DB
+	DB  *store.DB
 	Now func() time.Time
 
 	// IAP verifiers by provider name ("apple").

@@ -159,7 +159,7 @@ func (m *Module) postCheckin(w http.ResponseWriter, r *http.Request) error {
 		streak := effectiveStreak(st, today, c.StreakReset) + 1
 		idx := int((streak - 1) % int64(len(c.Cycle)))
 		if _, err := tx.ExecContext(ctx, `INSERT INTO ops_checkin_state(game_id,player_id,streak,total,last_day) VALUES(?,?,?,1,?)
-			ON CONFLICT(game_id,player_id) DO UPDATE SET streak=excluded.streak, total=total+1, last_day=excluded.last_day`,
+			ON CONFLICT(game_id,player_id) DO UPDATE SET streak=excluded.streak, total=ops_checkin_state.total+1, last_day=excluded.last_day`,
 			s.GameID, s.PlayerID, streak, today); err != nil {
 			return idempotency.Result{}, err
 		}

@@ -3,7 +3,7 @@
 // persisted before a caller performs an external call and then settled,
 // released, expired or sent to manual reconciliation.
 //
-// Every mutation runs in one sqlite.DB.WriteTx and is keyed by a per-tenant
+// Every mutation runs in one store.DB.WriteTx and is keyed by a per-tenant
 // idempotency key: the same key with the same request returns the stored result
 // (Result.Replayed), the same key with a different request is rejected with
 // 409 idempotency_key_reused. Failed operations are not recorded, so a key whose
@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/httpx"
 )
 
@@ -51,7 +51,7 @@ const (
 
 // Service implements the billing operations. Now defaults to time.Now.
 type Service struct {
-	DB  *sqlite.DB
+	DB  *store.DB
 	Now func() time.Time
 }
 
@@ -306,8 +306,9 @@ func applyBalance(ctx context.Context, tx *sql.Tx, tenant string, e *Entry, now 
 	if e.ReservationID != "" {
 		resID = e.ReservationID
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO billing_ledger_entries(id,tenant_id,account_id,type,amount,delta_available,delta_reserved,reservation_id,idempotency_key,note,created_at)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?)`, e.ID, tenant, e.AccountID, e.Type, e.Amount, e.DeltaAvailable, e.DeltaReserved, resID, e.IdempotencyKey, e.Note, now); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO billing_ledger_entries(id,tenant_id,account_id,type,amount,delta_available,delta_reserved,reservation_id,idempotency_key,note,created_at,seq)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,(SELECT version FROM billing_accounts WHERE tenant_id=? AND id=?))`,
+		e.ID, tenant, e.AccountID, e.Type, e.Amount, e.DeltaAvailable, e.DeltaReserved, resID, e.IdempotencyKey, e.Note, now, tenant, e.AccountID); err != nil {
 		return Account{}, err
 	}
 	return getAccount(ctx, tx, tenant, e.AccountID)
@@ -329,7 +330,7 @@ func (s *Service) CreateAccount(ctx context.Context, tenant, key, id, currency s
 			aid = httpx.RandomID("acct_")
 		}
 		_, err := tx.ExecContext(ctx, `INSERT INTO billing_accounts(tenant_id,id,currency,created_at,updated_at) VALUES(?,?,?,?,?)`, tenant, aid, currency, now, now)
-		if sqlite.IsUniqueViolation(err) {
+		if store.IsUniqueViolation(err) {
 			return Result{}, httpx.Conflict("account_exists", "account already exists")
 		}
 		if err != nil {
@@ -635,7 +636,18 @@ func (s *Service) Maintain(ctx context.Context) error {
 func (s *Service) Reconcile(ctx context.Context, tenant string) ([]Mismatch, error) {
 	var out []Mismatch
 	err := s.DB.ReadTx(ctx, func(tx *sql.Tx) error {
-		out = nil
+		var err error
+		out, err = ReconcileIn(ctx, tx, tenant)
+		return err
+	})
+	return out, err
+}
+
+// ReconcileIn is Reconcile over an existing transaction (e.g. the copy
+// transaction of `migrate to-postgres`). It returns nil when the books balance.
+func ReconcileIn(ctx context.Context, tx *sql.Tx, tenant string) ([]Mismatch, error) {
+	var out []Mismatch
+	err := func() error {
 		rows, err := tx.QueryContext(ctx, `SELECT a.tenant_id, a.id, a.available, a.reserved,
 			COALESCE((SELECT SUM(delta_available) FROM billing_ledger_entries l WHERE l.tenant_id=a.tenant_id AND l.account_id=a.id),0),
 			COALESCE((SELECT SUM(delta_reserved) FROM billing_ledger_entries l WHERE l.tenant_id=a.tenant_id AND l.account_id=a.id),0),
@@ -662,7 +674,7 @@ func (s *Service) Reconcile(ctx context.Context, tenant string) ([]Mismatch, err
 			}
 		}
 		return rows.Err()
-	})
+	}()
 	return out, err
 }
 
@@ -685,7 +697,7 @@ func (s *Service) Entries(ctx context.Context, tenant, accountID string, limit i
 		return nil, err
 	}
 	rows, err := s.DB.Read.QueryContext(ctx, `SELECT id,account_id,type,amount,delta_available,delta_reserved,COALESCE(reservation_id,''),idempotency_key,note,created_at
-		FROM billing_ledger_entries WHERE tenant_id=? AND account_id=? ORDER BY rowid DESC LIMIT ?`, tenant, accountID, limit)
+		FROM billing_ledger_entries WHERE tenant_id=? AND account_id=? ORDER BY seq DESC LIMIT ?`, tenant, accountID, limit)
 	if err != nil {
 		return nil, err
 	}

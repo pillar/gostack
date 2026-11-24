@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pillar/gostack/adapters/pgtest"
 	"github.com/pillar/gostack/kits/game"
 )
 
@@ -43,6 +44,7 @@ func cp(t *testing.T, src, dst string) {
 // TestBackupDrill runs snapshot → verify → restore on real files while the
 // application holds the database open, plus the refusal paths.
 func TestBackupDrill(t *testing.T) {
+	pgtest.SkipIfPostgres(t, "backup snapshot/verify/restore and this drill operate on SQLite files")
 	c := testConfig(t)
 	a := newTestApp(t, c)
 	ctx := context.Background()
@@ -141,6 +143,7 @@ func TestBackupDrill(t *testing.T) {
 }
 
 func TestMigrateStatusJSONReportsUnknownVersions(t *testing.T) {
+	pgtest.SkipIfPostgres(t, "backup snapshot/verify/restore and this drill operate on SQLite files")
 	c := testConfig(t)
 	a := newTestApp(t, c)
 	a.Close()

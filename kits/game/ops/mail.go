@@ -192,7 +192,7 @@ func (m *Module) listMail(w http.ResponseWriter, r *http.Request) error {
 }
 
 func ensureState(ctx context.Context, tx *sql.Tx, gameID, mailID, playerID string) error {
-	_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO ops_mail_state(game_id,mail_id,player_id) VALUES(?,?,?)`, gameID, mailID, playerID)
+	_, err := tx.ExecContext(ctx, `INSERT INTO ops_mail_state(game_id,mail_id,player_id) VALUES(?,?,?) ON CONFLICT DO NOTHING`, gameID, mailID, playerID)
 	return err
 }
 
