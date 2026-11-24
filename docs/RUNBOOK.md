@@ -164,8 +164,8 @@ journalctl -u $APP --since -1h | grep -E 'config reload|requires restart'
 **诊断**
 ```bash
 systemctl status litestream; journalctl -u litestream -n 200 --no-pager
-litestream snapshots -config /etc/litestream.yml $DB      # 命令名/参数以所固定版本文档为准
-litestream generations -config /etc/litestream.yml $DB
+litestream status -config /etc/litestream.yml                # Litestream v0.5.x
+litestream ltx -config /etc/litestream.yml -level all $DB    # 列出副本中的 LTX 文件
 ```
 检查：R2 凭据是否过期/权限不足（与应用凭据独立）、网络、对象存储错误、本机时钟。
 
