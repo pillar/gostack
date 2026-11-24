@@ -2,11 +2,12 @@
 
 只记录已执行验证的结果。"已实现"指代码存在且有下列测试覆盖；"未验证"指代码存在但缺少要求的环境或证据。
 
-## 验证命令与结果（本机 macOS arm64, Go 1.27.1, Node 24.21）
+## 验证命令与结果（本机 macOS arm64, Go 1.27.4 toolchain, Node 24.21）
 - `./scripts/ci.sh`：gofmt 干净、`go vet` 通过、`go test -race -count=1 ./...` 全部通过、linux amd64/arm64 `CGO_ENABLED=0` 交叉编译成功、SDK typecheck + 35 个测试通过、SDK 核心 gzip 4486 B（预算 30720 B）。
 - 生成项目验收：`gostack init demo --kit game --gostack-path <repo>` → `go build` → `doctor` / `migrate up` / `game create` / `game config publish` → `serve` → `sdk/typescript/examples/e2e.mjs` 全部步骤 ok → SIGTERM 优雅退出 → `game reconcile` 0 差异。空载 RSS 约 22 MiB（macOS，仅供参考，非 A10 证据）。
 - 独立代码审查（只读子代理，聚焦认证/经济/幂等）：未发现隔离绕过、重复发奖或负余额路径；提出的 7 项中低级问题已修复（sum 榜按单次成绩隔离、存档原样返回字节以匹配 checksum、幂等键按玩家+操作隔离、平台登录响应去掉游客字段、埋点批次不因停机中断、限流表满时随机淘汰而非全部拒绝且 IPv6 按 /64 聚合、停机超时强制关闭连接），前 4 项有回归测试，修复后 `./scripts/ci.sh` 与 SDK 实机 e2e 复跑通过。
-- 未运行：govulncheck（本地执行被权限策略拒绝，已写入 CI workflow，未在 CI 实跑）、linux 二进制实机运行。
+- govulncheck：在 GitHub Actions 运行；Go 1.27.1 标准库有已修复漏洞（net/http、crypto/x509、crypto/tls 等，最高修复版本 1.27.4），已在 go.mod 与项目模板中固定 `toolchain go1.27.4`。
+- 未运行：linux 二进制实机运行。
 
 ## 通用核心（PRD §5）
 | ID | 状态 | 说明 |

@@ -3,7 +3,7 @@
 Product baseline: `docs/GoStack_PRD_v2.0.md` and revisions in `docs/PRD_v2_REVIEW.md` (local only, not in the public repo); HTTP contract `docs/GAME_API.md`, implementation status `docs/STATUS.md` (only verified capabilities are listed as done).
 
 ## Stack (verified 2026-11-24)
-- Go 1.27.1, module `github.com/pillar/gostack` (public GitHub repository).
+- Go 1.27.1 minimum, toolchain pinned to go1.27.4 (govulncheck: stdlib fixes), module `github.com/pillar/gostack` (public GitHub repository).
 - SQLite via `modernc.org/sqlite` v1.63.0 (pure Go, SQLite 3.54.1, FTS5 available, `CGO_ENABLED=0`). YAML via `go.yaml.in/yaml/v3`. No other Go deps.
 - TypeScript SDK: `sdk/typescript`, Node 24, devDeps typescript + esbuild only, npm with lockfile.
 
