@@ -43,6 +43,8 @@ type Kit struct {
 	Metrics   *observability.Registry
 	Log       *slog.Logger
 	Now       func() time.Time
+	// SaveMerge, when set, resolves save conflicts for PUTs that send "merge": true.
+	SaveMerge SaveMergeFunc
 
 	authLimit  *ratelimit.Limiter
 	scoreLimit *ratelimit.Limiter
@@ -84,15 +86,27 @@ func (k *Kit) Routes(mux *http.ServeMux) {
 	g("GET /config", k.getConfig)
 	g("GET /saves/{slot}", k.authed(k.getSave))
 	g("PUT /saves/{slot}", k.authed(k.putSave))
+	g("DELETE /saves/{slot}", k.authed(k.deleteSave))
+	g("GET /saves/{slot}/revisions", k.authed(k.listSaveRevisions))
+	g("POST /saves/{slot}/restore", k.authed(k.restoreSave))
 	g("GET /boards/{board}", k.optionalAuth(k.getBoard))
 	g("POST /boards/{board}/scores", k.authed(k.submitScore))
+	g("POST /boards/{board}/runs", k.authed(k.startRun))
 	g("GET /wallet", k.authed(k.getWallet))
+	g("GET /inventory", k.authed(k.getInventory))
 	g("POST /rewards/{reward}/claim", k.authed(k.claimReward))
+	g("POST /offers/{offer}/purchase", k.authed(k.purchaseOffer))
 	g("POST /events/batch", k.optionalAuth(k.eventsBatch))
 
 	mux.Handle("POST /v1/admin/games", k.admin(k.adminCreateGame))
 	mux.Handle("PUT /v1/admin/games/{game}/config", k.admin(k.adminPublishConfig))
 	mux.Handle("POST /v1/admin/games/{game}/config/rollback", k.admin(k.adminRollbackConfig))
+	k.HandleAdmin(mux, "POST /players/{player}/adjust", k.adminAdjust)
+	k.HandleAdmin(mux, "GET /quarantine", k.adminListQuarantine)
+	k.HandleAdmin(mux, "POST /quarantine/{id}/approve", k.adminReviewQuarantine("approved"))
+	k.HandleAdmin(mux, "POST /quarantine/{id}/reject", k.adminReviewQuarantine("rejected"))
+	k.HandleAdmin(mux, "POST /boards/{board}/seasons/{season}/settle", k.adminSettle)
+	k.HandleAdmin(mux, "GET /boards/{board}/seasons/{season}/settlement", k.adminGetSettlement)
 }
 
 type gameRow struct {

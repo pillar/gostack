@@ -182,7 +182,9 @@ func (k *Kit) submitScore(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	var req struct {
-		Score *int64 `json:"score"`
+		Score       *int64 `json:"score"`
+		RuleVersion int64  `json:"rule_version"`
+		RunToken    string `json:"run_token"`
 	}
 	if err := decodeStrict(body, &req); err != nil {
 		return err
@@ -193,6 +195,17 @@ func (k *Kit) submitScore(w http.ResponseWriter, r *http.Request) error {
 	def, _, err := k.boardDef(ctx, k.DB.Read, s.GameID, board)
 	if err != nil {
 		return err
+	}
+	if def.RuleVersion > 0 && req.RuleVersion != def.RuleVersion {
+		e := httpx.Conflict("rule_version_mismatch", "board rules changed; update the client")
+		e.Details = map[string]any{"rule_version": def.RuleVersion}
+		return e
+	}
+	if def.RequireRun && req.RunToken == "" {
+		return httpx.BadRequest("run_token required for this board")
+	}
+	if len(req.RunToken) > 128 {
+		return httpx.BadRequest("invalid run_token")
 	}
 	score := *req.Score
 	if score < def.MinScore || score > def.MaxScore {
@@ -208,42 +221,42 @@ func (k *Kit) submitScore(w http.ResponseWriter, r *http.Request) error {
 				Season string `json:"season"`
 			}
 			res := result{Status: "accepted", Season: season}
-			var cur int64
-			err := tx.QueryRowContext(ctx, `SELECT score FROM scores WHERE game_id=? AND board_id=? AND season_id=? AND player_id=?`, s.GameID, board, season, s.PlayerID).Scan(&cur)
-			exists := err == nil
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return idempotency.Result{}, err
-			}
-			candidate := score
-			if def.Mode == "sum" && exists {
-				candidate = cur + score
+			reason := ""
+			if req.RunToken != "" {
+				elapsed, err := k.consumeRun(ctx, tx, s, board, req.RunToken, now.UnixMilli())
+				if err != nil {
+					return idempotency.Result{}, err
+				}
+				if elapsed < def.MinRunMs {
+					reason = "run shorter than min_run_ms"
+				}
 			}
 			if def.QuarantineAbove != nil && score > *def.QuarantineAbove { // per submission, not the accumulated sum
+				reason = "above quarantine threshold"
+			}
+			if reason != "" {
 				if _, err := tx.ExecContext(ctx, `INSERT INTO score_quarantine(game_id,board_id,season_id,player_id,score,reason,created_at) VALUES(?,?,?,?,?,?,?)`,
-					s.GameID, board, season, s.PlayerID, score, "above quarantine threshold", now.UnixMilli()); err != nil {
+					s.GameID, board, season, s.PlayerID, score, reason, now.UnixMilli()); err != nil {
 					return idempotency.Result{}, err
 				}
 				if k.Metrics != nil {
 					k.Metrics.Counter("game_scores_quarantined_total", "").Add(1)
 				}
 				res.Status = "quarantined"
-				if exists {
+				var cur int64
+				err := tx.QueryRowContext(ctx, `SELECT score FROM scores WHERE game_id=? AND board_id=? AND season_id=? AND player_id=?`, s.GameID, board, season, s.PlayerID).Scan(&cur)
+				if err == nil {
 					res.Best = &cur
+				} else if !errors.Is(err, sql.ErrNoRows) {
+					return idempotency.Result{}, err
 				}
 				return idempotency.Result{Body: res}, nil
 			}
-			improves := !exists || def.Mode == "sum" ||
-				(def.Order == "desc" && candidate > cur) || (def.Order == "asc" && candidate < cur)
-			if improves {
-				if _, err := tx.ExecContext(ctx, `INSERT INTO scores(game_id,board_id,season_id,player_id,score,achieved_at,status,updated_at)
-					VALUES(?,?,?,?,?,?,'accepted',?) ON CONFLICT(game_id,board_id,season_id,player_id) DO UPDATE SET
-					score=excluded.score, achieved_at=excluded.achieved_at, updated_at=excluded.updated_at`,
-					s.GameID, board, season, s.PlayerID, candidate, now.UnixMilli(), now.UnixMilli()); err != nil {
-					return idempotency.Result{}, err
-				}
-				cur = candidate
+			best, err := applyScore(ctx, tx, def, s.GameID, board, season, s.PlayerID, score, now.UnixMilli())
+			if err != nil {
+				return idempotency.Result{}, err
 			}
-			res.Best = &cur
+			res.Best = &best
 			return idempotency.Result{Body: res}, nil
 		})
 	if err != nil {
@@ -251,4 +264,31 @@ func (k *Kit) submitScore(w http.ResponseWriter, r *http.Request) error {
 	}
 	idempotency.Write(w, status, resp, replayed)
 	return nil
+}
+
+// applyScore records an accepted score respecting the board mode (best keeps
+// the better value, sum accumulates) and returns the player's resulting score.
+func applyScore(ctx context.Context, tx *sql.Tx, def BoardDef, gameID, board, season, playerID string, score, at int64) (int64, error) {
+	var cur int64
+	err := tx.QueryRowContext(ctx, `SELECT score FROM scores WHERE game_id=? AND board_id=? AND season_id=? AND player_id=?`, gameID, board, season, playerID).Scan(&cur)
+	exists := err == nil
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, err
+	}
+	candidate := score
+	if def.Mode == "sum" && exists {
+		candidate = cur + score
+	}
+	improves := !exists || def.Mode == "sum" ||
+		(def.Order == "desc" && candidate > cur) || (def.Order == "asc" && candidate < cur)
+	if !improves {
+		return cur, nil
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO scores(game_id,board_id,season_id,player_id,score,achieved_at,status,updated_at)
+		VALUES(?,?,?,?,?,?,'accepted',?) ON CONFLICT(game_id,board_id,season_id,player_id) DO UPDATE SET
+		score=excluded.score, achieved_at=excluded.achieved_at, updated_at=excluded.updated_at`,
+		gameID, board, season, playerID, candidate, at, at); err != nil {
+		return 0, err
+	}
+	return candidate, nil
 }
