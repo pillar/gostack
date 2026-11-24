@@ -8,13 +8,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"path/filepath"
 	"slices"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/pillar/gostack/adapters/sqlite"
@@ -25,6 +28,7 @@ import (
 	"github.com/pillar/gostack/migrations"
 	"github.com/pillar/gostack/modules/idempotency"
 	"github.com/pillar/gostack/modules/jobs"
+	"github.com/pillar/gostack/modules/webauth"
 )
 
 // Version is set at build time: -ldflags "-X github.com/pillar/gostack/app.Version=v0.1.0".
@@ -38,6 +42,8 @@ type Hooks struct {
 
 // App is a running (or ready to run) application instance.
 type App struct {
+	// Cfg is the configuration the process started with. Restart-only keys
+	// never change at runtime; read hot keys through Config().
 	Cfg       config.Config
 	Log       *slog.Logger
 	DB        *sqlite.DB
@@ -45,8 +51,18 @@ type App struct {
 	Jobs      *jobs.Queue
 	Metrics   *observability.Registry
 	Game      *game.Kit
+	// WebAuth is set when auth.web.enabled; protect app routes with WebAuth.Require.
+	WebAuth *webauth.Module
+	// LogLevel, when set (serve does), is retuned by log.level on reload.
+	LogLevel *slog.LevelVar
 
-	ready atomic.Bool
+	ready       atomic.Bool
+	cfg         *config.Snapshot
+	inflight    atomic.Int64
+	inflightMax atomic.Int64
+	reloadMu    sync.Mutex
+	subs        []func(old, new config.Config)
+	restartKeys atomic.Int64
 }
 
 func storageOptions(d config.DatabaseConfig, path string, lock bool) sqlite.Options {
@@ -104,21 +120,27 @@ func openAnalytics(ctx context.Context, cfg config.Config) (*sqlite.DB, error) {
 
 // New opens storage and builds the application. Caller must Close it.
 func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error) {
-	a := &App{Cfg: cfg, Log: log, Metrics: observability.NewRegistry()}
-	var err error
+	a := &App{Cfg: cfg, Log: log, Metrics: observability.NewRegistry(), cfg: config.NewSnapshot(cfg)}
+	a.inflightMax.Store(int64(cfg.HTTP.MaxConcurrent))
+	ip, err := httpx.NewClientIP(cfg.HTTP.TrustedProxies)
+	if err != nil {
+		return nil, err
+	}
 	if a.DB, err = OpenDB(ctx, cfg, true); err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 	a.Jobs = &jobs.Queue{DB: a.DB}
+	if cfg.Auth.Web.Enabled {
+		a.WebAuth = &webauth.Module{DB: a.DB, Cfg: cfg.Auth.Web, Secure: cfg.Environment == "production", ClientIP: ip, Log: log}
+		a.WebAuth.Init()
+		a.OnReload(func(_, n config.Config) {
+			a.WebAuth.SetRates(n.Auth.Web.IPRatePerMinute, n.Auth.Web.AccountRatePerMinute)
+		})
+	}
 	if slices.Contains(cfg.Kits, "game") {
 		if a.Analytics, err = openAnalytics(ctx, cfg); err != nil {
 			a.Close()
 			return nil, fmt.Errorf("open analytics database: %w", err)
-		}
-		ip, err := httpx.NewClientIP(cfg.HTTP.TrustedProxies)
-		if err != nil {
-			a.Close()
-			return nil, err
 		}
 		platforms := map[string]game.PlatformVerifier{}
 		if p, ok := cfg.Game.Platforms["wechat"]; ok {
@@ -138,6 +160,19 @@ func (a *App) registerMetrics() {
 	a.Metrics.Gauge("db_write_rejected_total", func() float64 { return float64(a.DB.Stats().WriteRejected) })
 	a.Metrics.Gauge("db_busy_retries_total", func() float64 { return float64(a.DB.Stats().Busy) })
 	a.Metrics.Gauge("db_wal_bytes", func() float64 { return float64(a.DB.Stats().WALBytes) })
+	dataDir := filepath.Dir(a.Cfg.Database.Path)
+	a.Metrics.Gauge("disk_free_bytes", func() float64 {
+		var st syscall.Statfs_t
+		if err := syscall.Statfs(dataDir, &st); err != nil {
+			return -1
+		}
+		return float64(int64(st.Bavail) * int64(st.Bsize))
+	})
+	a.Metrics.Gauge("http_in_flight", func() float64 { return float64(a.inflight.Load()) })
+	a.Metrics.Gauge("http_max_concurrent", func() float64 { return float64(a.inflightMax.Load()) })
+	a.Metrics.Gauge("config_restart_pending_keys", func() float64 { return float64(a.restartKeys.Load()) })
+	a.Metrics.Counter("config_reloads_total", `result="applied"`)
+	a.Metrics.Counter("config_reloads_total", `result="rejected"`)
 	var mu sync.Mutex
 	var last jobs.Stats
 	var at time.Time
@@ -186,6 +221,9 @@ func (a *App) Handler(h Hooks) http.Handler {
 	if a.Game != nil {
 		a.Game.Routes(mux)
 	}
+	if a.WebAuth != nil {
+		a.WebAuth.Routes(mux)
+	}
 	if h.Routes != nil {
 		h.Routes(mux, a)
 	}
@@ -197,8 +235,127 @@ func (a *App) Handler(h Hooks) http.Handler {
 		httpx.WithRequestID(),
 		observability.AccessLog(a.Metrics, a.Log),
 		httpx.WithRecover(),
-		httpx.WithLimits(c.MaxBodyBytes, c.RequestTimeout, c.MaxConcurrent),
+		a.concurrencyGate,
+		// The in-flight cap is enforced by concurrencyGate (hot-reloadable);
+		// WithLimits gets the static validation ceiling.
+		httpx.WithLimits(c.MaxBodyBytes, c.RequestTimeout, config.MaxConcurrentCeiling),
 	)
+}
+
+// concurrencyGate rejects requests beyond http.max_concurrent with 503 instead
+// of queueing. The limit is read per request so a reload applies immediately.
+func (a *App) concurrencyGate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := a.inflight.Add(1)
+		defer a.inflight.Add(-1)
+		if n > a.inflightMax.Load() {
+			httpx.WriteError(w, r, httpx.Overloaded("server busy"))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// Config returns the current configuration snapshot (startup values with hot
+// keys from the latest successful reload).
+func (a *App) Config() config.Config { return a.cfg.Load() }
+
+// OnReload registers f to run after a successful reload with the previous and
+// the new snapshot. Only hot keys differ between them. Register before Serve;
+// f runs on the reload goroutine and must not block.
+func (a *App) OnReload(f func(old, new config.Config)) {
+	a.reloadMu.Lock()
+	a.subs = append(a.subs, f)
+	a.reloadMu.Unlock()
+}
+
+// ReloadResult reports what a reload changed.
+type ReloadResult struct {
+	Applied []config.Change `json:"applied"`
+	// RestartRequired lists changed keys that were NOT applied.
+	RestartRequired []config.Change `json:"restart_required"`
+}
+
+// Reload validates next completely and, if valid, atomically swaps in a
+// snapshot with next's hot keys; restart-only changes are reported, not
+// applied. An invalid next leaves the running configuration untouched.
+func (a *App) Reload(next config.Config) (ReloadResult, error) {
+	var res ReloadResult
+	if err := next.Validate(); err != nil {
+		a.Metrics.Counter("config_reloads_total", `result="rejected"`).Add(1)
+		return res, err
+	}
+	a.reloadMu.Lock()
+	defer a.reloadMu.Unlock()
+	old := a.cfg.Load()
+	for _, c := range config.Diff(old, next) {
+		if c.Hot {
+			res.Applied = append(res.Applied, c)
+		} else {
+			res.RestartRequired = append(res.RestartRequired, c)
+		}
+	}
+	cur := config.WithHot(old, next)
+	a.cfg.Store(cur)
+	a.inflightMax.Store(int64(cur.HTTP.MaxConcurrent))
+	if a.LogLevel != nil {
+		_ = a.LogLevel.UnmarshalText([]byte(cur.Log.Level))
+	}
+	a.restartKeys.Store(int64(len(res.RestartRequired)))
+	for _, f := range a.subs {
+		f(old, cur)
+	}
+	a.Metrics.Counter("config_reloads_total", `result="applied"`).Add(1)
+	return res, nil
+}
+
+// reloadFrom loads configuration with load and applies it, logging the outcome.
+func (a *App) reloadFrom(load func() (config.Config, error)) {
+	next, err := load()
+	if err == nil {
+		var res ReloadResult
+		if res, err = a.Reload(next); err == nil {
+			a.Log.Info("config reloaded", "applied", changeKeys(res.Applied))
+			for _, c := range res.RestartRequired {
+				a.Log.Warn("config change requires restart; not applied", "key", c.Key, "running", c.Old, "configured", c.New)
+			}
+			return
+		}
+	} else {
+		a.Metrics.Counter("config_reloads_total", `result="rejected"`).Add(1)
+	}
+	a.Log.Error("config reload rejected; keeping current configuration", "err", err)
+}
+
+func changeKeys(cs []config.Change) []string {
+	out := make([]string, 0, len(cs))
+	for _, c := range cs {
+		out = append(out, c.Key)
+	}
+	return out
+}
+
+// NewLogger builds the process logger with a level that can change at runtime.
+func NewLogger(w io.Writer, level, format string) (*slog.Logger, *slog.LevelVar) {
+	lv := new(slog.LevelVar)
+	_ = lv.UnmarshalText([]byte(level))
+	base := observability.NewLogger(w, "debug", format) // keeps redaction; filtering happens below
+	return slog.New(levelFilter{base.Handler(), lv}), lv
+}
+
+type levelFilter struct {
+	slog.Handler
+	lv *slog.LevelVar
+}
+
+func (h levelFilter) Enabled(ctx context.Context, l slog.Level) bool {
+	return l >= h.lv.Level() && h.Handler.Enabled(ctx, l)
+}
+func (h levelFilter) WithAttrs(as []slog.Attr) slog.Handler {
+	return levelFilter{h.Handler.WithAttrs(as), h.lv}
+}
+func (h levelFilter) WithGroup(n string) slog.Handler {
+	return levelFilter{h.Handler.WithGroup(n), h.lv}
 }
 
 func (a *App) readyz(w http.ResponseWriter, r *http.Request) error {
@@ -314,6 +471,11 @@ func (a *App) maintenance(ctx context.Context) {
 		}
 		if _, err := a.Jobs.PurgeSucceeded(c, 7*24*time.Hour); err != nil {
 			a.Log.Warn("job cleanup failed", "err", err)
+		}
+		if a.WebAuth != nil {
+			if err := a.WebAuth.Maintain(c); err != nil {
+				a.Log.Warn("web session cleanup failed", "err", err)
+			}
 		}
 		if a.Game != nil {
 			if _, err := a.Game.Analytics.PurgeOlderThan(c, time.Duration(a.Cfg.Game.AnalyticsRetainDays)*24*time.Hour); err != nil {

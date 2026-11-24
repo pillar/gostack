@@ -1,4 +1,6 @@
 # /etc/systemd/system/{{.Name}}.service — review before installing.
+# Installed by deploy/install.sh, which also creates /etc/{{.Name}}/gostack.env
+# (GOSTACK_ENVIRONMENT, database paths) used here and by the deploy scripts.
 [Unit]
 Description={{.Name}} (GoStack)
 After=network-online.target
@@ -11,9 +13,9 @@ Group={{.Name}}
 StateDirectory={{.Name}}
 WorkingDirectory=/var/lib/{{.Name}}
 ExecStart=/opt/{{.Name}}/current/{{.Name}} --config /etc/{{.Name}}/gostack.yaml serve
-Environment=GOSTACK_ENVIRONMENT=production
-Environment=GOSTACK_DATABASE_PATH=/var/lib/{{.Name}}/app.db
-Environment=GOSTACK_DATABASE_ANALYTICS_PATH=/var/lib/{{.Name}}/analytics.db
+# `systemctl reload` re-reads config; only hot keys apply (see `config validate`).
+ExecReload=/bin/kill -HUP $MAINPID
+EnvironmentFile=/etc/{{.Name}}/gostack.env
 # Secrets: LoadCredential=wechat:/etc/{{.Name}}/wechat.secret and reference file:%d/wechat
 Restart=on-failure
 RestartSec=2

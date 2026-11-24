@@ -1,0 +1,143 @@
+# Prometheus alerting rules for a GoStack (Lite) instance.
+#
+# Scrape the internal listener (http.internal_listen, e.g. 127.0.0.1:9090/metrics)
+# with job="gostack". Every metric referenced here is exported by the
+# application itself; app/alerts_test.go in the GoStack repository fails if a
+# name or label disappears.
+# Thresholds are starting points for a 1 vCPU / 1 GiB host, not measured
+# budgets: tune them after observing your own baseline.
+#
+# Not covered here: Litestream replication lag / errors. Litestream exposes its
+# own metrics whose names depend on the pinned version; add those rules after
+# checking that version's documentation (see docs/RUNBOOK.md#backup-replication-lag).
+groups:
+  - name: gostack-availability
+    rules:
+      - alert: GoStackDown
+        expr: up{job="gostack"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "GoStack metrics endpoint unreachable on {{ $labels.instance }}"
+          runbook: docs/RUNBOOK.md#instance-down
+      - alert: GoStackHigh5xxRatio
+        expr: sum(rate(http_requests_total{class="5xx"}[5m])) / sum(rate(http_requests_total[5m])) > 0.02
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "More than 2% of requests fail with 5xx ({{ $value | humanizePercentage }})"
+          runbook: docs/RUNBOOK.md#write-queue-503s
+      - alert: GoStackHighLatencyP99
+        expr: histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket[5m]))) > 0.5
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "P99 latency above 500ms ({{ $value }}s)"
+          runbook: docs/RUNBOOK.md#write-queue-503s
+      - alert: GoStackConcurrencySaturated
+        expr: http_in_flight / http_max_concurrent > 0.9
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "In-flight requests above 90% of http.max_concurrent"
+          runbook: docs/RUNBOOK.md#write-queue-503s
+      - alert: GoStackMemoryHigh
+        expr: go_sys_bytes > 600 * 1024 * 1024
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Go runtime holds {{ $value | humanize1024 }}B (systemd MemoryMax is 768M)"
+          runbook: docs/RUNBOOK.md#memory-pressure
+
+  - name: gostack-storage
+    rules:
+      - alert: GoStackWriteQueueRejecting
+        expr: increase(db_write_rejected_total[5m]) > 0
+        for: 0m
+        labels: {severity: warning}
+        annotations:
+          summary: "Write admission queue full: {{ $value }} writes rejected with 503 in 5m"
+          runbook: docs/RUNBOOK.md#write-queue-503s
+      - alert: GoStackWriteQueueBacklog
+        expr: db_write_waiting > 512
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $value }} transactions waiting for the single SQLite writer"
+          runbook: docs/RUNBOOK.md#write-queue-503s
+      - alert: GoStackSQLiteBusy
+        expr: rate(db_busy_retries_total[5m]) > 0.1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "SQLITE_BUSY retries: another process is writing the database"
+          runbook: docs/RUNBOOK.md#write-queue-503s
+      - alert: GoStackWALLarge
+        expr: db_wal_bytes > 256 * 1024 * 1024
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "WAL is {{ $value | humanize1024 }}B and not shrinking (checkpoint starvation?)"
+          runbook: docs/RUNBOOK.md#wal-growth--checkpoint-starvation
+      - alert: GoStackWALCritical
+        expr: db_wal_bytes > 1024 * 1024 * 1024
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "WAL above 1 GiB"
+          runbook: docs/RUNBOOK.md#wal-growth--checkpoint-starvation
+      - alert: GoStackDiskLow
+        expr: disk_free_bytes >= 0 and disk_free_bytes < 2 * 1024 * 1024 * 1024
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Data volume has {{ $value | humanize1024 }}B free"
+          runbook: docs/RUNBOOK.md#disk-full
+      - alert: GoStackDiskCritical
+        expr: disk_free_bytes >= 0 and disk_free_bytes < 1024 * 1024 * 1024
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "Data volume below 1 GiB free; writes and checkpoints will fail soon"
+          runbook: docs/RUNBOOK.md#disk-full
+
+  - name: gostack-background
+    rules:
+      - alert: GoStackJobsDeadLetters
+        expr: jobs_dead > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $value }} jobs in the dead-letter state"
+          runbook: docs/RUNBOOK.md#jobs-dead-letters
+      - alert: GoStackJobsBacklogOld
+        expr: jobs_oldest_age_seconds > 300
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Oldest runnable job waited {{ $value }}s (workers stuck or too few)"
+          runbook: docs/RUNBOOK.md#jobs-dead-letters
+      - alert: GoStackAnalyticsDropping
+        expr: increase(analytics_dropped_total[10m]) > 0
+        for: 0m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $value }} analytics events dropped in 10m (buffer full)"
+          runbook: docs/RUNBOOK.md#analytics-drops
+
+  - name: gostack-config
+    rules:
+      - alert: GoStackConfigReloadRejected
+        expr: increase(config_reloads_total{result="rejected"}[15m]) > 0
+        for: 0m
+        labels: {severity: warning}
+        annotations:
+          summary: "A SIGHUP config reload was rejected; the old configuration is still running"
+          runbook: docs/RUNBOOK.md#config-reload
+      - alert: GoStackConfigRestartPending
+        expr: config_restart_pending_keys > 0
+        for: 1h
+        labels: {severity: info}
+        annotations:
+          summary: "{{ $value }} changed config keys need a restart to take effect"
+          runbook: docs/RUNBOOK.md#config-reload

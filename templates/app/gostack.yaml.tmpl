@@ -1,5 +1,8 @@
 # {{.Name}} configuration. Precedence: defaults < this file < GOSTACK_* env < --set.
-# Restart required for every key in this version (no hot reload yet).
+# SIGHUP (`systemctl reload`) applies only hot keys: log.level, http.max_concurrent,
+# game.auth_rate_per_minute, game.score_rate_per_minute, auth.web.ip_rate_per_minute,
+# auth.web.account_rate_per_minute. Everything else needs a restart; a reload
+# logs such changes without applying them. `config validate` lists the hot keys.
 profile: lite
 environment: development
 http:
@@ -34,3 +37,14 @@ game:
   save_slots_per_player: 5
 {{else}}kits: []
 {{end}}
+# Optional email/password login with cookie sessions (/v1/auth/*); see GoStack docs/SECURITY.md.
+# auth:
+#   web:
+#     enabled: true
+#     session_ttl: 168h
+#     idle_timeout: 24h
+#     allow_signup: true
+#     allowed_origins: []          # extra https origins allowed to call with cookies
+#     ip_rate_per_minute: 30
+#     account_rate_per_minute: 10
+#     max_concurrent_hashes: 2     # Argon2id uses 19 MiB per hash

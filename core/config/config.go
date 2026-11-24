@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -29,6 +30,32 @@ type Config struct {
 	Log         LogConfig      `yaml:"log" json:"log"`
 	Kits        []string       `yaml:"kits" json:"kits"`
 	Game        GameConfig     `yaml:"game" json:"game"`
+	Auth        AuthConfig     `yaml:"auth" json:"auth"`
+}
+
+// AuthConfig groups optional end-user authentication modules.
+type AuthConfig struct {
+	Web WebAuthConfig `yaml:"web" json:"web"`
+}
+
+// WebAuthConfig configures password login with cookie sessions (modules/webauth).
+// Disabled by default; API keys and GameKit sessions do not depend on it.
+type WebAuthConfig struct {
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// SessionTTL is the absolute session lifetime.
+	SessionTTL time.Duration `yaml:"session_ttl" json:"session_ttl"`
+	// IdleTimeout expires a session that has not been used for this long.
+	IdleTimeout time.Duration `yaml:"idle_timeout" json:"idle_timeout"`
+	// AllowSignup enables POST /v1/auth/signup.
+	AllowSignup bool `yaml:"allow_signup" json:"allow_signup"`
+	// AllowedOrigins are extra origins (scheme://host[:port]) accepted for unsafe
+	// requests besides the request's own host.
+	AllowedOrigins []string `yaml:"allowed_origins" json:"allowed_origins"`
+	// Password-check budgets per minute (process-local).
+	IPRatePerMinute      int `yaml:"ip_rate_per_minute" json:"ip_rate_per_minute"`
+	AccountRatePerMinute int `yaml:"account_rate_per_minute" json:"account_rate_per_minute"`
+	// MaxConcurrentHashes bounds simultaneous Argon2id computations (19 MiB each).
+	MaxConcurrentHashes int `yaml:"max_concurrent_hashes" json:"max_concurrent_hashes"`
 }
 
 type HTTPConfig struct {
@@ -152,6 +179,14 @@ func Defaults() Config {
 			AuthRatePerMinute:   30,
 			ScoreRatePerMinute:  60,
 		},
+		Auth: AuthConfig{Web: WebAuthConfig{
+			SessionTTL:           7 * 24 * time.Hour,
+			IdleTimeout:          24 * time.Hour,
+			AllowSignup:          true,
+			IPRatePerMinute:      30,
+			AccountRatePerMinute: 10,
+			MaxConcurrentHashes:  2,
+		}},
 	}
 }
 
@@ -220,25 +255,34 @@ func fields(c *Config) map[string]func(string) error {
 		return func(v string) error { b, err := strconv.ParseBool(v); *p = b; return err }
 	}
 	return map[string]func(string) error{
-		"PROFILE":                     str(&c.Profile),
-		"ENVIRONMENT":                 str(&c.Environment),
-		"HTTP_LISTEN":                 str(&c.HTTP.Listen),
-		"HTTP_INTERNAL_LISTEN":        str(&c.HTTP.InternalListen),
-		"HTTP_MAX_BODY_BYTES":         i64(&c.HTTP.MaxBodyBytes),
-		"HTTP_REQUEST_TIMEOUT":        dur(&c.HTTP.RequestTimeout),
-		"HTTP_MAX_CONCURRENT":         integer(&c.HTTP.MaxConcurrent),
-		"DATABASE_DRIVER":             str(&c.Database.Driver),
-		"DATABASE_PATH":               str(&c.Database.Path),
-		"DATABASE_ANALYTICS_PATH":     str(&c.Database.AnalyticsPath),
-		"DATABASE_READ_CONNECTIONS":   integer(&c.Database.ReadConnections),
-		"DATABASE_SYNCHRONOUS":        str(&c.Database.Synchronous),
-		"DATABASE_BUSY_TIMEOUT":       dur(&c.Database.BusyTimeout),
-		"DATABASE_WAL_AUTOCHECKPOINT": integer(&c.Database.WALAutocheckpoint),
-		"CACHE_MAX_BYTES":             i64(&c.Cache.MaxBytes),
-		"QUEUE_WORKERS":               integer(&c.Queue.Workers),
-		"BACKUP_ENABLED":              boolean(&c.Backup.Enabled),
-		"LOG_LEVEL":                   str(&c.Log.Level),
-		"LOG_FORMAT":                  str(&c.Log.Format),
+		"PROFILE":                          str(&c.Profile),
+		"ENVIRONMENT":                      str(&c.Environment),
+		"HTTP_LISTEN":                      str(&c.HTTP.Listen),
+		"HTTP_INTERNAL_LISTEN":             str(&c.HTTP.InternalListen),
+		"HTTP_MAX_BODY_BYTES":              i64(&c.HTTP.MaxBodyBytes),
+		"HTTP_REQUEST_TIMEOUT":             dur(&c.HTTP.RequestTimeout),
+		"HTTP_MAX_CONCURRENT":              integer(&c.HTTP.MaxConcurrent),
+		"DATABASE_DRIVER":                  str(&c.Database.Driver),
+		"DATABASE_PATH":                    str(&c.Database.Path),
+		"DATABASE_ANALYTICS_PATH":          str(&c.Database.AnalyticsPath),
+		"DATABASE_READ_CONNECTIONS":        integer(&c.Database.ReadConnections),
+		"DATABASE_SYNCHRONOUS":             str(&c.Database.Synchronous),
+		"DATABASE_BUSY_TIMEOUT":            dur(&c.Database.BusyTimeout),
+		"DATABASE_WAL_AUTOCHECKPOINT":      integer(&c.Database.WALAutocheckpoint),
+		"CACHE_MAX_BYTES":                  i64(&c.Cache.MaxBytes),
+		"QUEUE_WORKERS":                    integer(&c.Queue.Workers),
+		"BACKUP_ENABLED":                   boolean(&c.Backup.Enabled),
+		"LOG_LEVEL":                        str(&c.Log.Level),
+		"LOG_FORMAT":                       str(&c.Log.Format),
+		"GAME_AUTH_RATE_PER_MINUTE":        integer(&c.Game.AuthRatePerMinute),
+		"GAME_SCORE_RATE_PER_MINUTE":       integer(&c.Game.ScoreRatePerMinute),
+		"AUTH_WEB_ENABLED":                 boolean(&c.Auth.Web.Enabled),
+		"AUTH_WEB_SESSION_TTL":             dur(&c.Auth.Web.SessionTTL),
+		"AUTH_WEB_IDLE_TIMEOUT":            dur(&c.Auth.Web.IdleTimeout),
+		"AUTH_WEB_ALLOW_SIGNUP":            boolean(&c.Auth.Web.AllowSignup),
+		"AUTH_WEB_IP_RATE_PER_MINUTE":      integer(&c.Auth.Web.IPRatePerMinute),
+		"AUTH_WEB_ACCOUNT_RATE_PER_MINUTE": integer(&c.Auth.Web.AccountRatePerMinute),
+		"AUTH_WEB_MAX_CONCURRENT_HASHES":   integer(&c.Auth.Web.MaxConcurrentHashes),
 	}
 }
 
@@ -277,6 +321,9 @@ func (c Config) Validate() error {
 	}
 	if c.HTTP.RequestTimeout <= 0 || c.HTTP.MaxConcurrent <= 0 || c.HTTP.ShutdownTimeout <= 0 {
 		add("http timeouts and max_concurrent must be positive")
+	}
+	if c.HTTP.MaxConcurrent > MaxConcurrentCeiling {
+		add("http.max_concurrent must be <= %d", MaxConcurrentCeiling)
 	}
 	for _, cidr := range c.HTTP.TrustedProxies {
 		if _, _, err := net.ParseCIDR(cidr); err != nil {
@@ -352,6 +399,27 @@ func (c Config) Validate() error {
 			}
 		}
 	}
+	if w := c.Auth.Web; w.Enabled {
+		if w.SessionTTL < 5*time.Minute || w.SessionTTL > 90*24*time.Hour {
+			add("auth.web.session_ttl must be within [5m, 2160h]")
+		}
+		if w.IdleTimeout < time.Minute || w.IdleTimeout > w.SessionTTL {
+			add("auth.web.idle_timeout must be within [1m, session_ttl]")
+		}
+		if w.IPRatePerMinute < 1 || w.AccountRatePerMinute < 1 {
+			add("auth.web.ip_rate_per_minute and account_rate_per_minute must be >= 1")
+		}
+		if w.MaxConcurrentHashes < 1 || w.MaxConcurrentHashes > 64 {
+			add("auth.web.max_concurrent_hashes must be within [1,64] (each hash uses 19 MiB)")
+		}
+		for _, o := range w.AllowedOrigins {
+			if !validOrigin(o) {
+				add("auth.web.allowed_origins: %q must be scheme://host[:port] without path", o)
+			} else if c.Environment == "production" && !strings.HasPrefix(o, "https://") {
+				add("production: auth.web.allowed_origins entry %q must use https", o)
+			}
+		}
+	}
 	if c.Environment == "production" {
 		if !strings.HasPrefix(c.HTTP.Listen, "127.0.0.1:") && !strings.HasPrefix(c.HTTP.Listen, "[::1]:") && len(c.HTTP.TrustedProxies) == 0 {
 			add("production: http.listen is public without trusted_proxies; bind loopback or protect the origin explicitly")
@@ -361,6 +429,12 @@ func (c Config) Validate() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func validOrigin(o string) bool {
+	u, err := url.Parse(o)
+	return err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != "" &&
+		o == u.Scheme+"://"+u.Host
 }
 
 // IsSecretRef reports whether s is a supported secret reference.
