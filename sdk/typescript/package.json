@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "GoStack GameKit TypeScript SDK (engine-agnostic core with browser and WeChat adapters)",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "sideEffects": false,
   "files": ["dist", "README.md"],
   "main": "./dist/index.js",

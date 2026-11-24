@@ -27,3 +27,7 @@ cd mygame && go mod tidy && go build -o bin/mygame .
 ```
 
 未实现的 profile（scale/distributed）、驱动（postgres/valkey/pgmq）和 Kit（web/agent）会被配置校验拒绝，而不是假装可用。
+
+## License
+
+MIT, see `LICENSE`.
