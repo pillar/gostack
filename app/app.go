@@ -53,6 +53,8 @@ type App struct {
 	Game      *game.Kit
 	// WebAuth is set when auth.web.enabled; protect app routes with WebAuth.Require.
 	WebAuth *webauth.Module
+	// Mod holds the optional modules enabled by configuration.
+	Mod Modules
 	// LogLevel, when set (serve does), is retuned by log.level on reload.
 	LogLevel *slog.LevelVar
 
@@ -149,6 +151,11 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 		a.Game = &game.Kit{DB: a.DB, Analytics: game.NewAnalytics(a.Analytics, cfg.Game.AnalyticsBuffer, log),
 			Cfg: cfg.Game, ClientIP: ip, Platforms: platforms, Metrics: a.Metrics, Log: log}
 		a.Game.Init()
+		a.OnReload(func(_, n config.Config) { a.Game.SetRates(n.Game.AuthRatePerMinute, n.Game.ScoreRatePerMinute) })
+	}
+	if err := a.initModules(cfg); err != nil {
+		a.Close()
+		return nil, err
 	}
 	a.registerMetrics()
 	return a, nil
@@ -224,6 +231,7 @@ func (a *App) Handler(h Hooks) http.Handler {
 	if a.WebAuth != nil {
 		a.WebAuth.Routes(mux)
 	}
+	a.moduleRoutes(mux)
 	if h.Routes != nil {
 		h.Routes(mux, a)
 	}
@@ -410,6 +418,11 @@ func (a *App) Serve(ctx context.Context, h Hooks) error {
 	bg, stopBG := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
 	handlers := map[string]jobs.Handler{}
+	if a.Game != nil {
+		for k, v := range a.Game.JobHandlers() {
+			handlers[k] = v
+		}
+	}
 	for k, v := range h.Jobs {
 		handlers[k] = v
 	}
@@ -419,6 +432,14 @@ func (a *App) Serve(ctx context.Context, h Hooks) error {
 	go func() { defer wg.Done(); a.maintenance(bg) }()
 	if a.Game != nil {
 		go a.Game.Analytics.Run(bg, 5*time.Second)
+		if iv := a.Cfg.Game.Settlement.Interval; iv > 0 {
+			wg.Add(1)
+			go func() { defer wg.Done(); a.scheduleSettlements(bg, iv) }()
+		}
+	}
+	if a.Mod.Match != nil {
+		wg.Add(1)
+		go func() { defer wg.Done(); a.Mod.Match.Run(bg) }()
 	}
 
 	errc := make(chan error, 1)
@@ -442,6 +463,13 @@ func (a *App) Serve(ctx context.Context, h Hooks) error {
 	if internal != nil {
 		_ = internal.Shutdown(sctx)
 	}
+	// Upgraded WebSocket connections are not tracked by http.Server: close them
+	// (1001 going away) before background work and databases stop.
+	if a.Mod.Realtime != nil {
+		if herr := a.Mod.Realtime.Hub().Close(sctx); herr != nil {
+			a.Log.Warn("realtime shutdown incomplete", "err", herr)
+		}
+	}
 	stopBG()
 	wg.Wait()
 	if a.Game != nil {
@@ -452,6 +480,27 @@ func (a *App) Serve(ctx context.Context, h Hooks) error {
 		return nil
 	}
 	return err
+}
+
+// scheduleSettlements enqueues settlement jobs for ended seasons; the jobs
+// carry dedupe keys, so repeated passes and multiple processes are harmless.
+func (a *App) scheduleSettlements(ctx context.Context, every time.Duration) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		c, cancel := context.WithTimeout(ctx, 30*time.Second)
+		if n, err := a.Game.ScheduleSettlements(c, a.Jobs); err != nil && ctx.Err() == nil {
+			a.Log.Warn("settlement scheduling failed", "err", err)
+		} else if n > 0 {
+			a.Log.Info("settlement jobs enqueued", "count", n)
+		}
+		cancel()
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }
 
 // maintenance runs idempotent cleanup periodically.
@@ -477,7 +526,15 @@ func (a *App) maintenance(ctx context.Context) {
 				a.Log.Warn("web session cleanup failed", "err", err)
 			}
 		}
+		for name, m := range a.maintainers() {
+			if err := m.Maintain(c); err != nil {
+				a.Log.Warn("module maintenance failed", "module", name, "err", err)
+			}
+		}
 		if a.Game != nil {
+			if _, err := a.Game.PurgeRuns(c); err != nil {
+				a.Log.Warn("score run cleanup failed", "err", err)
+			}
 			if _, err := a.Game.Analytics.PurgeOlderThan(c, time.Duration(a.Cfg.Game.AnalyticsRetainDays)*24*time.Hour); err != nil {
 				a.Log.Warn("analytics retention failed", "err", err)
 			}

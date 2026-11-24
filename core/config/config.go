@@ -31,6 +31,8 @@ type Config struct {
 	Kits        []string       `yaml:"kits" json:"kits"`
 	Game        GameConfig     `yaml:"game" json:"game"`
 	Auth        AuthConfig     `yaml:"auth" json:"auth"`
+	Billing     BillingConfig  `yaml:"billing" json:"billing"`
+	Storage     StorageConfig  `yaml:"storage" json:"storage"`
 }
 
 // AuthConfig groups optional end-user authentication modules.
@@ -125,6 +127,14 @@ type GameConfig struct {
 	ScoreRatePerMinute int `yaml:"score_rate_per_minute" json:"score_rate_per_minute"`
 	// Platforms maps platform name to verifier configuration.
 	Platforms map[string]PlatformConfig `yaml:"platforms" json:"platforms"`
+	// Modules enables optional GameKit feature packages (see modules.go).
+	Modules    []string         `yaml:"modules" json:"modules"`
+	Ops        OpsConfig        `yaml:"ops" json:"ops"`
+	Social     SocialConfig     `yaml:"social" json:"social"`
+	Match      MatchConfig      `yaml:"match" json:"match"`
+	Commerce   CommerceConfig   `yaml:"commerce" json:"commerce"`
+	Realtime   RealtimeConfig   `yaml:"realtime" json:"realtime"`
+	Settlement SettlementConfig `yaml:"settlement" json:"settlement"`
 }
 
 type PlatformConfig struct {
@@ -178,6 +188,7 @@ func Defaults() Config {
 			AnalyticsRetainDays: 30,
 			AuthRatePerMinute:   30,
 			ScoreRatePerMinute:  60,
+			Settlement:          SettlementConfig{Interval: 5 * time.Minute},
 		},
 		Auth: AuthConfig{Web: WebAuthConfig{
 			SessionTTL:           7 * 24 * time.Hour,
@@ -209,6 +220,10 @@ func Load(path string, env func(string) (string, bool), overrides map[string]str
 		base := filepath.Dir(path)
 		cfg.Database.Path = resolve(base, cfg.Database.Path)
 		cfg.Database.AnalyticsPath = resolve(base, cfg.Database.AnalyticsPath)
+		cfg.Storage.Local.Root = resolve(base, cfg.Storage.Local.Root)
+		if a := cfg.Game.Commerce.Apple; a != nil {
+			a.RootCAFile = resolve(base, a.RootCAFile)
+		}
 	}
 	if env == nil {
 		env = os.LookupEnv
@@ -283,6 +298,12 @@ func fields(c *Config) map[string]func(string) error {
 		"AUTH_WEB_IP_RATE_PER_MINUTE":      integer(&c.Auth.Web.IPRatePerMinute),
 		"AUTH_WEB_ACCOUNT_RATE_PER_MINUTE": integer(&c.Auth.Web.AccountRatePerMinute),
 		"AUTH_WEB_MAX_CONCURRENT_HASHES":   integer(&c.Auth.Web.MaxConcurrentHashes),
+		"GAME_SETTLEMENT_INTERVAL":         dur(&c.Game.Settlement.Interval),
+		"BILLING_ENABLED":                  boolean(&c.Billing.Enabled),
+		"STORAGE_DRIVER":                   str(&c.Storage.Driver),
+		"STORAGE_LOCAL_ROOT":               str(&c.Storage.Local.Root),
+		"STORAGE_S3_ENDPOINT":              str(&c.Storage.S3.Endpoint),
+		"STORAGE_S3_BUCKET":                str(&c.Storage.S3.Bucket),
 	}
 }
 
@@ -428,6 +449,7 @@ func (c Config) Validate() error {
 			add("production: database.synchronous=NORMAL requires database.accept_normal_sync_risk=true")
 		}
 	}
+	errs = append(errs, c.validateModules()...)
 	return errors.Join(errs...)
 }
 

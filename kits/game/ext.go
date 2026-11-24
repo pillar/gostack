@@ -124,3 +124,11 @@ func EnsurePlayer(ctx context.Context, q interface {
 	}
 	return nil
 }
+
+// SetRates retunes the GameKit rate limiters (config hot reload): auth per IP,
+// score/run per player, and analytics events per IP (4x auth).
+func (k *Kit) SetRates(authPerMinute, scorePerMinute int) {
+	k.authLimit.SetPerMinute(authPerMinute)
+	k.scoreLimit.SetPerMinute(scorePerMinute)
+	k.eventLimit.SetPerMinute(authPerMinute * 4)
+}
