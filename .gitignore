@@ -10,3 +10,4 @@ sdk/typescript/.test-build/
 # Product requirement documents are kept local, not published.
 /docs/GoStack_PRD_*.md
 /docs/PRD_*.md
+/.claude/worktrees/
