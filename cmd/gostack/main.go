@@ -116,6 +116,11 @@ func initProject(args []string, stdout io.Writer) error {
 		if err != nil {
 			return err
 		}
+		if !strings.HasSuffix(p, ".tmpl") {
+			// Verbatim assets (deploy scripts, alert rules) may contain {{ }}.
+			files[filepath.Join(target, filepath.FromSlash(rel))] = raw
+			return nil
+		}
 		t, err := template.New(p).Option("missingkey=error").Parse(string(raw))
 		if err != nil {
 			return err
@@ -143,7 +148,11 @@ func initProject(args []string, stdout io.Writer) error {
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			return err
 		}
-		f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		mode := os.FileMode(0o644)
+		if strings.HasSuffix(p, ".sh") {
+			mode = 0o755
+		}
+		f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 		if err != nil {
 			return err
 		}

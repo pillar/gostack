@@ -18,7 +18,6 @@ import (
 	"github.com/pillar/gostack/adapters/sqlite"
 	"github.com/pillar/gostack/core/auth"
 	"github.com/pillar/gostack/core/config"
-	"github.com/pillar/gostack/core/observability"
 	"github.com/pillar/gostack/kits/game"
 	"github.com/pillar/gostack/migrations"
 	"github.com/pillar/gostack/modules/jobs"
@@ -43,10 +42,14 @@ type CheckFailed struct{ Msg string }
 func (e CheckFailed) Error() string { return e.Msg }
 
 const appUsage = `Application commands:
-  serve                                  run the HTTP server
+  serve                                  run the HTTP server (SIGHUP reloads hot config keys)
   migrate status|up                      show or apply schema migrations
-  config validate                        validate configuration
-  doctor                                 check environment, storage and configuration
+  config validate                        validate configuration and list hot-reloadable keys
+  config diff <other.yaml>               compare running sources with another file (hot vs restart)
+  backup snapshot --to FILE              consistent online copy of the main database (VACUUM INTO)
+  backup verify FILE                     integrity, schema compatibility and ledger reconcile
+  backup restore --from FILE --to PATH   verify, then restore to a new path (never overwrites)
+  doctor                                check environment, storage and configuration
   version                                print version
   game create <game_id> [--name N] [--origin URL]...
   game config publish <game_id> <file.json>
@@ -148,11 +151,14 @@ func run(args []string, hooks Hooks, env Env) error {
 	cfg, cfgErr := g.load(env)
 	switch cmd {
 	case "config":
+		if len(rest) == 2 && rest[0] == "diff" {
+			return configDiff(g, cfg, cfgErr, rest[1], env)
+		}
 		if len(rest) != 1 || rest[0] != "validate" {
-			return UsageError{"usage: config validate"}
+			return UsageError{"usage: config validate | config diff <other.yaml>"}
 		}
 		if g.json {
-			out := map[string]any{"valid": cfgErr == nil}
+			out := map[string]any{"valid": cfgErr == nil, "hot_keys": config.HotKeys()}
 			if cfgErr != nil {
 				out["errors"] = strings.Split(cfgErr.Error(), "\n")
 			} else {
@@ -165,8 +171,11 @@ func run(args []string, hooks Hooks, env Env) error {
 		}
 		if !g.json {
 			fmt.Fprintln(env.Stdout, "config valid")
+			fmt.Fprintf(env.Stdout, "hot-reloadable on SIGHUP: %s\nall other keys require a restart\n", strings.Join(config.HotKeys(), ", "))
 		}
 		return nil
+	case "backup":
+		return backupCmd(ctx, cfg, cfgErr, rest, g.json, env)
 	case "doctor":
 		return doctor(ctx, cfg, cfgErr, g.json, env)
 	}
@@ -175,7 +184,7 @@ func run(args []string, hooks Hooks, env Env) error {
 	}
 	switch cmd {
 	case "serve":
-		return serve(ctx, cfg, hooks, env)
+		return serve(ctx, g, cfg, hooks, env)
 	case "migrate":
 		return migrate(ctx, cfg, rest, g.json, env)
 	case "game":
@@ -196,14 +205,58 @@ func run(args []string, hooks Hooks, env Env) error {
 	return UsageError{fmt.Sprintf("unknown command %q", cmd)}
 }
 
-func serve(ctx context.Context, cfg config.Config, hooks Hooks, env Env) error {
-	log := observability.NewLogger(env.Stderr, cfg.Log.Level, cfg.Log.Format)
+func serve(ctx context.Context, g globals, cfg config.Config, hooks Hooks, env Env) error {
+	// Registered before startup so an early SIGHUP does not kill the process.
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	defer signal.Stop(hup)
+	log, lv := NewLogger(env.Stderr, cfg.Log.Level, cfg.Log.Format)
 	a, err := New(ctx, cfg, log)
 	if err != nil {
 		return err
 	}
 	defer a.Close()
+	a.LogLevel = lv
+	// Reload re-reads the same sources: the --config file, the environment of
+	// this process and the original --set flags.
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-hup:
+				a.reloadFrom(func() (config.Config, error) { return g.load(env) })
+			}
+		}
+	}()
 	return a.Serve(ctx, hooks)
+}
+
+func configDiff(g globals, cur config.Config, curErr error, other string, env Env) error {
+	if curErr != nil {
+		return CheckFailed{"current configuration invalid: " + curErr.Error()}
+	}
+	g.configPath = other
+	next, err := g.load(env)
+	if err != nil {
+		return CheckFailed{"configuration " + other + " invalid: " + err.Error()}
+	}
+	changes := config.Diff(cur, next)
+	if g.json {
+		PrintJSON(env.Stdout, map[string]any{"changes": changes, "hot_keys": config.HotKeys()})
+		return nil
+	}
+	if len(changes) == 0 {
+		fmt.Fprintln(env.Stdout, "no changes")
+	}
+	for _, c := range changes {
+		mode := "restart"
+		if c.Hot {
+			mode = "hot"
+		}
+		fmt.Fprintf(env.Stdout, "%-8s %s: %s -> %s\n", mode, c.Key, c.Old, c.New)
+	}
+	return nil
 }
 
 // openAdmin opens the database for short administrative writes while a server
@@ -265,7 +318,11 @@ func migrate(ctx context.Context, cfg config.Config, args []string, asJSON bool,
 		return err
 	}
 	if asJSON {
-		PrintJSON(env.Stdout, map[string]any{"applied_now": applied, "migrations": st, "pending": sqlite.Pending(st)})
+		ss := summarize(st, ms)
+		// Top-level "drift"/"unknown_versions" are what deploy/rollback.sh checks:
+		// a database with versions this binary does not know must not be served by it.
+		PrintJSON(env.Stdout, map[string]any{"applied_now": applied, "migrations": st, "pending": sqlite.Pending(st),
+			"drift": ss.Drift, "unknown_versions": ss.Unknown, "pending_versions": ss.Pending})
 	} else {
 		for _, s := range st {
 			state := "pending"
@@ -455,7 +512,12 @@ func doctor(ctx context.Context, cfg config.Config, cfgErr error, asJSON bool, e
 			add("integrity_check", err == nil, errString(err, "ok"))
 			ms, _ := sqlite.LoadMigrations(migrations.SQLite, "sqlite")
 			s, err := sqlite.MigrationStatusOf(ctx, db.Write, ms)
-			add("migrations", err == nil && !sqlite.Pending(s), errString(err, fmt.Sprintf("%d known, pending=%v", len(ms), sqlite.Pending(s))))
+			// Pending migrations are applied by `migrate up` / `serve`, so they are
+			// reported, not failed (an upgrade preflight runs doctor before them).
+			// Drift or versions unknown to this binary fail.
+			ss := summarize(s, ms)
+			add("migrations", err == nil && !ss.Drift, errString(err, fmt.Sprintf("%d known, %d applied, pending=%v unknown=%v drifted=%v",
+				ss.Known, ss.Applied, ss.Pending, ss.Unknown, ss.Drifted)))
 			add("wal_bytes", true, strconv.FormatInt(db.Stats().WALBytes, 10))
 			db.Close()
 		}

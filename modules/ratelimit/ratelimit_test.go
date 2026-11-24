@@ -29,6 +29,47 @@ func TestBucketAndBoundedKeys(t *testing.T) {
 	}
 }
 
+func TestSetPerMinute(t *testing.T) {
+	now := time.Unix(0, 0)
+	l := PerMinute(10, 100)
+	l.now = func() time.Time { return now }
+	l.Allow("a")
+	l.SetPerMinute(2) // lowering caps existing buckets immediately
+	n := 0
+	for i := 0; i < 10; i++ {
+		if ok, _ := l.Allow("a"); ok {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Fatalf("after lowering to 2/min allowed %d", n)
+	}
+	l.SetPerMinute(5) // raising credits the +3 burst immediately, without waiting
+	n = 0
+	for i := 0; i < 10; i++ {
+		if ok, _ := l.Allow("a"); ok {
+			n++
+		}
+	}
+	if n != 3 {
+		t.Fatalf("after raising 2->5/min allowed %d, want 3", n)
+	}
+	l.SetPerMinute(120) // 2/s refill
+	for ok := true; ok; ok, _ = l.Allow("a") {
+	}
+	now = now.Add(time.Second)
+	if ok, _ := l.Allow("a"); !ok {
+		t.Fatal("raised rate did not refill")
+	}
+	if ok, _ := l.Allow("fresh"); !ok {
+		t.Fatal("new key denied")
+	}
+	l.SetPerMinute(0)
+	if l.burst != 120 {
+		t.Fatal("invalid rate applied")
+	}
+}
+
 func TestIPKey(t *testing.T) {
 	if IPKey("2001:db8:1:2:aaaa::1") != IPKey("2001:db8:1:2:bbbb::9") || IPKey("2001:db8:1:3::1") == IPKey("2001:db8:1:2::1") {
 		t.Fatal("ipv6 not aggregated to /64")

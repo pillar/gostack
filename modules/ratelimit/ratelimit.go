@@ -38,6 +38,23 @@ func New(ratePerSec float64, burst, maxKeys int) *Limiter {
 	return &Limiter{rate: ratePerSec, burst: float64(burst), maxKeys: maxKeys, buckets: map[string]*bucket{}, now: time.Now}
 }
 
+// SetPerMinute retunes a PerMinute limiter live (config hot reload): rate n per
+// minute, burst n. Lowering caps existing buckets at the new burst; raising
+// credits the burst increase to existing buckets, so both take effect
+// immediately. n < 1 is ignored (config validation rejects it).
+func (l *Limiter) SetPerMinute(n int) {
+	if n < 1 {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delta := float64(n) - l.burst
+	l.rate, l.burst = float64(n)/60, float64(n)
+	for _, b := range l.buckets {
+		b.tokens = min(b.tokens+max(delta, 0), l.burst)
+	}
+}
+
 // Allow consumes one token for key. When denied, retryAfter is the wait until a token is available.
 func (l *Limiter) Allow(key string) (ok bool, retryAfter time.Duration) {
 	l.mu.Lock()
