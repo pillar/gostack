@@ -1,18 +1,43 @@
-# Litestream config for {{.Name}}. Pin the Litestream version you validated and
-# check this file against that version's documentation before use.
+# Litestream config for {{.Name}} — Litestream v0.5.x syntax (checked against
+# v0.5.18: `replica:` is a single mapping; the 0.3-style `replicas:` list is
+# deprecated and a per-replica `retention:` key is silently ignored).
+# Pin the Litestream version you validated; re-check this file when upgrading.
+#
 # Credentials come from the environment of the litestream service, NOT from the
-# application: LITESTREAM_ACCESS_KEY_ID / LITESTREAM_SECRET_ACCESS_KEY (R2 token
-# scoped to this bucket only).
+# application and NOT from this file: LITESTREAM_ACCESS_KEY_ID /
+# LITESTREAM_SECRET_ACCESS_KEY (R2 token scoped to this bucket only).
+#
+# Restore: deploy/litestream/restore.sh (litestream restore -o NEW_PATH, then
+# `backup verify`). Measured drill results: GoStack docs/DISASTER_RECOVERY.md.
+
+# Full snapshots and point-in-time restore window (v0.5 defaults: 24h / 24h).
+snapshot:
+  interval: 24h
+  retention: 168h
+
 dbs:
   - path: /var/lib/{{.Name}}/app.db
-    replicas:
-      - type: s3
-        bucket: {{.Name}}-backup
-        path: app
-        endpoint: https://<ACCOUNT_ID>.r2.cloudflarestorage.com
-        region: auto
-        sync-interval: 10s      # replication cadence, not an RPO guarantee
-        retention: 168h
+    replica:
+      type: s3
+      bucket: {{.Name}}-backup
+      path: app
+      endpoint: https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+      region: auto
+      # Upload cadence. Asynchronous: writes acknowledged after the last
+      # successful upload are lost on machine loss (RPO ~ sync-interval plus
+      # upload time; measured, not guaranteed). Each sync is at least one PUT,
+      # so 1s means ~2.6M Class A requests/month on R2; 10s ~260k.
+      sync-interval: 10s
+
 # analytics.db is best-effort data and is intentionally not replicated.
-# If you set database.wal_autocheckpoint: 0 in gostack.yaml, verify Litestream's
-# checkpoint management for your pinned version and document the runbook.
+#
+# Checkpoints: Litestream v0.5 holds a read transaction on the database and
+# runs its own PASSIVE checkpoints (when the WAL exceeds 1000 pages, and every
+# 1m), plus a TRUNCATE checkpoint above ~500 MB of WAL (truncate-page-n). The
+# application's default database.wal_autocheckpoint: 1000 is compatible with
+# that (SQLite checkpoints cannot move past Litestream's read lock).
+# database.wal_autocheckpoint: 0 hands checkpoints to Litestream entirely; then
+# the WAL grows without bound whenever Litestream is not running, so alert on
+# the litestream service and on the -wal file size before choosing it.
+# Under sustained writes the WAL can grow to hundreds of MB either way before
+# Litestream truncates it; budget disk space for it.

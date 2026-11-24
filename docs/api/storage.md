@@ -96,6 +96,42 @@ s, err := storage.NewS3(storage.S3Config{
   re-verifies every signature with an independent implementation (itself
   checked against the AWS examples), including path-style and virtual-host,
   signed/unsigned payload, session token, expiry and tampering.
-- **Not verified against real AWS S3, Cloudflare R2 or MinIO** (no network
-  access during development). Run a smoke test against the target provider
-  before relying on it; R2 uses region `auto`.
+- **Not verified against real AWS S3, Cloudflare R2 or MinIO.** A live
+  integration test exists but has not passed against a real service yet
+  (2026-11-25: the only local MinIO, Homebrew `minio` RELEASE.2025-10-15T17-29-55Z,
+  crashes at startup on macOS Darwin 27 / arm64 with `SIGSEGV ... signal
+  arrived during cgo execution` in `github.com/shoenig/go-m1cpu.init`, so the
+  run was not possible on the development machine). Run it before relying on
+  the adapter; R2 uses region `auto`.
+
+### Live integration test
+
+`modules/storage/s3_live_test.go` (`TestLiveS3`) is skipped unless
+`GOSTACK_TEST_S3_ENDPOINT` is set. It covers, against the real service:
+path-style Put/Get/Delete with unsigned and signed payloads (including an
+empty object), unknown-size streaming (3 MiB + 17 B), size limits (declared
+size over the limit, unknown size over the limit, short and long bodies →
+`ErrSizeMismatch`, nothing stored; an object exactly at the limit is stored),
+keys with dots, dashes, underscores, nested segments and the 512-byte maximum
+(and rejection of `~`), presigned GET and PUT used by a plain `net/http`
+client, a presigned GET URL refused for PUT, a tampered signature, an expired
+URL (signed 10 minutes in the past, and a 1 s TTL after 2.5 s) → 403, and
+wrong credentials → `*s3Error` with HTTP 403 for PUT (signed and unsigned),
+GET and DELETE whose message contains neither secret, and presigned URLs from
+wrong credentials → 403. Virtual-host style is only exercised when the
+endpoint resolves `bucket.host` (`GOSTACK_TEST_S3_PATH_STYLE=0`).
+
+```bash
+scripts/drill/s3_minio.sh          # throwaway MinIO, random credentials; MINIO_BIN=/path/to/minio
+# any provider:
+GOSTACK_TEST_S3_ENDPOINT=https://<account>.r2.cloudflarestorage.com GOSTACK_TEST_S3_BUCKET=<bucket> \
+GOSTACK_TEST_S3_ACCESS_KEY=... GOSTACK_TEST_S3_SECRET_KEY=... GOSTACK_TEST_S3_REGION=auto \
+  go test -count=1 -run TestLiveS3 -v ./modules/storage/
+```
+
+Provider note (unverified): Litestream v0.5.18 forces signed payloads for
+Cloudflare R2 and MinIO endpoints with the comment that they "don't support
+UNSIGNED-PAYLOAD" (`cmd/litestream/main.go`, provider defaults). That applies
+to the AWS SDK v2 streaming upload path Litestream uses; whether R2 accepts
+this adapter's single-PUT `UNSIGNED-PAYLOAD` requests is exactly what the
+live test checks. Until it has passed on R2, set `SignPayload: true` there.

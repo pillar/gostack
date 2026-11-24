@@ -10,8 +10,10 @@
 # the replica); --to is where the restored copy is written. The script runs
 # `litestream restore -config CFG -o TO [-timestamp T] DB` and then
 # `BIN backup verify TO` (integrity_check, schema vs binary, ledger reconcile).
-# Check the restore flags against the documentation of your pinned Litestream
-# version before relying on this script.
+# Exercised with Litestream v0.5.18 and a local file replica by
+# scripts/drill/litestream_minio.sh (see docs/DISASTER_RECOVERY.md for which
+# replica types were verified); re-check the restore flags when you pin a
+# different Litestream version.
 #
 # Re-runnable: a failed run removes only the partial file it created at --to.
 # Exit codes: 0 restored and verified; 1 refused or restore failed; 3 restored
