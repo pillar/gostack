@@ -173,7 +173,7 @@ func (k *Kit) cors(next http.Handler) http.Handler {
 		if err == nil && slices.Contains(g.AllowedOrigins, origin) {
 			h := w.Header()
 			h.Set("Access-Control-Allow-Origin", origin)
-			h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+			h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, If-None-Match")
 			h.Set("Access-Control-Expose-Headers", "ETag, Retry-After, X-Request-ID, Idempotent-Replayed")
 			h.Set("Access-Control-Max-Age", "600")
