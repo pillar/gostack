@@ -18,9 +18,13 @@ import (
 
 // Document is a published game configuration (GAME_API.md "配置").
 type Document struct {
-	Client  map[string]json.RawMessage `json:"client"`
-	Boards  map[string]BoardDef        `json:"boards"`
-	Rewards map[string]RewardDef       `json:"rewards"`
+	Client   map[string]json.RawMessage `json:"client"`
+	Boards   map[string]BoardDef        `json:"boards"`
+	Rewards  map[string]RewardDef       `json:"rewards"`
+	Saves    *SavesDef                  `json:"saves,omitempty"`
+	Items    map[string]ItemDef         `json:"items,omitempty"`
+	Offers   map[string]OfferDef        `json:"offers,omitempty"`
+	Rollouts []RolloutDef               `json:"rollouts,omitempty"`
 }
 
 type BoardDef struct {
@@ -30,6 +34,24 @@ type BoardDef struct {
 	MinScore        int64  `json:"min_score"`
 	MaxScore        int64  `json:"max_score"`
 	QuarantineAbove *int64 `json:"quarantine_above,omitempty"`
+	// RuleVersion, when > 0, must be echoed by every submission.
+	RuleVersion int64 `json:"rule_version,omitempty"`
+	// RequireRun demands a one-time run token from POST /boards/{board}/runs.
+	RequireRun bool  `json:"require_run,omitempty"`
+	MinRunMs   int64 `json:"min_run_ms,omitempty"` // shorter runs are quarantined
+	RunTTLMs   int64 `json:"run_ttl_ms,omitempty"` // 0 = defaultRunTTL
+	// Settlement pays rank rewards when a daily/weekly season ends.
+	Settlement *SettlementDef `json:"settlement,omitempty"`
+}
+
+type SettlementDef struct {
+	Rewards []RankReward `json:"rewards"`
+}
+
+type RankReward struct {
+	FromRank int64            `json:"from_rank"`
+	ToRank   int64            `json:"to_rank"`
+	Grants   map[string]int64 `json:"grants"`
 }
 
 type RewardDef struct {
@@ -39,6 +61,44 @@ type RewardDef struct {
 	StartsAt  int64            `json:"starts_at"` // 0 = unbounded
 	EndsAt    int64            `json:"ends_at"`   // 0 = unbounded
 }
+
+// SavesDef holds save compatibility rules.
+type SavesDef struct {
+	MinSchemaVersion int64 `json:"min_schema_version"`
+}
+
+// ItemDef is a catalog entry; assets are currencies or stackable items.
+type ItemDef struct {
+	Kind     string `json:"kind"`                // currency | item
+	Name     string `json:"name,omitempty"`      // display name
+	MaxStack int64  `json:"max_stack,omitempty"` // items only; 0 = unlimited
+}
+
+// OfferDef is a fixed-price exchange of assets.
+type OfferDef struct {
+	Cost      map[string]int64 `json:"cost"`
+	Grants    map[string]int64 `json:"grants"`
+	Period    string           `json:"period"`               // once | daily | unlimited
+	PerPeriod int              `json:"per_period,omitempty"` // required unless unlimited
+}
+
+// RolloutDef overrides client keys for a targeted, percentage-bucketed audience.
+type RolloutDef struct {
+	ID               string                     `json:"id"`
+	Enabled          bool                       `json:"enabled"`
+	Percent          int                        `json:"percent"`
+	Platforms        []string                   `json:"platforms,omitempty"`
+	MinClientVersion string                     `json:"min_client_version,omitempty"`
+	MaxClientVersion string                     `json:"max_client_version,omitempty"`
+	Client           map[string]json.RawMessage `json:"client"`
+}
+
+const (
+	maxGrant      = 1e12
+	maxSettleRank = 10000
+	defaultRunTTL = int64(time.Hour / time.Millisecond)
+	maxRunTTL     = int64(7 * 24 * time.Hour / time.Millisecond)
+)
 
 // ParseDocument strictly parses and validates a configuration document.
 func ParseDocument(b []byte) (Document, error) {
@@ -73,13 +133,8 @@ func ParseDocument(b []byte) (Document, error) {
 		if !idPattern.MatchString(id) {
 			return d, httpx.BadRequest("invalid reward id " + strconv.Quote(id))
 		}
-		if len(rd.Grants) == 0 {
-			return d, httpx.BadRequest("reward " + id + ": grants required")
-		}
-		for asset, n := range rd.Grants {
-			if !idPattern.MatchString(asset) || n <= 0 || n > 1e12 {
-				return d, httpx.BadRequest("reward " + id + ": grants must map asset ids to positive integers")
-			}
+		if err := d.checkAssets("reward "+id+": grants", rd.Grants); err != nil {
+			return d, err
 		}
 		if rd.Period != "once" && rd.Period != "daily" {
 			return d, httpx.BadRequest("reward " + id + ": period must be once or daily")
@@ -88,7 +143,146 @@ func ParseDocument(b []byte) (Document, error) {
 			return d, httpx.BadRequest("reward " + id + ": per_period must be within [1,1000]")
 		}
 	}
+	if err := d.validateP0(); err != nil {
+		return d, err
+	}
 	return d, nil
+}
+
+// validateP0 checks the optional sections added after the first contract.
+func (d *Document) validateP0() error {
+	for id, it := range d.Items {
+		if !idPattern.MatchString(id) {
+			return httpx.BadRequest("invalid item id " + strconv.Quote(id))
+		}
+		if it.Kind != "currency" && it.Kind != "item" {
+			return httpx.BadRequest("item " + id + ": kind must be currency or item")
+		}
+		if it.MaxStack < 0 || (it.Kind == "currency" && it.MaxStack != 0) {
+			return httpx.BadRequest("item " + id + ": max_stack must be >= 0 and is only allowed for items")
+		}
+		if len(it.Name) > 64 {
+			return httpx.BadRequest("item " + id + ": name too long")
+		}
+	}
+	for id, bd := range d.Boards {
+		if bd.RuleVersion < 0 {
+			return httpx.BadRequest("board " + id + ": rule_version must be >= 0")
+		}
+		if bd.MinRunMs < 0 || bd.RunTTLMs < 0 || bd.RunTTLMs > maxRunTTL {
+			return httpx.BadRequest("board " + id + ": min_run_ms/run_ttl_ms out of range")
+		}
+		if (bd.MinRunMs != 0 || bd.RunTTLMs != 0) && !bd.RequireRun {
+			return httpx.BadRequest("board " + id + ": min_run_ms/run_ttl_ms require require_run")
+		}
+		if bd.MinRunMs >= bd.runTTL() {
+			return httpx.BadRequest("board " + id + ": min_run_ms must be below run_ttl_ms")
+		}
+		if bd.Settlement == nil {
+			continue
+		}
+		if bd.Period != "daily" && bd.Period != "weekly" {
+			return httpx.BadRequest("board " + id + ": settlement requires a daily or weekly period")
+		}
+		if len(bd.Settlement.Rewards) == 0 {
+			return httpx.BadRequest("board " + id + ": settlement.rewards required")
+		}
+		var prev int64
+		for i, rr := range bd.Settlement.Rewards {
+			if rr.FromRank < 1 || rr.ToRank < rr.FromRank || rr.ToRank > maxSettleRank || rr.FromRank <= prev {
+				return httpx.BadRequest(fmt.Sprintf("board %s: settlement.rewards[%d] ranks must be ascending, non-overlapping and within [1,%d]", id, i, maxSettleRank))
+			}
+			prev = rr.ToRank
+			if err := d.checkAssets(fmt.Sprintf("board %s: settlement.rewards[%d].grants", id, i), rr.Grants); err != nil {
+				return err
+			}
+		}
+	}
+	for id, o := range d.Offers {
+		if !idPattern.MatchString(id) {
+			return httpx.BadRequest("invalid offer id " + strconv.Quote(id))
+		}
+		if err := d.checkAssets("offer "+id+": cost", o.Cost); err != nil {
+			return err
+		}
+		if err := d.checkAssets("offer "+id+": grants", o.Grants); err != nil {
+			return err
+		}
+		for a := range o.Cost {
+			if _, ok := o.Grants[a]; ok {
+				return httpx.BadRequest("offer " + id + ": an asset cannot be both cost and grant")
+			}
+		}
+		switch o.Period {
+		case "once", "daily":
+			if o.PerPeriod < 1 || o.PerPeriod > 1000 {
+				return httpx.BadRequest("offer " + id + ": per_period must be within [1,1000]")
+			}
+		case "unlimited":
+			if o.PerPeriod != 0 {
+				return httpx.BadRequest("offer " + id + ": per_period is not allowed for unlimited offers")
+			}
+		default:
+			return httpx.BadRequest("offer " + id + ": period must be once, daily or unlimited")
+		}
+	}
+	if d.Saves != nil && d.Saves.MinSchemaVersion < 0 {
+		return httpx.BadRequest("saves.min_schema_version must be >= 0")
+	}
+	seen := map[string]bool{}
+	for i, ro := range d.Rollouts {
+		where := fmt.Sprintf("rollouts[%d]", i)
+		if !idPattern.MatchString(ro.ID) || seen[ro.ID] {
+			return httpx.BadRequest(where + ": id must be a unique id")
+		}
+		seen[ro.ID] = true
+		if ro.Percent < 0 || ro.Percent > 100 {
+			return httpx.BadRequest(where + ": percent must be within [0,100]")
+		}
+		for _, p := range ro.Platforms {
+			if !idPattern.MatchString(p) {
+				return httpx.BadRequest(where + ": invalid platform " + strconv.Quote(p))
+			}
+		}
+		for _, v := range []string{ro.MinClientVersion, ro.MaxClientVersion} {
+			if _, ok := parseVersion(v); v != "" && !ok {
+				return httpx.BadRequest(where + ": invalid client version " + strconv.Quote(v))
+			}
+		}
+		if ro.MinClientVersion != "" && ro.MaxClientVersion != "" && compareVersions(ro.MinClientVersion, ro.MaxClientVersion) > 0 {
+			return httpx.BadRequest(where + ": min_client_version > max_client_version")
+		}
+		if len(ro.Client) == 0 {
+			return httpx.BadRequest(where + ": client overrides required")
+		}
+	}
+	return nil
+}
+
+// checkAssets validates a non-empty asset→amount map: ids, positive bounded
+// amounts and, when an items catalog exists, membership in it.
+func (d *Document) checkAssets(where string, m map[string]int64) error {
+	if len(m) == 0 {
+		return httpx.BadRequest(where + " required")
+	}
+	for asset, n := range m {
+		if !idPattern.MatchString(asset) || n <= 0 || n > maxGrant {
+			return httpx.BadRequest(where + " must map asset ids to positive integers")
+		}
+		if len(d.Items) > 0 {
+			if _, ok := d.Items[asset]; !ok {
+				return httpx.BadRequest(where + ": asset " + strconv.Quote(asset) + " is not in the items catalog")
+			}
+		}
+	}
+	return nil
+}
+
+func (bd BoardDef) runTTL() int64 {
+	if bd.RunTTLMs > 0 {
+		return bd.RunTTLMs
+	}
+	return defaultRunTTL
 }
 
 type cachedDoc struct {
@@ -117,6 +311,11 @@ func (k *Kit) currentConfig(ctx context.Context, q queryer, gameID string) (*cac
 	if err != nil {
 		return nil, err
 	}
+	return k.configAt(ctx, q, gameID, rev)
+}
+
+// configAt returns the parsed document of a specific revision (0 = empty document).
+func (k *Kit) configAt(ctx context.Context, q queryer, gameID string, rev int64) (*cachedDoc, error) {
 	if rev == 0 {
 		return &cachedDoc{Client: []byte("{}")}, nil
 	}
@@ -147,23 +346,6 @@ func (k *Kit) currentConfig(ctx context.Context, q queryer, gameID string) (*cac
 	k.configs.docs[key] = c
 	k.configs.mu.Unlock()
 	return c, nil
-}
-
-func (k *Kit) getConfig(w http.ResponseWriter, r *http.Request) error {
-	c, err := k.currentConfig(r.Context(), k.DB.Read, gameFrom(r.Context()).ID)
-	if err != nil {
-		return err
-	}
-	etag := `"` + strconv.FormatInt(c.Revision, 10) + `"`
-	w.Header().Set("ETag", etag)
-	w.Header().Set("Cache-Control", "no-cache")
-	if r.Header.Get("If-None-Match") == etag {
-		w.WriteHeader(http.StatusNotModified)
-		return nil
-	}
-	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"revision":%d,"data":%s}`+"\n", c.Revision, c.Client)
-	return nil
 }
 
 // CreateGame registers a game (G01). Used by the admin API and CLI.

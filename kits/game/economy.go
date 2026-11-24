@@ -131,6 +131,9 @@ func (k *Kit) claimReward(w http.ResponseWriter, r *http.Request) error {
 			if err := ApplyLedger(ctx, tx, s.GameID, s.PlayerID, "reward", "reward:"+claimID, def.Grants, ms); err != nil {
 				return idempotency.Result{}, err
 			}
+			if err := checkStacks(ctx, tx, c.Doc, s.GameID, s.PlayerID, def.Grants); err != nil {
+				return idempotency.Result{}, err
+			}
 			b, err := balances(ctx, tx, s.GameID, s.PlayerID)
 			if err != nil {
 				return idempotency.Result{}, err
