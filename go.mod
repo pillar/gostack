@@ -5,6 +5,7 @@ go 1.27.1
 toolchain go1.27.4
 
 require (
+	github.com/coder/websocket v1.8.15
 	go.yaml.in/yaml/v3 v3.0.6
 	modernc.org/sqlite v1.63.0
 )
