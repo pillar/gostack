@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/pillar/gostack/core/auth"
 	"github.com/pillar/gostack/core/config"
@@ -173,13 +174,39 @@ func (a *App) moduleRoutes(mux *http.ServeMux) {
 	if m.Billing != nil {
 		m.Billing.Handler(mux, auth.APIKeys{DB: a.DB})
 	}
-	if m.LocalStorage != nil {
-		p := a.Cfg.Storage.Local.PublicURL
-		if u, err := url.Parse(p); err == nil {
-			p = u.Path
-		}
-		mux.Handle(strings.TrimSuffix(p, "/")+"/", m.LocalStorage.Handler())
+}
+
+// storageRoute returns the path prefix and handler of the local storage
+// presign route (nil without local storage). It is not mounted on the main mux:
+// Handler serves it outside the generic body/time limits (see storageChain).
+func (a *App) storageRoute() (string, http.Handler) {
+	if a.Mod.LocalStorage == nil {
+		return "", nil
 	}
+	p := a.Cfg.Storage.Local.PublicURL
+	if u, err := url.Parse(p); err == nil {
+		p = u.Path
+	}
+	return strings.TrimSuffix(p, "/") + "/", a.Mod.LocalStorage.Handler()
+}
+
+// storageDeadlines replaces the listener's read/write timeouts (sized for
+// http.request_timeout) with storage.timeout for object transfers. The
+// storage handler bounds size (storage.max_object_bytes) and applies
+// storage.timeout to the operation's context itself.
+func (a *App) storageDeadlines(next http.Handler) http.Handler {
+	d := a.Cfg.Storage.Timeout
+	if d <= 0 {
+		d = storage.DefaultTimeout
+	}
+	d += 5 * time.Second // same slack the listener adds to http.request_timeout
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rc := http.NewResponseController(w)
+		dl := time.Now().Add(d)
+		_ = rc.SetReadDeadline(dl)
+		_ = rc.SetWriteDeadline(dl)
+		next.ServeHTTP(w, r)
+	})
 }
 
 // maintainers lists enabled modules with periodic cleanup.

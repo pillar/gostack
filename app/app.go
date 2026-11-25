@@ -16,6 +16,7 @@ import (
 	"net/http/pprof"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -186,6 +187,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 	if err != nil {
 		return nil, err
 	}
+	ip.TrustCFConnectingIP = cfg.HTTP.TrustCFConnectingIP
 	if a.DB, err = OpenDB(ctx, cfg, true); err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
@@ -305,7 +307,7 @@ func (a *App) Handler(h Hooks) http.Handler {
 		return httpx.NotFound("route not found")
 	}))
 	c := a.Cfg.HTTP
-	return httpx.Chain(observability.CaptureRoute(mux),
+	main := httpx.Chain(observability.CaptureRoute(mux),
 		httpx.WithRequestID(),
 		observability.AccessLog(a.Metrics, a.Log),
 		httpx.WithRecover(),
@@ -314,6 +316,29 @@ func (a *App) Handler(h Hooks) http.Handler {
 		// WithLimits gets the static validation ceiling.
 		httpx.WithLimits(c.MaxBodyBytes, c.RequestTimeout, config.MaxConcurrentCeiling),
 	)
+	prefix, sh := a.storageRoute()
+	if sh == nil {
+		return main
+	}
+	// Object transfers are bounded by storage.max_object_bytes / storage.timeout
+	// instead of http.max_body_bytes / http.request_timeout; they keep request
+	// ids, access logs, panic recovery and the in-flight cap.
+	smux := http.NewServeMux()
+	smux.Handle(prefix, sh)
+	storage := httpx.Chain(observability.CaptureRoute(smux),
+		httpx.WithRequestID(),
+		observability.AccessLog(a.Metrics, a.Log),
+		httpx.WithRecover(),
+		a.concurrencyGate,
+		a.storageDeadlines,
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, prefix) {
+			storage.ServeHTTP(w, r)
+			return
+		}
+		main.ServeHTTP(w, r)
+	})
 }
 
 // concurrencyGate rejects requests beyond http.max_concurrent with 503 instead
@@ -452,13 +477,11 @@ func (a *App) readyz(w http.ResponseWriter, r *http.Request) error {
 // Serve runs the HTTP server, workers and maintenance until ctx is cancelled,
 // then shuts down: stop accepting → drain in-flight requests → stop workers →
 // flush analytics → close databases (Close is the caller's job).
-func (a *App) Serve(ctx context.Context, h Hooks) error {
+// httpServer is the public listener's server. Its read/write timeouts bound
+// ordinary requests; the local storage route extends them per request.
+func (a *App) httpServer(h Hooks) *http.Server {
 	c := a.Cfg.HTTP
-	ln, err := net.Listen("tcp", c.Listen)
-	if err != nil {
-		return err
-	}
-	srv := &http.Server{
+	return &http.Server{
 		Handler:           a.Handler(h),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       c.RequestTimeout + 5*time.Second,
@@ -466,6 +489,15 @@ func (a *App) Serve(ctx context.Context, h Hooks) error {
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    c.MaxHeaderBytes,
 	}
+}
+
+func (a *App) Serve(ctx context.Context, h Hooks) error {
+	c := a.Cfg.HTTP
+	ln, err := net.Listen("tcp", c.Listen)
+	if err != nil {
+		return err
+	}
+	srv := a.httpServer(h)
 	var internal *http.Server
 	if c.InternalListen != "" {
 		mux := http.NewServeMux()

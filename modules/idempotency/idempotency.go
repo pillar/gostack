@@ -42,10 +42,14 @@ func RequestHash(op string, body []byte) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// Result is a JSON response.
+// Result is a JSON response. Body is encoded with json.Marshal (which compacts
+// and HTML-escapes embedded json.RawMessage); when Raw is set it is used
+// verbatim instead, for responses whose bytes are part of the contract (e.g. a
+// payload covered by a checksum). Raw must be valid JSON.
 type Result struct {
 	Status int
 	Body   any
+	Raw    []byte
 }
 
 // Do runs fn in a write transaction. When key is empty there is no idempotency
@@ -84,9 +88,11 @@ func Do(ctx context.Context, db *store.DB, scope, key, op string, body []byte, f
 		if r.Status == 0 {
 			r.Status = http.StatusOK
 		}
-		b, err := json.Marshal(r.Body)
-		if err != nil {
-			return err
+		b := r.Raw
+		if b == nil {
+			if b, err = json.Marshal(r.Body); err != nil {
+				return err
+			}
 		}
 		status, resp = r.Status, b
 		if key == "" {

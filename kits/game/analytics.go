@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/httpx"
@@ -69,29 +70,28 @@ func (a *Analytics) Run(ctx context.Context, drainTimeout time.Duration) {
 		// A batch already taken from the buffer is written even if shutdown starts meanwhile.
 		fctx, cancel := context.WithTimeout(context.WithoutCancel(parent), 10*time.Second)
 		defer cancel()
-		err := a.DB.WriteTx(fctx, func(tx *sql.Tx) error {
-			st, err := tx.PrepareContext(fctx, `INSERT INTO analytics_events(event_id,game_id,player_id,session_id,event_name,schema_version,platform,client_version,client_time,server_time,properties)
-				VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`)
-			if err != nil {
+		err := a.DB.WriteTx(fctx, func(tx *sql.Tx) error { _, err := a.insert(fctx, tx, batch, false); return err })
+		bad := 0
+		if err != nil && len(batch) > 1 {
+			// One row the database rejects (e.g. text PostgreSQL cannot store)
+			// must not drop the whole batch: retry row by row, each in its own
+			// savepoint, and drop only the rows that fail.
+			a.Log.Warn("analytics batch insert failed; retrying row by row", "events", len(batch), "err", err)
+			err = a.DB.WriteTx(fctx, func(tx *sql.Tx) error {
+				var err error
+				bad, err = a.insert(fctx, tx, batch, true)
 				return err
-			}
-			defer st.Close()
-			for _, r := range batch {
-				var pid any
-				if r.PlayerID != "" {
-					pid = r.PlayerID
-				}
-				if _, err := st.ExecContext(fctx, r.EventID, r.GameID, pid, r.SessionID, r.Name, r.SchemaVersion, r.Platform, r.ClientVersion, r.ClientTime, r.ServerTime, string(r.Properties)); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
+			})
+		}
 		if err != nil {
 			a.dropped.Add(int64(len(batch)))
 			a.Log.Warn("analytics flush failed; batch dropped", "events", len(batch), "err", err)
 		} else {
-			a.written.Add(int64(len(batch)))
+			if bad > 0 {
+				a.Log.Warn("analytics events rejected by the database; dropped", "events", bad, "written", len(batch)-bad)
+			}
+			a.dropped.Add(int64(bad))
+			a.written.Add(int64(len(batch) - bad))
 		}
 		batch = batch[:0]
 	}
@@ -126,6 +126,50 @@ func (a *Analytics) Run(ctx context.Context, drainTimeout time.Duration) {
 			return
 		}
 	}
+}
+
+// insert writes rows in tx. With perRow every row runs in its own savepoint and
+// a rejected row is rolled back and counted in bad instead of failing tx.
+func (a *Analytics) insert(ctx context.Context, tx *sql.Tx, rows []analyticsRow, perRow bool) (bad int, err error) {
+	st, err := tx.PrepareContext(ctx, `INSERT INTO analytics_events(event_id,game_id,player_id,session_id,event_name,schema_version,platform,client_version,client_time,server_time,properties)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`)
+	if err != nil {
+		return 0, err
+	}
+	defer st.Close()
+	for _, r := range rows {
+		var pid any
+		if r.PlayerID != "" {
+			pid = r.PlayerID
+		}
+		if perRow {
+			if _, err := tx.ExecContext(ctx, `SAVEPOINT analytics_row`); err != nil {
+				return bad, err
+			}
+		}
+		_, err := st.ExecContext(ctx, r.EventID, r.GameID, pid, r.SessionID, r.Name, r.SchemaVersion, r.Platform, r.ClientVersion, r.ClientTime, r.ServerTime, string(r.Properties))
+		if !perRow {
+			if err != nil {
+				return 0, err
+			}
+			continue
+		}
+		if err != nil {
+			if ctx.Err() != nil {
+				return bad, err
+			}
+			if bad++; bad == 1 { // one line per flush, not per row
+				a.Log.Warn("analytics event rejected by the database; dropped", "game_id", r.GameID, "event_id", r.EventID, "err", err)
+			}
+			if _, err := tx.ExecContext(ctx, `ROLLBACK TO SAVEPOINT analytics_row`); err != nil {
+				return bad, err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `RELEASE SAVEPOINT analytics_row`); err != nil {
+			return bad, err
+		}
+	}
+	return bad, nil
 }
 
 // Done is closed when Run returns.
@@ -167,6 +211,18 @@ func validToken(s string, max int) bool {
 	return true
 }
 
+// validText reports whether s is valid UTF-8 without control characters (C0,
+// DEL, C1). PostgreSQL TEXT rejects NUL and invalid UTF-8; the rest has no
+// place in a version or platform label.
+func validText(s string) bool {
+	for _, c := range s {
+		if c == utf8.RuneError || c < 0x20 || (c >= 0x7f && c <= 0x9f) {
+			return false
+		}
+	}
+	return true
+}
+
 func (k *Kit) eventsBatch(w http.ResponseWriter, r *http.Request) error {
 	g := gameFrom(r.Context())
 	if err := k.rateLimit(k.eventLimit, "events:"+g.ID+":"+ratelimit.IPKey(k.ClientIP.Of(r))); err != nil {
@@ -190,10 +246,13 @@ func (k *Kit) eventsBatch(w http.ResponseWriter, r *http.Request) error {
 		pid = s.PlayerID
 	}
 	now := k.Now().UnixMilli()
-	accepted, dropped := 0, 0
+	// Validate the whole request before enqueueing anything: a 400 means no
+	// event of the request was ingested.
+	rows := make([]analyticsRow, 0, len(req.Events))
 	for i, e := range req.Events {
 		if !validToken(e.EventID, 64) || !validToken(e.EventName, 64) || !validToken(e.SessionID, 64) ||
-			len(e.ClientVersion) > 32 || len(e.Platform) > 16 || len(e.Properties) > 4096 {
+			len(e.ClientVersion) > 32 || len(e.Platform) > 16 || len(e.Properties) > 4096 ||
+			!validText(e.ClientVersion) || !validText(e.Platform) || !utf8.Valid(e.Properties) {
 			return httpx.BadRequest("invalid event at index " + strconv.Itoa(i))
 		}
 		props := e.Properties
@@ -202,8 +261,11 @@ func (k *Kit) eventsBatch(w http.ResponseWriter, r *http.Request) error {
 		} else if props[0] != '{' {
 			return httpx.BadRequest("properties must be an object at index " + strconv.Itoa(i))
 		}
-		row := analyticsRow{GameID: g.ID, PlayerID: pid, EventID: e.EventID, SessionID: e.SessionID, Name: e.EventName,
-			Platform: e.Platform, ClientVersion: e.ClientVersion, SchemaVersion: e.SchemaVersion, ClientTime: e.ClientTime, ServerTime: now, Properties: props}
+		rows = append(rows, analyticsRow{GameID: g.ID, PlayerID: pid, EventID: e.EventID, SessionID: e.SessionID, Name: e.EventName,
+			Platform: e.Platform, ClientVersion: e.ClientVersion, SchemaVersion: e.SchemaVersion, ClientTime: e.ClientTime, ServerTime: now, Properties: props})
+	}
+	accepted, dropped := 0, 0
+	for _, row := range rows {
 		if k.Analytics.offer(row) {
 			accepted++
 		} else {

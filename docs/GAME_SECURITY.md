@@ -91,7 +91,7 @@ GameKit 路由只对游戏 `allowed_origins` 中的 Origin 返回 CORS 头（不
 | 实时消息 | 连接（令牌桶）、消息大小、连接数 | `TestMessageSizeAndRateLimits`、`TestConnectionLimits` |
 | 并发与写队列 | 全进程，503 + `Retry-After` | `TestReloadRetunesConcurrencyGate`、`TestWriteQueueBounded` |
 
-客户端 IP 只信任 `http.trusted_proxies` 中代理的 `X-Forwarded-For`（`TestClientIPTrustsOnlyConfiguredProxies`）。**限制**：所有限流器都是进程内的；scale profile 下有效配额 = 配置 × 实例数（配置须显式 `rate_limit.accept_per_instance: true` 承认），没有全局限流。限流表有容量上限，满时随机淘汰。
+客户端 IP 只在直连对端属于 `http.trusted_proxies` 时才读取转发头：默认只从右向左解析 `X-Forwarded-For` 并跳过受信代理（`TestClientIPTrustsOnlyConfiguredProxies`）；`CF-Connecting-IP` 仅在显式设置 `http.trust_cf_connecting_ip: true` 时采用（要求 `trusted_proxies` 非空，且只应在所有受信代理都是 Cloudflare 时开启——其他代理会原样转发客户端伪造的该头，从而绕过每 IP 限流；`TestClientIPCFConnectingIPOnlyWhenEnabled`）。**限制**：所有限流器都是进程内的；scale profile 下有效配额 = 配置 × 实例数（配置须显式 `rate_limit.accept_per_instance: true` 承认），没有全局限流。限流表有容量上限，满时随机淘汰。
 
 ### 2.9 输入与错误
 

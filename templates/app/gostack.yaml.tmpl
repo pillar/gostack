@@ -8,6 +8,11 @@ environment: development
 http:
   listen: 127.0.0.1:8080
   # internal_listen: 127.0.0.1:9090   # /metrics and pprof; never expose publicly
+  # Behind a reverse proxy / load balancer: only these peers' X-Forwarded-For is
+  # honoured (walked right to left, trusted hops skipped); per-IP rate limits key on it.
+  # trusted_proxies: [10.0.0.0/8]
+  # trust_cf_connecting_ip: false     # true ONLY if every trusted proxy is Cloudflare (list its ranges
+  #                                   # above); any other proxy forwards a client-forged CF-Connecting-IP
   max_body_bytes: 1048576
   request_timeout: 10s
 database:
@@ -80,7 +85,7 @@ game:
 # Optional object storage (local disk with signed URLs, or S3-compatible such as R2).
 # storage:
 #   driver: s3
-#   max_object_bytes: 104857600
+#   max_object_bytes: 104857600   # local presigned PUT/GET use this and storage.timeout, not http.max_body_bytes/request_timeout
 #   s3:
 #     endpoint: https://<account>.r2.cloudflarestorage.com
 #     region: auto

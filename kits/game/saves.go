@@ -32,13 +32,21 @@ type saveDTO struct {
 	Merged        bool            `json:"merged,omitempty"`
 }
 
-// writeSave emits the payload bytes exactly as stored (json.Marshal would compact
-// and escape RawMessage, breaking the checksum contract).
+// saveJSON renders d with the payload bytes exactly as stored (json.Marshal
+// would compact and escape RawMessage, breaking the checksum contract).
+func saveJSON(d saveDTO, payload []byte) []byte {
+	merged := ""
+	if d.Merged {
+		merged = `,"merged":true`
+	}
+	return fmt.Appendf(nil, `{"slot":%q,"revision":%d,"schema_version":%d,"checksum":%q,"updated_at":%d%s,"payload":%s}`,
+		d.Slot, d.Revision, d.SchemaVersion, d.Checksum, d.UpdatedAt, merged, payload)
+}
+
 func writeSave(w http.ResponseWriter, d saveDTO, payload []byte) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, `{"slot":%q,"revision":%d,"schema_version":%d,"checksum":%q,"updated_at":%d,"payload":%s}`+"\n",
-		d.Slot, d.Revision, d.SchemaVersion, d.Checksum, d.UpdatedAt, payload)
+	_, _ = w.Write(append(saveJSON(d, payload), '\n'))
 }
 
 func (k *Kit) slot(r *http.Request) (string, error) {
@@ -196,7 +204,7 @@ func (k *Kit) putSave(w http.ResponseWriter, r *http.Request) error {
 			if err := k.commitRevision(ctx, tx, s, d); err != nil {
 				return idempotency.Result{}, err
 			}
-			return idempotency.Result{Body: d}, nil
+			return idempotency.Result{Raw: saveJSON(d, d.Payload)}, nil
 		})
 	if err != nil {
 		return mapWriteErr(err)
@@ -339,7 +347,7 @@ func (k *Kit) restoreSave(w http.ResponseWriter, r *http.Request) error {
 			if err := k.commitRevision(ctx, tx, s, d); err != nil {
 				return idempotency.Result{}, err
 			}
-			return idempotency.Result{Body: d}, nil
+			return idempotency.Result{Raw: saveJSON(d, d.Payload)}, nil
 		})
 	if err != nil {
 		return mapWriteErr(err)
