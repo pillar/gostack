@@ -36,7 +36,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return app.ExitOK
 	}
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
-		fmt.Fprint(stdout, "Usage: gostack init <name> [--profile lite] [--kit game] [--module path] [--gostack-path dir] [--dir dir]\n       gostack [global flags] <command>\n\n")
+		fmt.Fprint(stdout, "Usage: gostack init <name> [--profile lite] [--kit game|agent|web] [--module path] [--gostack-path dir] [--dir dir]\n       gostack [global flags] <command>\n\n")
 		args = []string{"help"}
 	}
 	return app.Main(args, app.Hooks{}, app.Env{Stdout: stdout, Stderr: stderr, Getenv: os.LookupEnv})
@@ -46,7 +46,8 @@ var namePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 
 type tmplData struct {
 	Name, Module, GoStackVersion, Replace string
-	Game                                  bool
+	Kit                                   string
+	Game, Agent, Web                      bool
 }
 
 // initProject renders the skeleton. It never overwrites: if any target file
@@ -59,7 +60,7 @@ func initProject(args []string, stdout io.Writer) error {
 	fs_ := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs_.SetOutput(io.Discard)
 	profile := fs_.String("profile", "lite", "deployment profile")
-	kit := fs_.String("kit", "", "business kit (game)")
+	kit := fs_.String("kit", "", "business kit (game, agent, web)")
 	module := fs_.String("module", "", "Go module path (default: name)")
 	dir := fs_.String("dir", "", "target directory (default: ./<name>)")
 	local := fs_.String("gostack-path", "", "local GoStack checkout to use via a replace directive")
@@ -73,10 +74,13 @@ func initProject(args []string, stdout io.Writer) error {
 	if *profile != "lite" {
 		return fmt.Errorf("profile %q is not implemented (implemented: lite)", *profile)
 	}
-	if *kit != "" && *kit != "game" {
-		return fmt.Errorf("kit %q is not implemented (implemented: game)", *kit)
+	switch *kit {
+	case "", "game", "agent", "web":
+	default:
+		return fmt.Errorf("kit %q is not implemented (implemented: game, agent, web)", *kit)
 	}
-	d := tmplData{Name: name, Module: *module, GoStackVersion: *version, Game: *kit == "game"}
+	d := tmplData{Name: name, Module: *module, GoStackVersion: *version, Kit: *kit,
+		Game: *kit == "game", Agent: *kit == "agent", Web: *kit == "web"}
 	if d.GoStackVersion == "" && *local != "" {
 		d.GoStackVersion = "v0.0.0" // satisfied by the replace directive
 	}

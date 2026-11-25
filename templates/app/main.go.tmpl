@@ -1,12 +1,18 @@
-// Command {{.Name}} is a GoStack application (profile: lite{{if .Game}}, kit: game{{end}}).
+// Command {{.Name}} is a GoStack application (profile: lite{{if .Kit}}, kit: {{.Kit}}{{end}}).
 package main
 
 import (
+{{- if .Agent}}
+	"context"
+{{- end}}
 	"net/http"
 	"os"
 
 	"github.com/pillar/gostack/app"
 	"github.com/pillar/gostack/core/httpx"
+{{- if .Agent}}
+	"github.com/pillar/gostack/kits/agent"
+{{- end}}
 )
 
 func main() {
@@ -18,6 +24,26 @@ func main() {
 				return nil
 			}))
 		},
+{{- if .Agent}}
+		// Workflows run as durable agent runs (POST /v1/agent/runs {"workflow":"echo","input":{...}}).
+		// Steps are checkpointed: after a crash the workflow is replayed and completed
+		// steps return their recorded output. Issue the same steps in the same order.
+		Workflows: map[string]agent.Workflow{
+			"echo": {
+				MaxConcurrent: 4,
+				// Secrets: map[string]string{"model": "env:MODEL_API_KEY"}, // read with r.Secret("model")
+				Func: func(ctx context.Context, r *agent.Run) error {
+					out, err := r.Step(ctx, "echo", func(ctx context.Context) (agent.Output, error) {
+						return agent.Output{Data: r.Input(), CostUnits: 1}, nil
+					})
+					if err != nil {
+						return err
+					}
+					return r.SetOutput(map[string]any{"echo": string(out)})
+				},
+			},
+		},
+{{- end}}
 	}
 	os.Exit(app.Main(os.Args[1:], hooks, app.Env{}))
 }

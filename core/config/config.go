@@ -35,6 +35,8 @@ type Config struct {
 	Storage     StorageConfig   `yaml:"storage" json:"storage"`
 	RateLimit   RateLimitConfig `yaml:"rate_limit" json:"rate_limit"`
 	Valkey      ValkeyConfig    `yaml:"valkey" json:"valkey"`
+	Agent       AgentConfig     `yaml:"agent" json:"agent"`
+	Web         WebConfig       `yaml:"web" json:"web"`
 }
 
 // RateLimitConfig describes how request budgets (game auth/score/events, web
@@ -258,6 +260,8 @@ func Defaults() Config {
 			AccountRatePerMinute: 10,
 			MaxConcurrentHashes:  2,
 		}},
+		Agent: defaultAgent(),
+		Web:   defaultWeb(),
 	}
 }
 
@@ -375,6 +379,9 @@ func fields(c *Config) map[string]func(string) error {
 		"STORAGE_LOCAL_ROOT":               str(&c.Storage.Local.Root),
 		"STORAGE_S3_ENDPOINT":              str(&c.Storage.S3.Endpoint),
 		"STORAGE_S3_BUCKET":                str(&c.Storage.S3.Bucket),
+		"AGENT_MAX_RUNNING_PER_TENANT":     integer(&c.Agent.MaxRunningPerTenant),
+		"AGENT_STEP_TIMEOUT":               dur(&c.Agent.StepTimeout),
+		"WEB_PUBLIC_MAX_AGE":               dur(&c.Web.PublicMaxAge),
 	}
 }
 
@@ -386,7 +393,7 @@ var (
 	implementedLimiter  = map[string]bool{"local": true, "valkey": true}
 	implementedQueue    = map[string]bool{"sqlite": true, "postgres": true}
 	implementedBackup   = map[string]bool{"litestream": true}
-	implementedKits     = map[string]bool{"game": true}
+	implementedKits     = map[string]bool{"game": true, "agent": true, "web": true}
 	implementedPlatform = map[string]bool{"wechat": true}
 )
 
@@ -466,7 +473,7 @@ func (c Config) Validate() error {
 	}
 	for _, k := range c.Kits {
 		if !implementedKits[k] {
-			add("kit %q is not implemented (implemented: game)", k)
+			add("kit %q is not implemented (implemented: game, agent, web)", k)
 		}
 	}
 	g := c.Game
@@ -515,6 +522,7 @@ func (c Config) Validate() error {
 	}
 	errs = append(errs, c.validateProfile()...)
 	errs = append(errs, c.validateModules()...)
+	errs = append(errs, c.validateKits()...)
 	return errors.Join(errs...)
 }
 

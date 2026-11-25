@@ -29,7 +29,9 @@ import (
 	"github.com/pillar/gostack/core/config"
 	"github.com/pillar/gostack/core/httpx"
 	"github.com/pillar/gostack/core/observability"
+	"github.com/pillar/gostack/kits/agent"
 	"github.com/pillar/gostack/kits/game"
+	"github.com/pillar/gostack/kits/web"
 	"github.com/pillar/gostack/migrations"
 	"github.com/pillar/gostack/modules/cache"
 	"github.com/pillar/gostack/modules/idempotency"
@@ -45,6 +47,8 @@ var Version = "dev"
 type Hooks struct {
 	Routes func(mux *http.ServeMux, a *App)
 	Jobs   map[string]jobs.Handler
+	// Workflows are registered with AgentKit (kits: [agent]) before serving.
+	Workflows map[string]agent.Workflow
 }
 
 // App is a running (or ready to run) application instance.
@@ -58,6 +62,9 @@ type App struct {
 	Jobs      *jobs.Queue
 	Metrics   *observability.Registry
 	Game      *game.Kit
+	// Agent and Web are set when kits include agent / web.
+	Agent *agent.Kit
+	Web   *web.Kit
 	// WebAuth is set when auth.web.enabled; protect app routes with WebAuth.Require.
 	WebAuth *webauth.Module
 	// Mod holds the optional modules enabled by configuration.
@@ -222,6 +229,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 		a.Close()
 		return nil, err
 	}
+	a.initKits(cfg)
 	a.registerMetrics()
 	return a, nil
 }
@@ -300,6 +308,9 @@ func (a *App) Handler(h Hooks) http.Handler {
 		a.WebAuth.Routes(mux)
 	}
 	a.moduleRoutes(mux)
+	if err := a.kitRoutes(mux, h); err != nil {
+		a.Log.Error("kit routes", "err", err)
+	}
 	if h.Routes != nil {
 		h.Routes(mux, a)
 	}
@@ -520,6 +531,9 @@ func (a *App) Serve(ctx context.Context, h Hooks) error {
 		for k, v := range a.Game.JobHandlers() {
 			handlers[k] = v
 		}
+	}
+	for k, v := range a.kitJobHandlers() {
+		handlers[k] = v
 	}
 	for k, v := range h.Jobs {
 		handlers[k] = v

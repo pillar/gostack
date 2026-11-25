@@ -23,7 +23,7 @@ Product baseline: `docs/GoStack_PRD_v2.0.md` and revisions in `docs/PRD_v2_REVIE
 - `adapters/store` driver-agnostic `*store.DB` (WriteTx/ReadTx, bounded admission, retry, migrations runner for both dialects)
 - `adapters/sqlite` Lite opener (single writer, read-only pool, PRAGMAs, instance lock); `adapters/postgres` Scale opener (pgx, SERIALIZABLE retry, `?`→`$n` rewriting); `adapters/pgtest` test helpers
 - `adapters/valkey` RESP2 client; `adapters/valkeytest` test helpers
-- `core/{config,httpx,auth,observability}`; `modules/{jobs,idempotency,ratelimit,cache}` (ratelimit: `Allower` = local `Limiter` or Valkey `Global`; build limiters via `Kit.NewLimiter`/`ratelimit.Factory`, never `ratelimit.PerMinute` directly in features); `kits/game`
+- `core/{config,httpx,auth,observability}`; `modules/{jobs,idempotency,ratelimit,cache}` (ratelimit: `Allower` = local `Limiter` or Valkey `Global`; build limiters via `Kit.NewLimiter`/`ratelimit.Factory`, never `ratelimit.PerMinute` directly in features); `kits/game`; `kits/agent` (AgentKit P1, docs/api/agent.md); `kits/web` (WebKit P1, docs/api/web.md)
 - `app` wiring + application subcommands; `cmd/gostack` CLI (adds `init`); `cmd/example` reference app
 - `migrations/{sqlite,analytics}` and their PostgreSQL twins `migrations/{postgres,postgres_analytics}` (same version numbers), embedded, forward-only; `templates/app` project skeleton (embedded)
 - `tests/fault` process-level fault injection (SQLite); `tests/scale` two instances on one PostgreSQL + `migrate to-postgres` end-to-end; `docs/adr` decisions
