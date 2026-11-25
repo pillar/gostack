@@ -162,8 +162,13 @@ func (k *Kit) loadGame(ctx context.Context, q interface {
 	return g, nil
 }
 
-// withGame resolves the URL game and rejects unknown or disabled games (G01).
-func (k *Kit) withGame(next handler) handler {
+// withGame resolves the URL game and rejects unknown or disabled games (G01),
+// then applies the game's request quotas.
+func (k *Kit) withGame(next handler) handler { return k.withGameQuota(next, true) }
+
+// withGameQuota is withGame; quotas=false skips the per-game request quotas
+// (provider callbacks registered with HandleCallback).
+func (k *Kit) withGameQuota(next handler, quotas bool) handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		id := r.PathValue("game")
 		if !idPattern.MatchString(id) {
@@ -179,11 +184,13 @@ func (k *Kit) withGame(next handler) handler {
 		if g.Status != "active" {
 			return httpx.Forbidden("game is disabled")
 		}
-		release, err := k.enforceRequestQuotas(r, g.ID) // quota.go
-		if err != nil {
-			return err
+		if quotas {
+			release, err := k.enforceRequestQuotas(r, g.ID) // quota.go
+			if err != nil {
+				return err
+			}
+			defer release()
 		}
-		defer release()
 		return next(w, r.WithContext(context.WithValue(r.Context(), gameKey, g)))
 	}
 }

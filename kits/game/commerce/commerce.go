@@ -15,10 +15,13 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/pillar/gostack/adapters/store"
@@ -85,10 +88,11 @@ func (m *Module) Routes(mux *http.ServeMux) {
 	k.Handle(mux, "GET /iap/orders/{order}", game.Player, m.getOrder)
 	k.Handle(mux, "POST /iap/wechatpay/prepay", game.Player, m.wechatPrepay)
 	k.Handle(mux, "POST /iap/{provider}/verify", game.Player, m.verifyPurchase)
-	k.Handle(mux, "POST /callbacks/{provider}", game.Public, m.iapCallback)
 	k.Handle(mux, "POST /ads/{placement}/intent", game.Player, m.adIntent)
-	k.Handle(mux, "GET /callbacks/ads/{provider}", game.Public, m.adCallback)
-	k.Handle(mux, "POST /callbacks/ads/{provider}", game.Public, m.adCallback)
+	// Signed provider callbacks are exempt from per-game request quotas.
+	k.HandleCallback(mux, "POST /callbacks/{provider}", m.iapCallback)
+	k.HandleCallback(mux, "GET /callbacks/ads/{provider}", m.adCallback)
+	k.HandleCallback(mux, "POST /callbacks/ads/{provider}", m.adCallback)
 
 	k.HandleAdmin(mux, "PUT /products", m.adminPutProducts)
 	k.HandleAdmin(mux, "GET /products", m.adminGetProducts)
@@ -103,27 +107,138 @@ func (m *Module) Routes(mux *http.ServeMux) {
 // jobs.Worker must run them; OutboxJobType is handled by the application.
 func (m *Module) JobHandlers() map[string]jobs.Handler {
 	out := map[string]jobs.Handler{}
-	for _, v := range m.IAP {
+	for provider, v := range m.IAP {
 		if f, ok := v.(finisher); ok {
-			for t, h := range f.jobHandlers() {
-				out[t] = h
-			}
+			out[f.finishJobType()] = m.finishHandler(provider, f)
 		}
 	}
 	return out
 }
 
+func (m *Module) log() *slog.Logger {
+	if m.Kit != nil && m.Kit.Log != nil {
+		return m.Kit.Log
+	}
+	return slog.Default()
+}
+
+func (m *Module) counter(name, labels string) {
+	if m.Kit != nil && m.Kit.Metrics != nil {
+		m.Kit.Metrics.Counter(name, labels).Add(1)
+	}
+}
+
+// finishHandler runs a store finish job: the store call (no transaction),
+// then a short WriteTx recording the outcome on the order. A rejection that
+// needs attention is logged at error level, counted in
+// commerce_store_finish_attention_total{provider,status}, flagged on the order
+// (finish_state needs_attention, visible in the admin order list) and retried.
+func (m *Module) finishHandler(provider string, f finisher) jobs.Handler {
+	return func(ctx context.Context, job *jobs.Claimed) error {
+		r := f.finish(ctx, job.Payload)
+		if r.Attention != "" {
+			m.log().Error("commerce: store rejected purchase finish; needs attention", "provider", provider, "game", r.GameID,
+				"order", r.OrderID, "job", job.ID, "attempt", job.Attempt, "err", r.Attention)
+			m.counter("commerce_store_finish_attention_total", `provider="`+provider+`",status="`+strconv.Itoa(r.Status)+`"`)
+		}
+		if r.OrderID != "" && (r.Done || r.Attention != "") {
+			now := m.now().UnixMilli()
+			err := m.DB.WriteTx(ctx, func(tx *sql.Tx) error {
+				var err error
+				if r.Done {
+					_, err = tx.ExecContext(ctx, `UPDATE commerce_orders SET finish_state='done', finish_error='', finished_at=?
+						WHERE game_id=? AND order_id=? AND finish_state<>'done'`, now, r.GameID, r.OrderID)
+				} else {
+					_, err = tx.ExecContext(ctx, `UPDATE commerce_orders SET finish_state='needs_attention', finish_error=?, updated_at=?
+						WHERE game_id=? AND order_id=? AND finish_state<>'done'`, r.Attention, now, r.GameID, r.OrderID)
+				}
+				return err
+			})
+			if err != nil {
+				return err // the store call is idempotent; retry records it
+			}
+		}
+		return r.Err
+	}
+}
+
 // Maintain purges expired ad intents and inbox records older than 90 days
-// (orders and ad reward rows keep the permanent uniqueness guarantees).
+// (orders and ad reward rows keep the permanent uniqueness guarantees), then
+// reconciles store-side work that has no live job (reconcileFinish) and, for
+// WeChat Pay, queries unpaid orders (reconcileWeChatPay).
 func (m *Module) Maintain(ctx context.Context) error {
 	now := m.now()
-	return m.DB.WriteTx(ctx, func(tx *sql.Tx) error {
+	err := m.DB.WriteTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM commerce_ad_intents WHERE expires_at < ?`, now.Add(-24*time.Hour).UnixMilli()); err != nil {
 			return err
 		}
 		_, err := tx.ExecContext(ctx, `DELETE FROM commerce_inbox WHERE received_at < ? AND status <> 'failed'`, now.Add(-90*24*time.Hour).UnixMilli())
 		return err
 	})
+	return errors.Join(err, m.reconcileFinish(ctx), m.reconcileWeChatPay(ctx))
+}
+
+// reconcileFinish re-enqueues the finish job of every delivered order of a
+// finisher provider whose completion is not recorded as done (pending or
+// needs_attention), delivered within googleFinishWindow, and whose job is dead
+// (Replay: fresh attempt budget) or missing (re-created from the stored
+// purchase token). Bounded to 500 orders per run.
+func (m *Module) reconcileFinish(ctx context.Context) error {
+	if m.Outbox == nil {
+		return nil
+	}
+	type cand struct{ id, gameID, tenant, provider, ppid, token string }
+	rows, err := m.DB.Read.QueryContext(ctx, `SELECT o.order_id, o.game_id, g.tenant_id, o.provider, coalesce(o.provider_product_id,''), coalesce(o.purchase_token,'')
+		FROM commerce_orders o JOIN games g ON g.game_id=o.game_id
+		WHERE o.finish_state IN ('pending','needs_attention') AND o.state='delivered' AND o.delivered_at>=?
+		ORDER BY o.delivered_at, o.order_id LIMIT 500`, m.now().Add(-googleFinishWindow).UnixMilli())
+	if err != nil {
+		return err
+	}
+	var cands []cand
+	for rows.Next() {
+		var c cand
+		if err := rows.Scan(&c.id, &c.gameID, &c.tenant, &c.provider, &c.ppid, &c.token); err != nil {
+			rows.Close()
+			return err
+		}
+		cands = append(cands, c)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	var errs []error
+	for _, c := range cands {
+		f, ok := m.IAP[c.provider].(finisher)
+		if !ok {
+			continue
+		}
+		var jobID, status string
+		err := m.DB.Read.QueryRowContext(ctx, `SELECT id, status FROM jobs WHERE tenant_id=? AND type=? AND dedupe_key=?`,
+			c.tenant, f.finishJobType(), "finish:"+c.id).Scan(&jobID, &status)
+		switch {
+		case err == nil && status != "dead":
+			continue // live (or succeeded: the handler records done)
+		case err == nil:
+			err = m.Outbox.Replay(ctx, jobID)
+		case errors.Is(err, sql.ErrNoRows):
+			j, ok := f.finishJob(c.gameID, c.id, &Transaction{ProviderProductID: c.ppid, PurchaseToken: c.token})
+			if !ok {
+				m.log().Error("commerce: cannot re-create finish job (no purchase token or app)", "provider", c.provider, "order", c.id)
+				continue
+			}
+			j.TenantID, j.DedupeKey = c.tenant, "finish:"+c.id
+			_, err = m.Outbox.EnqueueNow(ctx, j)
+		}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("commerce: reconcile finish of %s: %w", c.id, err))
+			continue
+		}
+		m.log().Warn("commerce: re-enqueued store finish job", "provider", c.provider, "game", c.gameID, "order", c.id, "job_was", status)
+		m.counter("commerce_store_finish_requeued_total", `provider="`+c.provider+`"`)
+	}
+	return errors.Join(errs...)
 }
 
 // --- inbox -----------------------------------------------------------------

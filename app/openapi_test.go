@@ -272,7 +272,7 @@ func sourceRoutes(t *testing.T) (routes map[string]string, codes map[string]stri
 						codes[s] = at
 					}
 					return true
-				case "Handle", "HandleFunc", "HandleAdmin", "g", "h", "mutate":
+				case "Handle", "HandleFunc", "HandleAdmin", "HandleCallback", "g", "h", "mutate":
 				default:
 					return true
 				}
@@ -284,7 +284,7 @@ func sourceRoutes(t *testing.T) (routes map[string]string, codes map[string]stri
 					if name != "Handle" && name != "HandleFunc" && !strings.Contains(s, " /v1/") {
 						prefix = "/v1/games/{game}"
 					}
-				} else if s, ok = lit(1); ok { // Kit.Handle(mux, p, ...) / Kit.HandleAdmin(mux, p, ...)
+				} else if s, ok = lit(1); ok { // Kit.Handle(mux, p, ...) / Kit.HandleAdmin(mux, p, ...) / Kit.HandleCallback(mux, p, ...)
 					prefix = "/v1/games/{game}"
 					if name == "HandleAdmin" {
 						prefix = "/v1/admin/games/{game}"

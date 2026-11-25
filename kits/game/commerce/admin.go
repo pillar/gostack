@@ -197,14 +197,19 @@ func (m *Module) adminGetPlacements(w http.ResponseWriter, r *http.Request) erro
 
 var orderStates = map[string]bool{"created": true, "paid": true, "delivered": true, "refunded": true, "refund_compensated": true, "refund_shortfall": true}
 
-// adminListOrders lists orders, newest update first (?state=&player_id=&limit=).
+var finishStates = map[string]bool{"pending": true, "done": true, "needs_attention": true}
+
+// adminListOrders lists orders, newest update first (?state=&finish_state=&player_id=&limit=).
 func (m *Module) adminListOrders(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	g := game.CurrentGame(ctx)
 	q := r.URL.Query()
-	state, player := q.Get("state"), q.Get("player_id")
+	state, finish, player := q.Get("state"), q.Get("finish_state"), q.Get("player_id")
 	if state != "" && !orderStates[state] {
 		return httpx.BadRequest("unknown state")
+	}
+	if finish != "" && !finishStates[finish] {
+		return httpx.BadRequest("unknown finish_state")
 	}
 	limit := 50
 	if s := q.Get("limit"); s != "" {
@@ -215,8 +220,8 @@ func (m *Module) adminListOrders(w http.ResponseWriter, r *http.Request) error {
 		limit = n
 	}
 	rows, err := m.DB.Read.QueryContext(ctx, `SELECT `+orderCols+` FROM commerce_orders
-		WHERE game_id=? AND (?='' OR state=?) AND (?='' OR player_id=?) ORDER BY updated_at DESC, order_id LIMIT ?`,
-		g.ID, state, state, player, player, limit)
+		WHERE game_id=? AND (?='' OR state=?) AND (?='' OR finish_state=?) AND (?='' OR player_id=?) ORDER BY updated_at DESC, order_id LIMIT ?`,
+		g.ID, state, state, finish, finish, player, player, limit)
 	if err != nil {
 		return err
 	}
@@ -227,7 +232,7 @@ func (m *Module) adminListOrders(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		out = append(out, o.view())
+		out = append(out, o.adminView())
 	}
 	if err := rows.Err(); err != nil {
 		return err

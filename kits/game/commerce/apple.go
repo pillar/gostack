@@ -71,9 +71,26 @@ type RequestVerifier interface {
 
 // finisher is implemented by verifiers that must complete a purchase at the
 // store after delivery; the job is enqueued in the delivery transaction.
+// The module records the outcome on the order (finish_state) and reconciles
+// orders whose job died or is missing (Module.Maintain).
 type finisher interface {
-	finishJob(gameID, orderID string, txn *Transaction) (jobType string, payload []byte, ok bool)
-	jobHandlers() map[string]jobs.Handler
+	// finishJobType is the job type of the provider's finish jobs.
+	finishJobType() string
+	// finishJob returns the job for a delivered transaction (ok=false: no
+	// store-side completion needed). Type, Payload and MaxAttempts are set.
+	finishJob(gameID, orderID string, txn *Transaction) (j jobs.Job, ok bool)
+	// finish performs the store call of a finish job payload (network IO,
+	// outside any transaction).
+	finish(ctx context.Context, payload []byte) finishResult
+}
+
+// finishResult is the outcome of one finish attempt.
+type finishResult struct {
+	GameID, OrderID string
+	Done            bool   // the store reports the purchase as finished
+	Attention       string // non-retryable rejection to surface; the job still retries
+	Status          int    // HTTP status of the rejection (metric label)
+	Err             error  // transient failure: retry (also set with Attention)
 }
 
 // callbackWriter is implemented by verifiers whose provider requires a

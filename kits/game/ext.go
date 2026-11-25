@@ -49,6 +49,18 @@ func (k *Kit) Handle(mux *http.ServeMux, pattern string, mode AuthMode, h httpx.
 	mux.Handle(method+" /v1/games/{game}"+path, k.cors(k.withGame(h)))
 }
 
+// HandleCallback registers a public server-to-server provider callback
+// (store / payment notifications, ad SSV) under /v1/games/{game}. It is a
+// Public route that is exempt from the game's requests_per_minute and
+// write_concurrency quotas, so unauthenticated traffic to the game cannot make
+// the provider's signed requests fail with 429/503 (WeChat Pay, for one, has
+// no client-side fallback). The handler must authenticate the provider
+// (signature, OIDC token) before doing any database work.
+func (k *Kit) HandleCallback(mux *http.ServeMux, pattern string, h httpx.HandlerFunc) {
+	method, path, _ := strings.Cut(pattern, " ")
+	mux.Handle(method+" /v1/games/{game}"+path, k.cors(k.withGameQuota(h, false)))
+}
+
 // HandleAdmin registers pattern ("METHOD /path") under /v1/admin/games/{game}.
 // The caller needs an API key with the admin scope whose tenant owns the game.
 func (k *Kit) HandleAdmin(mux *http.ServeMux, pattern string, h httpx.HandlerFunc) {

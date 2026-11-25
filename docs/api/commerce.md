@@ -125,29 +125,63 @@ the service account JSON key; never logged), `apps.<game>` with `package_name`,
   `https://www.googleapis.com/auth/androidpublisher`, `aud` = token URL, 1h)
   exchanged at `https://oauth2.googleapis.com/token` with
   `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`. Cached until one
-  minute before expiry, dropped on a 401. Stdlib crypto only.
+  minute before expiry, dropped on a 401. Stdlib crypto only. At most one
+  token request is in flight (no lock is held during network IO); concurrent
+  callers wait for it only as long as their own request context allows.
 - **Verify** (`POST /iap/google/verify`, body `{"product_id","purchase_token"}`)
   calls
   `GET /androidpublisher/v3/applications/{package}/purchases/products/{product}/tokens/{token}`
   before any transaction. `purchaseState` 0 → deliver, 1 (canceled) → 409
-  `transaction_refunded`, 2 (pending) → 409 `purchase_pending`. `purchaseType`
-  0 (test) → 400 `test_purchase_rejected` unless allowed. A non-test purchase
-  without `orderId` → 400 `invalid_purchase`; a 400/404/410 from Google → 400
+  `transaction_refunded`, 2 (pending) → 409 `purchase_pending` (checked before
+  `orderId`, which is not set while pending). `purchaseType` 0 (test) → 400
+  `test_purchase_rejected` unless allowed. A standard purchase (`purchaseType`
+  absent) without `orderId` → 400 `invalid_purchase`; promo (1) and rewarded (2)
+  purchases are accepted without `orderId` (identity = purchase token). The
+  androidpublisher reference does not state when `orderId` is absent
+  (`purchaseType` is documented as "only set if this purchase was not made using
+  the standard in-app billing flow"; the Billing Library documents `orderId` as
+  null only while pending), so tolerating its absence for non-standard purchase
+  types is a defensive choice, not documented behaviour. A 400/404/410 from Google → 400
   `invalid_purchase`; any other failure → 503 `store_unavailable`. The provider
   transaction id is the hex SHA-256 of the purchase token; `orderId` is stored as
   `original_txn_id`. A purchase that is already consumed/acknowledged is still
-  delivered at most once (the order table enforces uniqueness), without a finish job.
+  delivered at most once (the order table enforces uniqueness), without a finish
+  job (`finish_state` `done`).
 - **Acknowledge / consume:** the delivery transaction enqueues the job
-  `commerce.google.finish` (deduplicated per order). The job calls `:consume` or
-  `:acknowledge` outside any transaction. The queue retries transient failures;
-  a 4xx other than 401/408/429 is logged and dropped. Google refunds purchases
-  that are not acknowledged within three days, so the jobs worker must run
-  (`queue.workers` > 0). The app registers the handler from `Module.JobHandlers()`.
+  `commerce.google.finish` (deduplicated per order, `max_attempts` 200) and sets
+  the order's `finish_state` to `pending` and stores the purchase token
+  (`purchase_token`, migration 0019). The job calls `:consume` or `:acknowledge`
+  outside any transaction, then records `finish_state` `done` and `finished_at`.
+  Google refunds purchases that are not acknowledged within three days, so the
+  jobs worker must run (`queue.workers` > 0); the app registers the handler from
+  `Module.JobHandlers()`.
+  - Transient failures (network, 5xx, 401, 408, 429) are retried by the queue:
+    exponential backoff with full jitter capped at 1 h, so 200 attempts span
+    about 4 days on average (attempts from the 12th on wait 0–1 h, mean 30 min);
+    tested with a fake that answers 503 for 48 simulated hours (still
+    `retry_wait`, then completes).
+  - Any other 4xx (e.g. 403: the service account lacks permission, 404) is first
+    checked with purchases.products.get: already consumed (or acknowledged in
+    `acknowledge` mode) counts as `done`. Otherwise the order gets
+    `finish_state` `needs_attention` and `finish_error` (admin order list,
+    `?finish_state=needs_attention`), an error log line and
+    `commerce_store_finish_attention_total{provider,status}` is incremented; the
+    job keeps retrying, so the purchase is finished once the cause is fixed.
+  - Reconciliation (`Module.Maintain`, every 10 min with the app's maintenance):
+    delivered orders with `finish_state` `pending` or `needs_attention`,
+    delivered within the last 3 days, whose finish job is `dead` are replayed
+    (fresh attempt budget) and whose job is missing are re-enqueued from the
+    stored purchase token (`commerce_store_finish_requeued_total{provider}`).
+    At most 500 orders per run. Orders delivered before migration 0019 have
+    `finish_state` backfilled from their job if it still exists (succeeded jobs
+    are purged after 7 days); otherwise it stays empty and they are not reconciled.
 - **RTDN** (`POST /callbacks/google`, Pub/Sub push with OIDC authentication):
   the bearer JWT must be RS256 with a `kid` from Google's JWKS
   (`https://www.googleapis.com/oauth2/v3/certs`). The JWKS is fetched before the
   transaction and cached 1h; an unknown `kid` triggers a refetch at most once a
-  minute. The token also needs `iss` `accounts.google.com` or
+  minute. At most one fetch is in flight and no lock is held during it: an
+  expired but known key is used while the refresh runs; a caller that needs
+  the fetch waits only as long as its own context allows (503 `key_fetch_failed`). The token also needs `iss` `accounts.google.com` or
   `https://accounts.google.com`, `aud` = the configured audience, an unexpired
   `exp` (60 s leeway), and `email` = the configured push service account with
   `email_verified: true`. Otherwise the answer is 401 `invalid_signature` and
@@ -170,6 +204,8 @@ Configuration `game.commerce.wechatpay`:
 - `platform_keys`: `Wechatpay-Serial` → PEM public key or platform certificate
   file (WeChat Pay public keys have serials `PUB_KEY_ID_…`)
 - `notify_base_url` (https origin of this server), `max_skew` (default 5m)
+- `query_after` (default 10m, must be < 2h): unpaid orders with a `prepay_id`
+  older than this are queried (see Order query below)
 - `apps.<game>`: `app_id` (the AppID the player logged in with through
   `game.platforms.wechat`), `prices` (wechatpay provider product id → fen),
   optional `description`
@@ -227,6 +263,29 @@ Client flow: `POST /iap/orders` → `POST /iap/wechatpay/prepay {"order_id"}` �
   - Answer: `204` without body on success (processed, ignored or duplicate).
     On failure: the error's HTTP status with
     `{"code":"FAIL","message":"<error code>"}`, so WeChat Pay retries.
+- **Order query** (lost or late notifications; `Module.Maintain`, every 10 min):
+  orders with provider `wechatpay`, state `created`, a stored `prepay_id`,
+  created at least `query_after` ago and less than 2h (prepay expiry) + 1h ago
+  are queried, oldest first, at most 100 per run, outside any transaction:
+  `GET /v3/pay/transactions/out-trade-no/{out_trade_no}?mchid={mch_id}` with the
+  same merchant `Authorization` (signed message
+  `GET\n/v3/pay/transactions/out-trade-no/{no}?mchid={mch_id}\ntimestamp\nnonce\n\n`).
+  The 200 answer's `Wechatpay-Signature` is verified with the platform key like
+  every API v3 response (the official page's samples verify the response
+  signature on 2xx; the parameter tables do not describe it). 404
+  `ORDER_NOT_EXIST` → skipped. `trade_state` SUCCESS is checked exactly like a
+  `TRANSACTION.SUCCESS` resource (mchid, appid, out_trade_no, CNY amount equal to
+  the order amount) and delivered through the notification path with inbox
+  event id `query:<transaction_id>`; the order/ledger uniqueness on
+  `transaction_id` makes it idempotent with a notification arriving earlier,
+  later or concurrently. `NOTPAY`, `CLOSED`, `REFUND`, ... → nothing (a refund
+  is applied by its notification). Errors (network, bad signature, mismatch)
+  are returned from `Maintain` and logged; the next run retries. Counter
+  `commerce_wechatpay_query_delivered_total`. An abandoned order is queried
+  about (3h − `query_after`) / 10 min times. Verified only against an httptest
+  fake built from the official API page
+  (https://pay.weixin.qq.com/doc/v3/merchant/4012791859, read 2026-11-25), not
+  against WeChat Pay.
 
 ## Client routes (session required)
 
@@ -273,6 +332,18 @@ tokens can be open per player.
 Errors: 404 `not_found` (placement), 409 `ad_cap_reached`, 409 `too_many_intents`.
 
 ## Public callback routes
+
+Callback routes are registered with `Kit.HandleCallback` and are exempt from
+the game's `requests_per_minute` and `write_concurrency` quotas
+(docs/api/quotas.md): otherwise unauthenticated traffic to any route of the game
+could exhaust the shared bucket and make signed Google RTDN, WeChat Pay (which
+has no client-side verify fallback) or ad SSV callbacks fail with 429/503.
+Each handler authenticates the provider (signature / OIDC token) before any
+database work; unauthenticated callback traffic costs one signature check and
+is bounded only by server-wide limits (HTTP server, reverse proxy), not by the
+game's quota. Tested: with `requests_per_minute` 5 and a flood of unsigned
+callbacks and public requests, a signed RTDN and a signed WeChat Pay
+notification still succeed.
 
 ### POST /v1/games/{game}/callbacks/{provider}
 App Store Server Notifications V2 for the game (`provider` = `apple`). Body
@@ -333,9 +404,12 @@ becomes `refund_shortfall`, for manual review.
 - `PUT /v1/admin/games/{game}/ad-placements` replaces the placements:
   `{"bonus":{"grants":{"coins":10},"daily_cap":3}}` (`daily_cap` 1–1000).
   `GET` returns `{"placements":{...}}`.
-- `GET /v1/admin/games/{game}/orders?state=&player_id=&limit=` (limit 1–200,
+- `GET /v1/admin/games/{game}/orders?state=&finish_state=&player_id=&limit=` (limit 1–200,
   default 50), newest first: `{"orders":[order...]}`. Use
-  `?state=refund_shortfall` for the review queue.
+  `?state=refund_shortfall` for the review queue and
+  `?finish_state=needs_attention` (`pending|done|needs_attention`) for purchases
+  the store refused to acknowledge/consume. Admin orders additionally carry
+  `finish_state`, `finish_error` and `finished_at` when set (not shown to players).
 - `POST /v1/admin/games/{game}/orders/{order}/resolve` with body
   `{"waive":false}` retries recovering `outstanding` from current balances.
   `{"waive":true}` also writes off the remainder. The order becomes

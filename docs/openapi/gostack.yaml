@@ -25,7 +25,8 @@ info:
     - Unknown paths and unsupported methods get `404 not_found`
       (message `route not found`), not 405.
     - Per-game quotas (`/v1/admin/games/{game}/quotas`, docs/api/quotas.md)
-      apply to every `/v1/games/{game}/...` route: `429 rate_limited` with
+      apply to every `/v1/games/{game}/...` route except the signed provider
+      callbacks (`/callbacks/{provider}`, `/callbacks/ads/{provider}`): `429 rate_limited` with
       `Retry-After` and `details.quota=requests_per_minute`; `503 overloaded`
       with `details.quota=write_concurrency` for mutating methods; `403
       quota_exceeded` on player creation (`max_players`) and save
@@ -2293,7 +2294,12 @@ paths:
         `{"code":"FAIL","message":<error code>}` so WeChat Pay retries. Errors:
         `401 invalid_signature`, `400 invalid_signature` (resource does not
         decrypt), `400 merchant_mismatch`, `400 app_mismatch`,
-        `409 amount_mismatch`.
+        `409 amount_mismatch`. A lost notification is covered by the periodic
+        order query (docs/api/commerce.md).
+
+        Exempt from the game's `requests_per_minute` and `write_concurrency`
+        quotas (registered with `Kit.HandleCallback`), so unauthenticated
+        traffic to the game cannot make signed provider callbacks fail with 429/503.
       security: []
       parameters:
         - $ref: '#/components/parameters/Game'
@@ -2397,6 +2403,7 @@ paths:
           where canonical is every parameter except `sig`, sorted by name, joined
           as `name=value` with `&` (decoded values). Repeated parameters are
           rejected. Secret per game.
+        Exempt from the game's request quotas (`Kit.HandleCallback`).
 
         The player comes from the intent token, never from a callback field.
         Credited once per (game, network, event id). A verified callback that
@@ -2581,7 +2588,10 @@ paths:
       tags: [commerce]
       x-gostack-module: commerce
       summary: List orders, most recently updated first
-      description: Use `?state=refund_shortfall` for the refund review queue.
+      description: |
+        Use `?state=refund_shortfall` for the refund review queue and
+        `?finish_state=needs_attention` for purchases the store refused to
+        acknowledge/consume (Google Play; see `finish_error`).
       security:
         - adminKey: []
       parameters:
@@ -2590,6 +2600,10 @@ paths:
           in: query
           required: false
           schema: {$ref: '#/components/schemas/CommerceOrderState'}
+        - name: finish_state
+          in: query
+          required: false
+          schema: {type: string, enum: [pending, done, needs_attention]}
         - name: player_id
           in: query
           required: false
@@ -6731,6 +6745,22 @@ components:
           type: integer
           format: int64
           description: Price fixed before payment in minor units (WeChat Pay, fen); absent when 0.
+        finish_state:
+          type: string
+          enum: [pending, done, needs_attention]
+          description: |
+            Admin order list only. Store-side completion of a delivered purchase
+            (Google Play acknowledge/consume): `pending` (job queued/retrying),
+            `done`, `needs_attention` (the store rejected the call with a
+            non-retryable status such as 403; the job keeps retrying). Absent when
+            no completion is required or the state predates migration 0019.
+        finish_error:
+          type: string
+          description: 'Admin order list only. Last non-retryable store rejection (e.g. `google play api: HTTP 403`).'
+        finished_at:
+          type: integer
+          format: int64
+          description: Admin order list only. When the store confirmed the completion.
     CommerceOrderResult:
       type: object
       required: [order]

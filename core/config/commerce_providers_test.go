@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/pillar/gostack/core/config"
 )
@@ -43,6 +44,8 @@ func TestCommerceProviderValidation(t *testing.T) {
 		"wechat no mch":           func(c *config.Config) { c.Game.Commerce.WeChatPay.MchID = "" },
 		"wechat no platform keys": func(c *config.Config) { c.Game.Commerce.WeChatPay.PlatformKeys = nil },
 		"wechat relative notify":  func(c *config.Config) { c.Game.Commerce.WeChatPay.NotifyBaseURL = "/cb" },
+		"wechat negative query":   func(c *config.Config) { c.Game.Commerce.WeChatPay.QueryAfter = -time.Minute },
+		"wechat query after ttl":  func(c *config.Config) { c.Game.Commerce.WeChatPay.QueryAfter = 3 * time.Hour },
 		"wechat http notify prod": func(c *config.Config) {
 			c.Environment = "production"
 			c.Game.Commerce.WeChatPay.NotifyBaseURL = "http://api.example.com"

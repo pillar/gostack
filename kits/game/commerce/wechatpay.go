@@ -20,6 +20,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -33,6 +34,7 @@ import (
 const (
 	WeChatPayBaseURL = "https://api.mch.weixin.qq.com"
 	wechatPayJSAPI   = "/v3/pay/transactions/jsapi"
+	wechatPayQuery   = "/v3/pay/transactions/out-trade-no/"
 	// wechatPayOrderTTL bounds how long an order can be paid (time_expire =
 	// created_at + TTL); a JSAPI prepay_id is valid for 2 hours.
 	wechatPayOrderTTL = 2 * time.Hour
@@ -96,9 +98,13 @@ type WeChatPayPrepay struct {
 	} `json:"payer"`
 }
 
-// WeChatPayClient creates JSAPI orders. Called outside database transactions.
+// WeChatPayClient creates and queries JSAPI orders. Called outside database transactions.
 type WeChatPayClient interface {
 	Prepay(ctx context.Context, req *WeChatPayPrepay) (prepayID string, err error)
+	// QueryByOutTradeNo queries an order by merchant order number
+	// (GET /v3/pay/transactions/out-trade-no/{out_trade_no}?mchid=...).
+	// An order WeChat Pay does not know is a *WeChatPayError with Status 404.
+	QueryByOutTradeNo(ctx context.Context, outTradeNo string) (*WeChatPayTransaction, error)
 }
 
 // WeChatPayError is a non-2xx answer from WeChat Pay.
@@ -120,25 +126,29 @@ type WeChatPayHTTPClient struct {
 	Client   *http.Client // default 10s timeout
 }
 
-func (c *WeChatPayHTTPClient) Prepay(ctx context.Context, p *WeChatPayPrepay) (string, error) {
-	body, err := json.Marshal(p)
-	if err != nil {
-		return "", err
-	}
+// do sends a merchant-signed request (the signed URL is the path and query)
+// and returns the body of a 200 answer after verifying its Wechatpay-Signature.
+func (c *WeChatPayHTTPClient) do(ctx context.Context, method, pathAndQuery string, body []byte) ([]byte, error) {
 	base := c.BaseURL
 	if base == "" {
 		base = WeChatPayBaseURL
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(base, "/")+wechatPayJSAPI, bytes.NewReader(body))
-	if err != nil {
-		return "", err
+	var rd io.Reader
+	if body != nil {
+		rd = bytes.NewReader(body)
 	}
-	authz, err := c.Merchant.Authorization(http.MethodPost, wechatPayJSAPI, body, time.Now().Unix(), randomNonce())
+	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(base, "/")+pathAndQuery, rd)
 	if err != nil {
-		return "", err
+		return nil, err
+	}
+	authz, err := c.Merchant.Authorization(method, pathAndQuery, body, time.Now().Unix(), randomNonce())
+	if err != nil {
+		return nil, err
 	}
 	req.Header.Set("Authorization", authz)
-	req.Header.Set("Content-Type", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "gostack")
 	hc := c.Client
@@ -147,29 +157,55 @@ func (c *WeChatPayHTTPClient) Prepay(ctx context.Context, p *WeChatPayPrepay) (s
 	}
 	resp, err := hc.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	rb, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		var e struct {
+			Code string `json:"code"`
+		}
+		_ = json.Unmarshal(rb, &e)
+		return nil, &WeChatPayError{Status: resp.StatusCode, Code: e.Code}
+	}
+	// A successful answer must carry a valid WeChat Pay signature.
+	if err := c.Verify.Verify(resp.Header, rb); err != nil {
+		return nil, &WeChatPayError{Status: resp.StatusCode, Code: "RESPONSE_SIGNATURE_INVALID"}
+	}
+	return rb, nil
+}
+
+func (c *WeChatPayHTTPClient) Prepay(ctx context.Context, p *WeChatPayPrepay) (string, error) {
+	body, err := json.Marshal(p)
+	if err != nil {
+		return "", err
+	}
+	rb, err := c.do(ctx, http.MethodPost, wechatPayJSAPI, body)
 	if err != nil {
 		return "", err
 	}
 	var out struct {
 		PrepayID string `json:"prepay_id"`
-		Code     string `json:"code"`
 	}
-	_ = json.Unmarshal(rb, &out)
-	if resp.StatusCode != http.StatusOK {
-		return "", &WeChatPayError{Status: resp.StatusCode, Code: out.Code}
-	}
-	// A successful answer must carry a valid WeChat Pay signature.
-	if err := c.Verify.Verify(resp.Header, rb); err != nil {
-		return "", &WeChatPayError{Status: resp.StatusCode, Code: "RESPONSE_SIGNATURE_INVALID"}
-	}
-	if out.PrepayID == "" {
-		return "", &WeChatPayError{Status: resp.StatusCode, Code: "NO_PREPAY_ID"}
+	if json.Unmarshal(rb, &out) != nil || out.PrepayID == "" {
+		return "", &WeChatPayError{Status: http.StatusOK, Code: "NO_PREPAY_ID"}
 	}
 	return out.PrepayID, nil
+}
+
+func (c *WeChatPayHTTPClient) QueryByOutTradeNo(ctx context.Context, outTradeNo string) (*WeChatPayTransaction, error) {
+	rb, err := c.do(ctx, http.MethodGet, wechatPayQuery+url.PathEscape(outTradeNo)+"?mchid="+url.QueryEscape(c.Merchant.MchID), nil)
+	if err != nil {
+		return nil, err
+	}
+	var t WeChatPayTransaction
+	if err := json.Unmarshal(rb, &t); err != nil {
+		return nil, &WeChatPayError{Status: http.StatusOK, Code: "MALFORMED_RESPONSE"}
+	}
+	return &t, nil
 }
 
 func randomNonce() string {
@@ -265,7 +301,10 @@ type WeChatPayVerifier struct {
 	// NotifyBaseURL is the public origin of this server; notify_url is
 	// NotifyBaseURL + /v1/games/{game}/callbacks/wechatpay.
 	NotifyBaseURL string
-	Log           *slog.Logger
+	// QueryAfter is how long an order with a prepay_id may stay unpaid before
+	// Module.Maintain queries it by out_trade_no (default 10m).
+	QueryAfter time.Duration
+	Log        *slog.Logger
 }
 
 func (v *WeChatPayVerifier) app(gameID string) (WeChatPayApp, error) {
@@ -315,7 +354,9 @@ type wechatNotification struct {
 	} `json:"resource"`
 }
 
-type wechatTransaction struct {
+// WeChatPayTransaction is a WeChat Pay API v3 transaction (payment
+// notification resource, order query answer); only the fields used here.
+type WeChatPayTransaction struct {
 	AppID         string `json:"appid"`
 	MchID         string `json:"mchid"`
 	OutTradeNo    string `json:"out_trade_no"`
@@ -371,6 +412,29 @@ var (
 	errAppMismatch      = httpx.NewError(http.StatusBadRequest, "app_mismatch", "notification is for another app")
 )
 
+// purchase maps a verified transaction (decrypted notification resource or
+// signed order-query answer) to a purchase; reason explains a transaction
+// that is not a deliverable payment (txn nil, no error).
+func (v *WeChatPayVerifier) purchase(a WeChatPayApp, t *WeChatPayTransaction) (txn *Transaction, reason string, err error) {
+	if t.MchID != v.MchID {
+		return nil, "", errMerchantMismatch
+	}
+	if t.AppID != a.AppID {
+		return nil, "", errAppMismatch
+	}
+	tok := tokenFromOutTradeNo(t.OutTradeNo)
+	switch {
+	case t.TradeState != "SUCCESS":
+		return nil, "trade_state " + t.TradeState + " is not handled", nil
+	case tok == "":
+		return nil, "out_trade_no was not issued by this server", nil
+	case t.TransactionID == "" || len(t.TransactionID) > 64 || t.Amount.Total <= 0 || (t.Amount.Currency != "" && t.Amount.Currency != "CNY"):
+		return nil, "", invalidProof("transaction is missing transaction_id or a CNY amount")
+	}
+	return &Transaction{TransactionID: t.TransactionID, OriginalTransactionID: t.OutTradeNo, ProviderProductID: t.Attach,
+		AppAccountToken: tok, Quantity: 1, Amount: t.Amount.Total}, "", nil
+}
+
 // VerifyNotificationRequest verifies the Wechatpay-Signature, decrypts the
 // resource and maps TRANSACTION.SUCCESS to a purchase and a full
 // REFUND.SUCCESS to a refund. out_trade_no carries the order's token.
@@ -389,28 +453,15 @@ func (v *WeChatPayVerifier) VerifyNotificationRequest(_ context.Context, gameID 
 	n := &Notification{EventID: wn.ID, Type: wn.EventType, Kind: NotifyIgnored}
 	switch wn.EventType {
 	case "TRANSACTION.SUCCESS":
-		var t wechatTransaction
+		var t WeChatPayTransaction
 		if err := v.decrypt(&wn, &t); err != nil {
 			return nil, err
 		}
-		if t.MchID != v.MchID {
-			return nil, errMerchantMismatch
+		if n.Txn, n.Reason, err = v.purchase(a, &t); err != nil {
+			return nil, err
 		}
-		if t.AppID != a.AppID {
-			return nil, errAppMismatch
-		}
-		tok := tokenFromOutTradeNo(t.OutTradeNo)
-		switch {
-		case t.TradeState != "SUCCESS":
-			n.Reason = "trade_state " + t.TradeState + " is not handled"
-		case tok == "":
-			n.Reason = "out_trade_no was not issued by this server"
-		case t.TransactionID == "" || len(t.TransactionID) > 64 || t.Amount.Total <= 0 || (t.Amount.Currency != "" && t.Amount.Currency != "CNY"):
-			return nil, invalidProof("transaction is missing transaction_id or a CNY amount")
-		default:
+		if n.Txn != nil {
 			n.Kind = NotifyPurchase
-			n.Txn = &Transaction{TransactionID: t.TransactionID, OriginalTransactionID: t.OutTradeNo, ProviderProductID: t.Attach,
-				AppAccountToken: tok, Quantity: 1, Amount: t.Amount.Total}
 		}
 	case "REFUND.SUCCESS":
 		var rf wechatRefund
@@ -595,4 +646,97 @@ func (v *WeChatPayVerifier) writePayment(w http.ResponseWriter, a WeChatPayApp, 
 		"payment": map[string]string{"appId": a.AppID, "timeStamp": ts, "nonceStr": nonce, "package": pkg, "signType": "RSA", "paySign": sig},
 	})
 	return nil
+}
+
+// --- order query reconciliation ----------------------------------------------
+
+// wechatPayQueryMargin keeps querying an order this long after its prepay
+// expiry (time_expire = created_at + wechatPayOrderTTL), for payments that
+// completed just before expiry.
+const wechatPayQueryMargin = time.Hour
+
+// reconcileWeChatPay covers lost payment notifications: every order with a
+// prepay_id that is still created after QueryAfter and younger than its prepay
+// expiry + margin is queried by out_trade_no (merchant-signed GET, response
+// signature verified, outside any transaction). trade_state SUCCESS is
+// delivered through the notification path (processEvent + notifyPurchase,
+// inbox event "query:<transaction_id>"): the order and ledger uniqueness on the
+// transaction id make it idempotent with a notification that arrives later or
+// concurrently. At most 100 orders per run, oldest first; maintenance runs
+// every 10 minutes, so an unpaid order is queried about (2h+1h-QueryAfter)/10m times.
+func (m *Module) reconcileWeChatPay(ctx context.Context) error {
+	v, ok := m.IAP["wechatpay"].(*WeChatPayVerifier)
+	if !ok || v.Client == nil {
+		return nil
+	}
+	after := v.QueryAfter
+	if after <= 0 {
+		after = 10 * time.Minute
+	}
+	now := m.now()
+	type cand struct{ id, gameID, tenant, token string }
+	rows, err := m.DB.Read.QueryContext(ctx, `SELECT o.order_id, o.game_id, g.tenant_id, coalesce(o.app_account_token,'')
+		FROM commerce_orders o JOIN games g ON g.game_id=o.game_id
+		WHERE o.provider='wechatpay' AND o.state='created' AND o.prepay_id<>'' AND o.created_at<=? AND o.created_at>=?
+		ORDER BY o.created_at, o.order_id LIMIT 100`,
+		now.Add(-after).UnixMilli(), now.Add(-wechatPayOrderTTL-wechatPayQueryMargin).UnixMilli())
+	if err != nil {
+		return err
+	}
+	var cands []cand
+	for rows.Next() {
+		var c cand
+		if err := rows.Scan(&c.id, &c.gameID, &c.tenant, &c.token); err != nil {
+			rows.Close()
+			return err
+		}
+		cands = append(cands, c)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	var errs []error
+	for _, c := range cands {
+		if ctx.Err() != nil {
+			errs = append(errs, ctx.Err())
+			break
+		}
+		a, err := v.app(c.gameID)
+		if err != nil || c.token == "" {
+			continue
+		}
+		t, err := v.Client.QueryByOutTradeNo(ctx, outTradeNo(c.token))
+		var we *WeChatPayError
+		if errors.As(err, &we) && we.Status == http.StatusNotFound {
+			continue // ORDER_NOT_EXIST: never paid at WeChat Pay
+		}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("commerce: wechatpay query of order %s: %w", c.id, err))
+			continue
+		}
+		if t.OutTradeNo != outTradeNo(c.token) {
+			errs = append(errs, fmt.Errorf("commerce: wechatpay query of order %s answered another out_trade_no", c.id))
+			continue
+		}
+		txn, _, err := v.purchase(a, t)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("commerce: wechatpay query of order %s: %w", c.id, err))
+			continue
+		}
+		if txn == nil {
+			continue // NOTPAY, CLOSED, REFUND, ...
+		}
+		g := game.Game{ID: c.gameID, TenantID: c.tenant}
+		res, err := m.processEvent(ctx, g.ID, "wechatpay", "query:"+txn.TransactionID, NotifyPurchase, hashOf([]byte(txn.TransactionID)),
+			func(tx *sql.Tx) (inboxState, error) { return m.notifyPurchase(ctx, tx, g, "wechatpay", txn) })
+		if err != nil {
+			errs = append(errs, fmt.Errorf("commerce: wechatpay delivery of queried order %s: %w", c.id, err))
+			continue
+		}
+		m.log().Warn("commerce: wechatpay payment found by order query (notification missing or late)", "game", c.gameID,
+			"order", c.id, "status", res["status"])
+		m.counter("commerce_wechatpay_query_delivered_total", "")
+	}
+	return errors.Join(errs...)
 }

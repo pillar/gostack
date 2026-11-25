@@ -12,7 +12,6 @@ import (
 	"github.com/pillar/gostack/core/httpx"
 	"github.com/pillar/gostack/kits/game"
 	"github.com/pillar/gostack/modules/idempotency"
-	"github.com/pillar/gostack/modules/jobs"
 )
 
 // order is a commerce_orders row.
@@ -23,12 +22,13 @@ type order struct {
 	Amount                                                       int64
 	Grants, Outstanding                                          grants
 	CreatedAt, UpdatedAt                                         int64
-	DeliveredAt, RefundedAt                                      sql.NullInt64
+	DeliveredAt, RefundedAt, FinishedAt                          sql.NullInt64
+	FinishState, FinishError                                     string // store-side completion (Google acknowledge/consume)
 }
 
 const orderCols = `order_id, game_id, coalesce(player_id,''), provider, coalesce(product_id,''), coalesce(provider_product_id,''),
 	coalesce(app_account_token,''), coalesce(provider_txn_id,''), state, quantity, refund_attempts, grants, outstanding,
-	created_at, updated_at, delivered_at, refunded_at, amount, prepay_id`
+	created_at, updated_at, delivered_at, refunded_at, amount, prepay_id, finish_state, finish_error, finished_at`
 
 type rowScanner interface{ Scan(...any) error }
 
@@ -36,7 +36,8 @@ func scanOrder(r rowScanner) (*order, error) {
 	var o order
 	var g, out string
 	err := r.Scan(&o.ID, &o.GameID, &o.PlayerID, &o.Provider, &o.ProductID, &o.ProviderProductID, &o.Token, &o.TxnID,
-		&o.State, &o.Quantity, &o.RefundAttempts, &g, &out, &o.CreatedAt, &o.UpdatedAt, &o.DeliveredAt, &o.RefundedAt, &o.Amount, &o.PrepayID)
+		&o.State, &o.Quantity, &o.RefundAttempts, &g, &out, &o.CreatedAt, &o.UpdatedAt, &o.DeliveredAt, &o.RefundedAt, &o.Amount, &o.PrepayID,
+		&o.FinishState, &o.FinishError, &o.FinishedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -61,6 +62,21 @@ func (o *order) view() map[string]any {
 	}
 	if o.Amount > 0 {
 		v["amount"] = o.Amount
+	}
+	return v
+}
+
+// adminView adds operational fields (store-side completion) to view.
+func (o *order) adminView() map[string]any {
+	v := o.view()
+	if o.FinishState != "" {
+		v["finish_state"] = o.FinishState
+	}
+	if o.FinishError != "" {
+		v["finish_error"] = o.FinishError
+	}
+	if o.FinishedAt.Valid {
+		v["finished_at"] = o.FinishedAt.Int64
 	}
 	return v
 }
@@ -312,9 +328,19 @@ func (m *Module) deliver(ctx context.Context, tx *sql.Tx, g game.Game, playerID,
 	}
 	// Store-side completion (Google Play acknowledge/consume) runs as a job
 	// committed with the delivery: no network IO inside this transaction.
+	// The order records its finish state (pending -> done | needs_attention)
+	// and the purchase token, so Maintain can re-enqueue a dead or missing job.
 	if f, ok := m.IAP[provider].(finisher); ok && m.Outbox != nil {
-		if typ, payload, ok := f.finishJob(g.ID, id, txn); ok {
-			if _, err := m.Outbox.Enqueue(ctx, tx, jobs.Job{TenantID: g.TenantID, Type: typ, Payload: payload, DedupeKey: "finish:" + id}); err != nil {
+		if j, ok := f.finishJob(g.ID, id, txn); ok {
+			j.TenantID, j.DedupeKey = g.TenantID, "finish:"+id
+			if _, err := m.Outbox.Enqueue(ctx, tx, j); err != nil {
+				return nil, err
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE commerce_orders SET finish_state='pending', purchase_token=? WHERE order_id=?`, txn.PurchaseToken, id); err != nil {
+				return nil, err
+			}
+		} else if txn.Finished {
+			if _, err := tx.ExecContext(ctx, `UPDATE commerce_orders SET finish_state='done', finished_at=? WHERE order_id=?`, now, id); err != nil {
 				return nil, err
 			}
 		}
