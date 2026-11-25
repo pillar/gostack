@@ -69,6 +69,18 @@ game:
   #   apple:
   #     root_ca_file: secrets/AppleRootCA-G3.pem   # download and verify from apple.com yourself
   #     apps: { {{.Name}}: { bundle_id: com.example.{{.Name}}, environments: [Production] } }
+  #   google:                     # Google Play one-time products (Play Developer API)
+  #     service_account_ref: file:secrets/play-service-account.json
+  #     apps: { {{.Name}}: { package_name: com.example.{{.Name}}, finish: consume } }   # finish: consume | acknowledge
+  #     rtdn: { audience: "https://api.example.com/v1/games/{{.Name}}/callbacks/google", service_account_email: rtdn-push@PROJECT.iam.gserviceaccount.com }
+  #   wechatpay:                  # WeChat Pay API v3 JSAPI (not mini-game virtual payment)
+  #     mch_id: "1900000001"
+  #     merchant_serial_no: MERCHANT_CERT_SERIAL
+  #     merchant_private_key_ref: file:secrets/apiclient_key.pem
+  #     apiv3_key_ref: env:WECHATPAY_APIV3_KEY
+  #     platform_keys: { PUB_KEY_ID_0000000000: secrets/wechatpay_pub_key.pem }
+  #     notify_base_url: https://api.example.com
+  #     apps: { {{.Name}}: { app_id: wxAPPID, prices: { gems_100: 600 } } }   # fen
   #   ads:
   #     admob: { kind: admob }
   # realtime:

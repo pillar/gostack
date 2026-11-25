@@ -1,20 +1,40 @@
 # GameKit commerce API (G11)
 
-Package `kits/game/commerce`, migration `0007_game_commerce.sql`.
+Package `kits/game/commerce`, migrations `0007_game_commerce.sql` and
+`0016_commerce_providers.sql` (order `amount`, `prepay_id`).
 Implements: App Store in-app purchase verification (StoreKit 2 / App Store Server
-API signed transactions and App Store Server Notifications V2), rewarded-ad
+API signed transactions and App Store Server Notifications V2), Google Play
+one-time products (Play Developer API + Real-time developer notifications), WeChat
+Pay API v3 JSAPI / mini-program payment (prepay + notifications), rewarded-ad
 server-to-server callbacks (AdMob SSV and a generic HMAC-SHA256 scheme),
 refunds with shortfall tracking, and an outbox hook.
 
-**Not implemented:** Google Play, WeChat Pay and any other IAP provider;
-subscriptions (renewals, `DID_RENEW`, `SUBSCRIBED` are verified and ignored);
-`REFUND_REVERSED`. `commerce.ValidateProviders` rejects unimplemented names so
-configuration cannot enable them.
+**Not implemented:** WeChat mini-game virtual payment (米大师 / 虚拟支付) — a
+different API; Huawei and any other IAP provider; subscriptions (Apple renewals
+and Google `subscriptionNotification` are verified and ignored);
+`REFUND_REVERSED`; automatic handling of partial refunds (Google quantity-based
+partial voids and WeChat Pay partial refunds are verified, recorded `ignored`
+and left to an operator); WeChat Pay order closing and refund initiation
+(refunds are started in the merchant platform; only their notifications are
+handled); Google `pendingRefundReviewNotification`. `commerce.ValidateProviders`
+and config validation reject unimplemented names.
 
-**Verification status:** all crypto paths are tested with locally generated
-keys and a locally generated root → intermediate → leaf certificate chain. No
-real Apple or Google endpoint or real signed payload was exercised; the Apple
-Root CA and AdMob production keys were never fetched in tests.
+Platform policy (not verified): WeChat rules may require mini-games to sell
+virtual goods through the virtual payment API rather than merchant WeChat Pay.
+Whether a given app may use the `wechatpay` provider is the operator's call.
+
+**Verification status:** all crypto and HTTP paths are tested only with locally
+generated keys and httptest fakes: a locally generated Apple-like certificate
+chain; a fake Google OAuth2 token endpoint, Play Developer API and JWKS with
+generated RSA keys; a fake WeChat Pay JSAPI endpoint with generated merchant and
+platform RSA keys and APIv3 key. No real Apple, Google or WeChat endpoint, real
+credential or real signed payload was exercised. Formats follow the official
+documentation read on 2026-11-25 (Google: androidpublisher v3
+purchases.products, RTDN reference, Pub/Sub push authentication; WeChat Pay:
+API v3 request signature, JSAPI 下单, JSAPI 调起支付签名, 支付成功回调通知,
+退款结果回调通知). Real-service behaviour in edge cases (a repeated JSAPI order
+with the same `out_trade_no` after a lost response, test purchases without
+`orderId`) is not verified.
 
 All errors use the standard envelope `{"error":{"code","message"},"request_id"}`.
 
@@ -43,6 +63,18 @@ All errors use the standard envelope `{"error":{"code","message"},"request_id"}`
   Daily caps are counted inside the crediting transaction.
 - **Balances never go negative.** A refund removes what the player still holds
   and records the rest as `outstanding` (state `refund_shortfall`).
+
+### Binding for Google Play and WeChat Pay
+
+- **Google Play:** the client passes the order's `app_account_token` to
+  `BillingFlowParams.Builder.setObfuscatedAccountId`. The Play Developer API
+  returns it as `obfuscatedExternalAccountId`, which is bound exactly like
+  Apple's `appAccountToken` (same 403/400 errors).
+- **WeChat Pay:** the server creates the WeChat order itself with
+  `out_trade_no` = the order's token without dashes (32 hex), so a payment
+  notification names exactly one order and its player. The paid `amount.total`
+  must equal the price fixed on the order (409 `amount_mismatch`); `mchid` and
+  `appid` must match the configuration.
 
 ## Order states
 
@@ -80,6 +112,122 @@ Every verified callback is recorded in `commerce_inbox` under
 
 Callback success body: `{"status":"processed|ignored","duplicate":false,"reason":"...","order_id":"..."}`.
 
+## Google Play
+
+Configuration `game.commerce.google`: `service_account_ref` (secret reference to
+the service account JSON key; never logged), `apps.<game>` with `package_name`,
+`finish` (`consume` by default, or `acknowledge` for non-consumables) and
+`allow_test_purchases` (rejected in production), and optional `rtdn` with the
+`audience` and `service_account_email` of the Pub/Sub push subscription.
+`token_url`, `api_base_url` and `rtdn.jwks_url` exist for tests only.
+
+- **Access token:** an RS256 JWT (`iss` = client_email, `scope`
+  `https://www.googleapis.com/auth/androidpublisher`, `aud` = token URL, 1h)
+  exchanged at `https://oauth2.googleapis.com/token` with
+  `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`. Cached until one
+  minute before expiry, dropped on a 401. Stdlib crypto only.
+- **Verify** (`POST /iap/google/verify`, body `{"product_id","purchase_token"}`)
+  calls
+  `GET /androidpublisher/v3/applications/{package}/purchases/products/{product}/tokens/{token}`
+  before any transaction. `purchaseState` 0 → deliver, 1 (canceled) → 409
+  `transaction_refunded`, 2 (pending) → 409 `purchase_pending`. `purchaseType`
+  0 (test) → 400 `test_purchase_rejected` unless allowed. A non-test purchase
+  without `orderId` → 400 `invalid_purchase`; a 400/404/410 from Google → 400
+  `invalid_purchase`; any other failure → 503 `store_unavailable`. The provider
+  transaction id is the hex SHA-256 of the purchase token; `orderId` is stored as
+  `original_txn_id`. A purchase that is already consumed/acknowledged is still
+  delivered at most once (the order table enforces uniqueness), without a finish job.
+- **Acknowledge / consume:** the delivery transaction enqueues the job
+  `commerce.google.finish` (deduplicated per order). The job calls `:consume` or
+  `:acknowledge` outside any transaction. The queue retries transient failures;
+  a 4xx other than 401/408/429 is logged and dropped. Google refunds purchases
+  that are not acknowledged within three days, so the jobs worker must run
+  (`queue.workers` > 0). The app registers the handler from `Module.JobHandlers()`.
+- **RTDN** (`POST /callbacks/google`, Pub/Sub push with OIDC authentication):
+  the bearer JWT must be RS256 with a `kid` from Google's JWKS
+  (`https://www.googleapis.com/oauth2/v3/certs`). The JWKS is fetched before the
+  transaction and cached 1h; an unknown `kid` triggers a refetch at most once a
+  minute. The token also needs `iss` `accounts.google.com` or
+  `https://accounts.google.com`, `aud` = the configured audience, an unexpired
+  `exp` (60 s leeway), and `email` = the configured push service account with
+  `email_verified: true`. Otherwise the answer is 401 `invalid_signature` and
+  nothing is recorded. Event id = `message.messageId`; `packageName` must match
+  (400 `package_mismatch`).
+  - `voidedPurchaseNotification` with `productType` 2 and `refundType` 1 → refund
+    (grants reversed, shortfall rules below). Partial voids (`refundType` 2) and
+    subscription voids → `ignored` with a reason.
+  - `oneTimeProductNotification` type 1 (PURCHASED) → re-checked with
+    purchases.products.get, then delivered to the token's player (or stored as
+    `paid`). Pending and test purchases → `ignored`. Type 2 (CANCELED) → refund.
+  - Test, subscription and pending-refund-review notifications → `ignored`.
+
+## WeChat Pay (API v3, JSAPI / mini-program)
+
+Configuration `game.commerce.wechatpay`:
+- `mch_id`, `merchant_serial_no`
+- `merchant_private_key_ref` (PEM, secret reference)
+- `apiv3_key_ref` (32 bytes, secret reference)
+- `platform_keys`: `Wechatpay-Serial` → PEM public key or platform certificate
+  file (WeChat Pay public keys have serials `PUB_KEY_ID_…`)
+- `notify_base_url` (https origin of this server), `max_skew` (default 5m)
+- `apps.<game>`: `app_id` (the AppID the player logged in with through
+  `game.platforms.wechat`), `prices` (wechatpay provider product id → fen),
+  optional `description`
+
+Map products with `provider_product_ids: {"wechatpay": "<id in prices>"}`.
+
+Client flow: `POST /iap/orders` → `POST /iap/wechatpay/prepay {"order_id"}` →
+`wx.requestPayment(payment)` → poll `GET /iap/orders/{order}` until `delivered`.
+
+- **Prepay** (no network IO inside a transaction):
+  1. Checks: the order belongs to the player and is `created` (else 404 / 409
+     `invalid_state`); it is younger than 2h − 1 min (else 409 `order_expired`);
+     the player has a `wechat` identity, i.e. an openid (else 409
+     `wechat_identity_required`); the product has a wechatpay mapping and price
+     (else 422 `product_not_mapped`).
+  2. A WriteTx fixes `provider`, `provider_product_id` and `amount` on the order.
+  3. `POST https://api.mch.weixin.qq.com/v3/pay/transactions/jsapi` with
+     `Authorization: WECHATPAY2-SHA256-RSA2048 mchid,nonce_str,signature,timestamp,serial_no`
+     (signature = base64 RSA-SHA256 over `METHOD\nPATH\ntimestamp\nnonce\nbody\n`).
+     The body has `appid, mchid, description, out_trade_no, time_expire`
+     (created + 2h), `attach` (= wechatpay product id), `notify_url`
+     (`notify_base_url/v1/games/{game}/callbacks/wechatpay`),
+     `amount{total, CNY}` and `payer{openid}`. The response signature is
+     verified with the platform key.
+  4. A WriteTx stores `prepay_id`. The answer carries `wx.requestPayment`
+     parameters; `paySign` = base64 RSA-SHA256 over
+     `appId\ntimeStamp\nnonceStr\npackage\n`.
+
+  Failure modes:
+  - WeChat unreachable or an error answer → 503 `store_unavailable`. The order
+    keeps its fixed amount, and a retry repeats step 3 with identical parameters.
+  - WeChat answers `OUT_TRADE_NO_USED` → 409 `prepay_conflict`; the client
+    creates a new order.
+  - WeChat accepted step 3 but the response was lost: if the payer still pays
+    that WeChat order, its notification (which names the out_trade_no) delivers it.
+  - Step 4 fails after a successful step 3: the next prepay calls WeChat again.
+    Whether WeChat returns the same `prepay_id` for an identical repeat is
+    **not verified**.
+  - Once `prepay_id` is stored, repeats return it without calling WeChat.
+- **Notifications** (`POST /callbacks/wechatpay`): `Wechatpay-Signature` must be
+  RSA-SHA256 over `Wechatpay-Timestamp\nWechatpay-Nonce\nbody\n` with the key
+  named by `Wechatpay-Serial`, and the timestamp must be within `max_skew`
+  (else 401 `invalid_signature`). `resource` is decrypted with AEAD_AES_256_GCM
+  (APIv3 key, `nonce`, `associated_data`); a failure is 400 `invalid_signature`.
+  Event id = the notification `id`.
+  - `TRANSACTION.SUCCESS` with `trade_state` SUCCESS: `mchid` (400
+    `merchant_mismatch`) and `appid` (400 `app_mismatch`) must match;
+    `out_trade_no` → order token; `attach` → store product; `amount.total` must
+    equal the order amount (409 `amount_mismatch`, recorded `failed`). The
+    payment is delivered once, keyed by `transaction_id`.
+  - `REFUND.SUCCESS` with `refund_status` SUCCESS and `amount.refund` =
+    `amount.total` → refund (grants reversed). Partial refunds, `REFUND.ABNORMAL`
+    and `REFUND.CLOSED` → `ignored`. A refund that arrives before the payment
+    notification marks the order `refunded`; the later payment is ignored.
+  - Answer: `204` without body on success (processed, ignored or duplicate).
+    On failure: the error's HTTP status with
+    `{"code":"FAIL","message":"<error code>"}`, so WeChat Pay retries.
+
 ## Client routes (session required)
 
 ### POST /v1/games/{game}/iap/orders
@@ -87,8 +235,17 @@ Body `{"product_id":"gems100"}`. Supports `Idempotency-Key`.
 201 `{"order_id","product_id","app_account_token","provider_product_ids":{"apple":"com.x.gems100"},"state":"created"}`.
 Errors: 400 `invalid_request`, 404 `not_found` (product).
 
+### GET /v1/games/{game}/iap/orders/{order}
+200 `{"order":{...}}` for the session player's own order; otherwise 404 `not_found`.
+
+### POST /v1/games/{game}/iap/wechatpay/prepay
+Body `{"order_id"}`. 200 `{"order_id","out_trade_no","amount","currency":"CNY","payment":{"appId","timeStamp","nonceStr","package","signType":"RSA","paySign"}}`.
+Errors are listed under WeChat Pay above.
+
 ### POST /v1/games/{game}/iap/{provider}/verify
-Body `{"signed_transaction":"<JWS signedTransactionInfo>"}` (max 128 KiB).
+Apple: body `{"signed_transaction":"<JWS signedTransactionInfo>"}`. Google:
+`{"product_id":"<Play product id>","purchase_token":"..."}` (max 128 KiB).
+`wechatpay` answers 400 because delivery comes from the payment notification.
 The request is idempotent by transaction: a repeat by the same player returns the
 same order with `replayed: true` and grants nothing more.
 200 `{"order":{order_id,provider,product_id,provider_product_id,provider_txn_id,state,quantity,grants,outstanding,player_id,created_at,updated_at,delivered_at?,refunded_at?},"replayed":false}`.
@@ -191,7 +348,8 @@ becomes `refund_shortfall`, for manual review.
 When `Module.Outbox` (a `*jobs.Queue`) is set, a job of type `OutboxJobType`
 (default `commerce.notify`) is enqueued in the same transaction for each of
 `delivered`, `refunded`, `refund_shortfall`, `refund_compensated` and
-`ad_reward`. The job payload is `OutboxEvent` JSON and carries a dedupe key per
+`ad_reward`. Google Play deliveries also enqueue `commerce.google.finish`, which
+the module handles itself (see Google Play). The job payload is `OutboxEvent` JSON and carries a dedupe key per
 order or event. The application supplies the handler, for example one that
 notifies a game server. Jobs run at least once, so the handler must be
 idempotent.

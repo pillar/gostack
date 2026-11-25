@@ -635,10 +635,10 @@ func TestAdminValidationAndIsolation(t *testing.T) {
 }
 
 func TestValidateProviders(t *testing.T) {
-	if err := commerce.ValidateProviders([]string{"apple"}, []string{"admob", "hmac"}); err != nil {
+	if err := commerce.ValidateProviders([]string{"apple", "google", "wechatpay"}, []string{"admob", "hmac"}); err != nil {
 		t.Fatal(err)
 	}
-	if commerce.ValidateProviders([]string{"google"}, nil) == nil || commerce.ValidateProviders(nil, []string{"wechat"}) == nil {
+	if commerce.ValidateProviders([]string{"huawei"}, nil) == nil || commerce.ValidateProviders(nil, []string{"wechat"}) == nil {
 		t.Fatal("unimplemented provider accepted")
 	}
 	if _, err := commerce.NewAppleVerifier([]byte("nope"), nil); err == nil {

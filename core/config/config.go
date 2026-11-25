@@ -297,6 +297,11 @@ func Load(path string, env func(string) (string, bool), overrides map[string]str
 		if a := cfg.Game.Commerce.Apple; a != nil {
 			a.RootCAFile = resolve(base, a.RootCAFile)
 		}
+		if wp := cfg.Game.Commerce.WeChatPay; wp != nil {
+			for serial, f := range wp.PlatformKeys {
+				wp.PlatformKeys[serial] = resolve(base, f)
+			}
+		}
 	}
 	if env == nil {
 		env = os.LookupEnv

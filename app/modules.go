@@ -148,6 +148,20 @@ func newCommerce(a *App, c config.CommerceConfig) (*commerce.Module, error) {
 		}
 		mod.IAP["apple"] = v
 	}
+	if c.Google != nil {
+		v, err := newGoogleVerifier(a, c.Google)
+		if err != nil {
+			return nil, err
+		}
+		mod.IAP["google"] = v
+	}
+	if c.WeChatPay != nil {
+		v, err := newWeChatPayVerifier(a, c.WeChatPay)
+		if err != nil {
+			return nil, err
+		}
+		mod.IAP["wechatpay"] = v
+	}
 	for name, n := range c.Ads {
 		switch n.Kind {
 		case "admob":
