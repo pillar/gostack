@@ -80,14 +80,15 @@ func (m *Module) adminGetCheckin(w http.ResponseWriter, r *http.Request) error {
 
 type checkinState struct {
 	Streak, Total int64
-	LastDay       string
+	LastDay       string // local date of the last claim in the timezone of that time
+	LastAt        int64  // epoch ms of the last claim; 0 for rows written before migration 0012
 }
 
 func loadCheckinState(ctx context.Context, q interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }, gameID, playerID string) (checkinState, error) {
 	var s checkinState
-	err := q.QueryRowContext(ctx, `SELECT streak,total,last_day FROM ops_checkin_state WHERE game_id=? AND player_id=?`, gameID, playerID).Scan(&s.Streak, &s.Total, &s.LastDay)
+	err := q.QueryRowContext(ctx, `SELECT streak,total,last_day,last_at FROM ops_checkin_state WHERE game_id=? AND player_id=?`, gameID, playerID).Scan(&s.Streak, &s.Total, &s.LastDay, &s.LastAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return checkinState{}, nil
 	}
@@ -96,14 +97,30 @@ func loadCheckinState(ctx context.Context, q interface {
 
 const dayLayout = "2006-01-02"
 
+// lastLocalDay is the local date of the last claim in loc (the CURRENT
+// timezone): comparing it with today's date in the same zone means an admin
+// timezone change cannot create a new day inside the same real day. Rows from
+// before last_at existed fall back to the stored date string.
+func (s checkinState) lastLocalDay(loc *time.Location) string {
+	if s.LastAt > 0 {
+		return time.UnixMilli(s.LastAt).In(loc).Format(dayLayout)
+	}
+	return s.LastDay
+}
+
+// claimedToday reports whether the last claim falls on today's local date.
+func (s checkinState) claimedToday(today string, loc *time.Location) bool {
+	return s.LastDay != "" && s.lastLocalDay(loc) >= today
+}
+
 // effectiveStreak is the streak a claim today would extend: with streak_reset a
-// gap of more than one local day starts over.
-func effectiveStreak(s checkinState, today string, reset bool) int64 {
+// gap of more than one local day (both dates in the current timezone) starts over.
+func effectiveStreak(s checkinState, today string, loc *time.Location, reset bool) int64 {
 	if s.LastDay == "" {
 		return 0
 	}
 	if reset {
-		a, err1 := time.Parse(dayLayout, s.LastDay)
+		a, err1 := time.Parse(dayLayout, s.lastLocalDay(loc))
 		b, err2 := time.Parse(dayLayout, today)
 		if err1 == nil && err2 == nil && b.Sub(a) > 24*time.Hour {
 			return 0
@@ -126,8 +143,8 @@ func (m *Module) getCheckin(w http.ResponseWriter, r *http.Request) error {
 	loc := zoneOrUTC(c.Timezone)
 	now := m.now().In(loc)
 	today := now.Format(dayLayout)
-	done := st.LastDay >= today
-	streak := effectiveStreak(st, today, c.StreakReset)
+	done := st.claimedToday(today, loc)
+	streak := effectiveStreak(st, today, loc, c.StreakReset)
 	idx := int(streak % int64(len(c.Cycle)))
 	next := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, loc)
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
@@ -138,7 +155,8 @@ func (m *Module) getCheckin(w http.ResponseWriter, r *http.Request) error {
 }
 
 // postCheckin claims the reward of the configured timezone's current local day,
-// once per day; the day is part of the ledger source key.
+// once per day; the day is part of the ledger source key. "Already claimed" is
+// decided from the instant of the last claim, re-read in the current timezone.
 func (m *Module) postCheckin(w http.ResponseWriter, r *http.Request) error {
 	s := game.CurrentSession(r.Context())
 	return m.idem(w, r, "game:"+s.GameID+":"+s.PlayerID, "checkin", nil, func(tx *sql.Tx) (idempotency.Result, error) {
@@ -148,22 +166,33 @@ func (m *Module) postCheckin(w http.ResponseWriter, r *http.Request) error {
 			return idempotency.Result{}, err
 		}
 		now := m.now()
-		today := now.In(zoneOrUTC(c.Timezone)).Format(dayLayout)
+		loc := zoneOrUTC(c.Timezone)
+		today := now.In(loc).Format(dayLayout)
 		st, err := loadCheckinState(ctx, tx, s.GameID, s.PlayerID)
 		if err != nil {
 			return idempotency.Result{}, err
 		}
-		if st.LastDay >= today {
+		if st.claimedToday(today, loc) {
 			return idempotency.Result{}, httpx.Conflict("already_checked_in", "already checked in today")
 		}
-		streak := effectiveStreak(st, today, c.StreakReset) + 1
-		idx := int((streak - 1) % int64(len(c.Cycle)))
-		if _, err := tx.ExecContext(ctx, `INSERT INTO ops_checkin_state(game_id,player_id,streak,total,last_day) VALUES(?,?,?,1,?)
-			ON CONFLICT(game_id,player_id) DO UPDATE SET streak=excluded.streak, total=ops_checkin_state.total+1, last_day=excluded.last_day`,
-			s.GameID, s.PlayerID, streak, today); err != nil {
+		source := "checkin:" + today + ":" + s.PlayerID
+		// After a timezone change toward the west the same local date can come
+		// round again; its ledger key is already taken, so it counts as claimed.
+		var used int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM game_ledger WHERE game_id=? AND source_key=?`, s.GameID, source).Scan(&used); err != nil {
 			return idempotency.Result{}, err
 		}
-		if err := m.Kit.Grant(ctx, tx, s.GameID, s.PlayerID, "reward", "checkin:"+today+":"+s.PlayerID, c.Cycle[idx], now.UnixMilli()); err != nil {
+		if used > 0 {
+			return idempotency.Result{}, httpx.Conflict("already_checked_in", "already checked in today")
+		}
+		streak := effectiveStreak(st, today, loc, c.StreakReset) + 1
+		idx := int((streak - 1) % int64(len(c.Cycle)))
+		if _, err := tx.ExecContext(ctx, `INSERT INTO ops_checkin_state(game_id,player_id,streak,total,last_day,last_at) VALUES(?,?,?,1,?,?)
+			ON CONFLICT(game_id,player_id) DO UPDATE SET streak=excluded.streak, total=ops_checkin_state.total+1, last_day=excluded.last_day, last_at=excluded.last_at`,
+			s.GameID, s.PlayerID, streak, today, now.UnixMilli()); err != nil {
+			return idempotency.Result{}, err
+		}
+		if err := m.Kit.Grant(ctx, tx, s.GameID, s.PlayerID, "reward", source, c.Cycle[idx], now.UnixMilli()); err != nil {
 			return idempotency.Result{}, err
 		}
 		return idempotency.Result{Body: map[string]any{"day": today, "streak": streak, "index": idx, "grants": c.Cycle[idx]}}, nil

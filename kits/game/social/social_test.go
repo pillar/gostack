@@ -248,7 +248,7 @@ func balance(f *fixture, p gametest.Player, asset string) float64 {
 }
 
 func TestInvites(t *testing.T) {
-	f := setup(t, func(m *social.Module) {
+	f := setupPlatform(t, func(m *social.Module) {
 		m.InviterGrant = map[string]int64{"gem": 10}
 		m.InviteeGrant = map[string]int64{"coin": 5}
 		m.MaxInvites = 2
@@ -263,6 +263,7 @@ func TestInvites(t *testing.T) {
 	f.expect(f.do("POST", "/invites/bad!/accept", f.e.Guest("alpha"), nil), 404, "")
 
 	n := f.e.Guest("alpha")
+	f.bind(n) // only verified invitees are paid at accept time
 	r1 := f.expect(f.do("POST", "/invites/"+code+"/accept", n, nil, "Idempotency-Key", "i1"), 200, "")
 	r2 := f.expect(f.do("POST", "/invites/"+code+"/accept", n, nil, "Idempotency-Key", "i1"), 200, "")
 	if r2.Header.Get("Idempotent-Replayed") != "true" || string(r1.Raw) != string(r2.Raw) {
@@ -280,6 +281,7 @@ func TestInvites(t *testing.T) {
 
 	// concurrent accepts by the same new player attribute and grant exactly once
 	n2 := f.e.Guest("alpha")
+	f.bind(n2)
 	var wg sync.WaitGroup
 	var ok, conflict atomic.Int32
 	for i := 0; i < 8; i++ {

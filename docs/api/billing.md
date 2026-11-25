@@ -71,7 +71,7 @@ svc.MarkUncertain(ctx, tenant, key, reservationID, note)
 svc.ResolveReconciliation(ctx, tenant, key, reservationID, "settle"|"release", actual, operatorNote)
 svc.ExpireReservations(ctx, limit)   // sweeper, all tenants, one transaction
 svc.Maintain(ctx)                    // runs the sweeper until no due reservations remain
-svc.Reconcile(ctx, tenant /* "" = all */) ([]billing.Mismatch, error)
+svc.Reconcile(ctx, tenant /* "" = all tenants: operator tooling only */) ([]billing.Mismatch, error)
 svc.GetAccount / GetReservation / Entries
 ```
 
@@ -88,7 +88,11 @@ alert on any mismatch.
 
 Mount with `svc.Handler(mux, auth.APIKeys{DB: db})`. Every route requires
 `Authorization: Bearer gsk_…` with scope `billing`; the tenant is the key's
-tenant. Bodies are strict JSON (unknown fields rejected), max 16 KiB. Every
+tenant. A key with an empty tenant is refused with `403 forbidden` on every
+route (the library treats an empty tenant as "all tenants" in
+`Reconcile`/`ReconcileIn`; that view is for the operator CLI, e.g. `migrate
+to-postgres`, and never reachable over HTTP). `gostack apikey create` refuses an
+empty `--tenant` as a usage error (exit 2). Bodies are strict JSON (unknown fields rejected), max 16 KiB. Every
 POST requires an `Idempotency-Key` header (checked first; missing is 400) and a JSON body: every POST needs at least `{}`, even `release` and `uncertain` whose fields are all optional. An empty body is `400 invalid_request` ("empty body"); unknown fields and trailing data are 400 as well.
 
 | Method | Path | Body | Success |

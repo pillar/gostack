@@ -90,6 +90,7 @@ func (m *Module) Routes(mux *http.ServeMux) {
 	h("POST /invites", m.createInvite)
 	h("GET /invites", m.listInvites)
 	h("POST /invites/{code}/accept", m.acceptInvite)
+	h("POST /invites/claim-pending", m.claimPendingInvite)
 
 	h("POST /shares", m.createShare)
 	h("GET /shares/{id}", m.getShare)

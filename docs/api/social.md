@@ -53,9 +53,12 @@ While either side blocks the other: friend requests both ways, share opens and i
 |---|---|
 | `POST /invites` | `201 {"code":"K7M2QX9A"}`; `409 invite_limit` |
 | `GET /invites` | `{"invites":[{code,created_at,accepted}]}` |
-| `POST /invites/{code}/accept` | `{"attributed":true,"grants":{..}}`; `grants` is `null` when no `InviteeGrant` is configured |
+| `POST /invites/{code}/accept` | `{"attributed":true,"grants_pending":false,"grants":{..}}`; `grants` is what was paid to the caller now (`{}` when pending or no `InviteeGrant` is configured) |
+| `POST /invites/claim-pending` | `{"paid":true,"grants":{..}}`; `404` no accepted invite, `403 identity_required` (still guest-only), `409 already_paid` |
 
-Accepting: the caller must have been created within the invite window (default 24h) else `403 not_new_player`; own code `400 self_invite`; unknown code or blocked pair `404`; a player is attributed once per game (`409 already_attributed`, enforced by the primary key on the invitee); inviters stop earning after `MaxAcceptsPerInviter` invitees (`409 invite_full`). Optional grants go through `game.ApplyLedger` in the same transaction with source keys `invite:<invitee>:inviter` and `invite:<invitee>:invitee`, so a retry or race can never grant twice. Codes are per game.
+Accepting: the caller must have been created within the invite window (default 24h) else `403 not_new_player`; own code `400 self_invite`; unknown code or blocked pair `404`; a player is attributed once per game (`409 already_attributed`, enforced by the primary key on the invitee); inviters stop earning after `MaxAcceptsPerInviter` invitees (`409 invite_full`). Optional grants go through `game.ApplyLedger` with source keys `invite:<invitee>:inviter` and `invite:<invitee>:invitee`, so a retry or race can never grant twice. Codes are per game.
+
+Grants require a verified invitee. Guest accounts cost nothing to create, so paying on a guest accept let one person farm `InviterGrant` (up to `MaxAcceptsPerInviter`) and `InviteeGrant` with throwaway guests. The attribution is always recorded (and counts toward `MaxAcceptsPerInviter`), but grants are paid in the accept transaction only when the caller has a platform identity (a `player_identities` row with provider other than `guest`, from a platform login or `POST /auth/bind`). Otherwise the accept answers `grants_pending: true` and the attribution is stored with `rewarded_at = 0`. After binding a platform identity the invitee calls `POST /invites/claim-pending`: it re-checks the identity, flips `rewarded_at` from 0 with a conditional UPDATE and pays both grants with the same source keys, so they are paid exactly once even under concurrent calls. Payout is explicit (not on bind) so the identity code in `kits/game` stays independent of the social module; clients should call it after a successful bind. Attributions created before migration 0012 count as paid.
 
 ## Shares
 | Route | Result |

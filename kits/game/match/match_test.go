@@ -107,10 +107,10 @@ func (f *fixture) claim(token string, body any) gametest.Resp {
 	return f.e.Do("POST", "/v1/match/rooms/claim", token, body)
 }
 
-func (f *fixture) claimed(connURL string) (room string, tok float64) {
+func (f *fixture) claimed(connURL string) (room string, tok string) {
 	f.e.T.Helper()
 	r := f.expect(f.claim(f.battle, map[string]any{"server_id": "bs1", "connection": map[string]string{"url": connURL}}), 200, "")
-	return r.Body["room_id"].(string), r.Body["token"].(float64)
+	return r.Body["room_id"].(string), r.Body["token"].(string)
 }
 
 func (f *fixture) room(id, op string, token string, body any) gametest.Resp {
@@ -305,7 +305,7 @@ func TestRoomLifecycleAndSettlement(t *testing.T) {
 	f.expect(f.claim(f.other, map[string]any{"server_id": "bs9"}), 204, "") // other tenant sees nothing
 
 	id, tok := f.claimed("wss://battle.example/r1")
-	if id != roomID || tok < 1 {
+	if id != roomID || tok == "" {
 		t.Fatalf("claimed %s tok %v", id, tok)
 	}
 	f.expect(f.claim(f.battle, map[string]any{"server_id": "bs1"}), 204, "") // nothing left
@@ -316,12 +316,12 @@ func TestRoomLifecycleAndSettlement(t *testing.T) {
 	}
 
 	// fencing: wrong / zero / future token
-	for _, bad := range []float64{0, tok + 1, tok - 1} {
-		f.expect(f.room(roomID, "heartbeat", f.battle, map[string]float64{"token": bad}), 409, "stale_token")
+	for _, bad := range []string{"", "mrt_guess", tok + "x"} {
+		f.expect(f.room(roomID, "heartbeat", f.battle, map[string]any{"token": bad}), 409, "stale_token")
 	}
-	f.expect(f.room(roomID, "heartbeat", f.battle, map[string]float64{"token": tok}), 200, "")
-	f.expect(f.room(roomID, "heartbeat", f.e.AdminToken, map[string]float64{"token": tok}), 403, "")
-	f.expect(f.room("rm_unknown", "heartbeat", f.battle, map[string]float64{"token": tok}), 404, "")
+	f.expect(f.room(roomID, "heartbeat", f.battle, map[string]any{"token": tok}), 200, "")
+	f.expect(f.room(roomID, "heartbeat", f.e.AdminToken, map[string]any{"token": tok}), 403, "")
+	f.expect(f.room("rm_unknown", "heartbeat", f.battle, map[string]any{"token": tok}), 404, "")
 
 	// disconnect / rejoin
 	st := func(p gametest.Player, state string) gametest.Resp {
@@ -341,13 +341,13 @@ func TestRoomLifecycleAndSettlement(t *testing.T) {
 	f.expect(st(a, "connected"), 200, "")
 
 	// settlement validation: nothing is applied when any entry is invalid
-	res := func(token float64, results ...map[string]any) gametest.Resp {
+	res := func(token string, results ...map[string]any) gametest.Resp {
 		return f.room(roomID, "result", f.battle, map[string]any{"token": token, "results": results})
 	}
 	f.expect(res(tok, map[string]any{"player_id": outsider.ID}), 400, "not_a_member")
 	f.expect(res(tok, map[string]any{"player_id": a.ID, "grants": map[string]int{"coin": -5}}), 400, "")
 	f.expect(res(tok, map[string]any{"player_id": a.ID, "grants": map[string]int{"coin": 10}}, map[string]any{"player_id": b.ID, "score": 5000}), 400, "")
-	f.expect(res(tok+1, map[string]any{"player_id": a.ID}), 409, "stale_token")
+	f.expect(res(tok+"x", map[string]any{"player_id": a.ID}), 409, "stale_token")
 	f.expect(f.room(roomID, "result", f.battle, map[string]any{"token": tok, "results": []any{}}), 400, "")
 	if bal := f.e.Do("GET", "/v1/games/alpha/wallet", a.Token, nil).Body["balances"].(map[string]any); len(bal) != 0 {
 		t.Fatalf("invalid settlement applied grants: %v", bal)
@@ -361,8 +361,8 @@ func TestRoomLifecycleAndSettlement(t *testing.T) {
 		t.Fatalf("replay differs: %s vs %s", r1.Raw, r2.Raw)
 	}
 	f.expect(res(tok, map[string]any{"player_id": a.ID, "grants": map[string]int{"coin": 999}}), 409, "already_settled")
-	f.expect(res(tok+1, win, lose), 409, "stale_token")
-	f.expect(f.room(roomID, "heartbeat", f.battle, map[string]float64{"token": tok}), 409, "room_settled")
+	f.expect(res(tok+"x", win, lose), 409, "stale_token")
+	f.expect(f.room(roomID, "heartbeat", f.battle, map[string]any{"token": tok}), 409, "room_settled")
 
 	bal := func(p gametest.Player) map[string]any {
 		return f.e.Do("GET", "/v1/games/alpha/wallet", p.Token, nil).Body["balances"].(map[string]any)
@@ -446,15 +446,15 @@ func TestLeaseExpiryAbandonsRoom(t *testing.T) {
 	ps, ts, roomID := f.pair()
 	_, tok := f.claimed("x")
 	f.advance(20 * time.Second)
-	f.expect(f.room(roomID, "heartbeat", f.battle, map[string]float64{"token": tok}), 200, "") // extends the lease
-	f.advance(20 * time.Second)                                                                // 40s total but only 20s since heartbeat
-	f.expect(f.room(roomID, "heartbeat", f.battle, map[string]float64{"token": tok}), 200, "")
+	f.expect(f.room(roomID, "heartbeat", f.battle, map[string]any{"token": tok}), 200, "") // extends the lease
+	f.advance(20 * time.Second)                                                            // 40s total but only 20s since heartbeat
+	f.expect(f.room(roomID, "heartbeat", f.battle, map[string]any{"token": tok}), 200, "")
 	f.advance(31 * time.Second)
 	// the player already sees the abandonment, before anything persists it
 	if f.status(ps[0], ts[0]).Body["status"] != "abandoned" {
 		t.Fatal("ticket should read as abandoned")
 	}
-	f.expect(f.room(roomID, "heartbeat", f.battle, map[string]float64{"token": tok}), 409, "room_abandoned")
+	f.expect(f.room(roomID, "heartbeat", f.battle, map[string]any{"token": tok}), 409, "room_abandoned")
 	f.expect(f.room(roomID, "result", f.battle, map[string]any{"token": tok, "results": []map[string]any{{"player_id": ps[0].ID, "grants": map[string]int{"coin": 5}}}}), 409, "room_abandoned")
 	var status string
 	f.e.App.DB.Read.QueryRow(`SELECT status FROM match_rooms WHERE room_id=?`, roomID).Scan(&status)
@@ -492,12 +492,12 @@ func TestFencingTokensGrowAndAreRoomScoped(t *testing.T) {
 	_, _, r2 := f.pair()
 	id1, t1 := f.claimed("a")
 	id2, t2 := f.claimed("b")
-	if id1 != r1 || id2 != r2 || t2 <= t1 {
+	if id1 != r1 || id2 != r2 || t2 == t1 {
 		t.Fatalf("tokens %v %v rooms %s %s", t1, t2, id1, id2)
 	}
-	f.expect(f.room(r2, "heartbeat", f.battle, map[string]float64{"token": t1}), 409, "stale_token")
-	f.expect(f.room(r1, "heartbeat", f.battle, map[string]float64{"token": t2}), 409, "stale_token")
-	f.expect(f.room(r2, "heartbeat", f.battle, map[string]float64{"token": t2}), 200, "")
+	f.expect(f.room(r2, "heartbeat", f.battle, map[string]any{"token": t1}), 409, "stale_token")
+	f.expect(f.room(r1, "heartbeat", f.battle, map[string]any{"token": t2}), 409, "stale_token")
+	f.expect(f.room(r2, "heartbeat", f.battle, map[string]any{"token": t2}), 200, "")
 }
 
 func TestTenantIsolation(t *testing.T) {
@@ -517,15 +517,15 @@ func TestTenantIsolation(t *testing.T) {
 	f.expect(f.claim(f.battle, map[string]any{"server_id": "bs1"}), 204, "")
 	var room string
 	f.e.App.DB.Read.QueryRow(`SELECT room_id FROM match_rooms WHERE game_id='gamma'`).Scan(&room)
-	f.expect(f.room(room, "heartbeat", f.battle, map[string]float64{"token": 1}), 404, "")
-	f.expect(f.room(room, "result", f.battle, map[string]any{"token": 1, "results": []map[string]any{{"player_id": ps[0].ID}}}), 404, "")
-	f.expect(f.e.Do("POST", "/v1/match/rooms/"+room+"/members/"+ps[0].ID+"/state", f.battle, map[string]any{"token": 1, "state": "left"}), 404, "")
+	f.expect(f.room(room, "heartbeat", f.battle, map[string]any{"token": "mrt_guess"}), 404, "")
+	f.expect(f.room(room, "result", f.battle, map[string]any{"token": "mrt_guess", "results": []map[string]any{{"player_id": ps[0].ID}}}), 404, "")
+	f.expect(f.e.Do("POST", "/v1/match/rooms/"+room+"/members/"+ps[0].ID+"/state", f.battle, map[string]any{"token": "mrt_guess", "state": "left"}), 404, "")
 	// the owning tenant can
 	r := f.expect(f.claim(f.other, map[string]any{"server_id": "bs2", "game_id": "gamma"}), 200, "")
 	if r.Body["game_id"] != "gamma" {
 		t.Fatalf("%s", r.Raw)
 	}
-	f.expect(f.room(room, "heartbeat", f.other, map[string]float64{"token": r.Body["token"].(float64)}), 200, "")
+	f.expect(f.room(room, "heartbeat", f.other, map[string]any{"token": r.Body["token"].(string)}), 200, "")
 	// a player of alpha cannot read a gamma ticket (and vice versa): tickets are game/player scoped
 	a := f.e.Guest("alpha")
 	var tid string

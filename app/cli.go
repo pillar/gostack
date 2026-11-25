@@ -464,6 +464,11 @@ func apikeyCmd(ctx context.Context, cfg config.Config, args []string, asJSON boo
 		if err := fs.Parse(args[1:]); err != nil {
 			return UsageError{err.Error()}
 		}
+		if strings.TrimSpace(*tenant) == "" {
+			// A key without a tenant would be scoped to nothing (billing
+			// would read it as "all tenants"), so it is never issued.
+			return UsageError{"apikey create: --tenant must not be empty"}
+		}
 		if len(scopes) == 0 {
 			scopes = multiFlag{"admin"}
 		}

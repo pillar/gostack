@@ -145,6 +145,21 @@ func (m *Module) adminDeleteTask(w http.ResponseWriter, r *http.Request) error {
 	return writeNoContent(w)
 }
 
+// claimedThisPeriod reports whether the player's last claim of the task falls in
+// the period of now. Both instants are mapped to periods in the task's CURRENT
+// timezone, so changing the timezone cannot reopen a period that was already
+// paid in real time. Progress rows stay keyed by the period at write time.
+func claimedThisPeriod(ctx context.Context, q interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}, gameID, playerID string, t taskRow, key string) (bool, error) {
+	var last int64
+	if err := q.QueryRowContext(ctx, `SELECT COALESCE(MAX(claimed_at),0) FROM ops_task_progress WHERE game_id=? AND player_id=? AND task_id=?`,
+		gameID, playerID, t.ID).Scan(&last); err != nil {
+		return false, err
+	}
+	return last > 0 && periodKey(t.Period, t.Timezone, time.UnixMilli(last)) == key, nil
+}
+
 // periodKey identifies the current period of a task in its timezone.
 func periodKey(period, tz string, now time.Time) string {
 	t := now.In(zoneOrUTC(tz))
@@ -257,6 +272,15 @@ func (m *Module) listTasks(w http.ResponseWriter, r *http.Request) error {
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return err
 			}
+			if claimed == 0 {
+				done, err := claimedThisPeriod(ctx, tx, s.GameID, s.PlayerID, t, key)
+				if err != nil {
+					return err
+				}
+				if done {
+					claimed = 1
+				}
+			}
 			out = append(out, map[string]any{"id": t.ID, "title": t.Title, "metric": t.Metric, "target": t.Target, "period": t.Period,
 				"grants": t.Grants, "period_key": key, "progress": min(progress, t.Target), "completed": progress >= t.Target,
 				"claimed": claimed > 0, "claimable": progress >= t.Target && claimed == 0})
@@ -271,6 +295,8 @@ func (m *Module) listTasks(w http.ResponseWriter, r *http.Request) error {
 }
 
 // claimTask pays a completed task once per period (source key task:<id>:<period>:<player>).
+// A period counts as claimed when its progress row was claimed or when the last
+// claim instant falls in the same period in the task's current timezone.
 func (m *Module) claimTask(w http.ResponseWriter, r *http.Request) error {
 	s := game.CurrentSession(r.Context())
 	id, err := pathID(r)
@@ -306,6 +332,15 @@ func (m *Module) claimTask(w http.ResponseWriter, r *http.Request) error {
 		}
 		if progress < t.Target {
 			return idempotency.Result{}, httpx.Conflict("not_completed", "task is not completed")
+		}
+		if claimed == 0 {
+			done, err := claimedThisPeriod(ctx, tx, s.GameID, s.PlayerID, t, key)
+			if err != nil {
+				return idempotency.Result{}, err
+			}
+			if done {
+				claimed = 1
+			}
 		}
 		if claimed > 0 {
 			return idempotency.Result{}, httpx.Conflict("already_claimed", "task already claimed for this period")

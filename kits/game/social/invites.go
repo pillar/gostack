@@ -72,9 +72,39 @@ func (m *Module) listInvites(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// verifiedPlayer reports whether the player has a platform identity (any
+// provider other than guest). Guest accounts are free to create, so invite
+// grants are only paid to and for verified invitees.
+func verifiedPlayer(c *call) (bool, error) {
+	n, err := count(c.ctx, c.tx, `SELECT count(*) FROM player_identities WHERE game_id=? AND player_id=? AND provider<>'guest'`, c.gid, c.pid)
+	return n > 0, err
+}
+
+// payInvite posts the inviter and invitee grants of the caller's attribution.
+// The source keys are unique per invitee, so they can be posted only once.
+func (m *Module) payInvite(c *call, inviter string) error {
+	if len(m.InviterGrant) > 0 {
+		if err := m.Kit.Grant(c.ctx, c.tx, c.gid, inviter, "invite", "invite:"+c.pid+":inviter", m.InviterGrant, c.now); err != nil {
+			return err
+		}
+	}
+	if len(m.InviteeGrant) > 0 {
+		if err := m.Kit.Grant(c.ctx, c.tx, c.gid, c.pid, "invite", "invite:"+c.pid+":invitee", m.InviteeGrant, c.now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *Module) hasInviteGrants() bool { return len(m.InviterGrant) > 0 || len(m.InviteeGrant) > 0 }
+
 // acceptInvite attributes the caller (a recently created player) to the
 // inviter exactly once; the PRIMARY KEY on the invitee and the per-invitee ledger
-// source keys make double attribution and double grants impossible.
+// source keys make double attribution and double grants impossible. Grants are
+// paid now only when the invitee already has a verified platform identity;
+// otherwise the attribution is recorded with grants pending (rewarded_at=0)
+// and the invitee collects them with POST /invites/claim-pending after binding
+// a platform identity.
 func (m *Module) acceptInvite(w http.ResponseWriter, r *http.Request) error {
 	if err := m.limit(r, "invite"); err != nil {
 		return err
@@ -117,20 +147,75 @@ func (m *Module) acceptInvite(w http.ResponseWriter, r *http.Request) error {
 		} else if n >= m.MaxAcceptsPerInviter {
 			return idempotency.Result{}, httpx.Conflict("invite_full", "this inviter reached the invite limit")
 		}
-		if _, err := c.tx.ExecContext(c.ctx, `INSERT INTO invite_attributions(game_id,invitee_id,code,inviter_id,created_at) VALUES(?,?,?,?,?)`, c.gid, c.pid, code, inviter, c.now); err != nil {
+		verified, err := verifiedPlayer(c)
+		if err != nil {
 			return idempotency.Result{}, err
 		}
-		if len(m.InviterGrant) > 0 {
-			if err := m.Kit.Grant(c.ctx, c.tx, c.gid, inviter, "invite", "invite:"+c.pid+":inviter", m.InviterGrant, c.now); err != nil {
+		pending := !verified && m.hasInviteGrants()
+		var rewardedAt int64
+		if !pending {
+			rewardedAt = c.now
+		}
+		if _, err := c.tx.ExecContext(c.ctx, `INSERT INTO invite_attributions(game_id,invitee_id,code,inviter_id,created_at,rewarded_at) VALUES(?,?,?,?,?,?)`,
+			c.gid, c.pid, code, inviter, c.now, rewardedAt); err != nil {
+			return idempotency.Result{}, err
+		}
+		granted := map[string]int64{}
+		if !pending {
+			if err := m.payInvite(c, inviter); err != nil {
 				return idempotency.Result{}, err
 			}
-		}
-		if len(m.InviteeGrant) > 0 {
-			if err := m.Kit.Grant(c.ctx, c.tx, c.gid, c.pid, "invite", "invite:"+c.pid+":invitee", m.InviteeGrant, c.now); err != nil {
-				return idempotency.Result{}, err
+			if m.InviteeGrant != nil {
+				granted = m.InviteeGrant
 			}
 		}
-		return idempotency.Result{Body: map[string]any{"attributed": true, "grants": m.InviteeGrant}}, nil
+		return idempotency.Result{Body: map[string]any{"attributed": true, "grants_pending": pending, "grants": granted}}, nil
+	})
+}
+
+// claimPendingInvite pays the grants of the caller's pending attribution once
+// the caller has bound a verified platform identity. A conditional UPDATE of
+// rewarded_at (0 -> now) plus the unique ledger source keys make the payout
+// happen exactly once, also under concurrent calls.
+func (m *Module) claimPendingInvite(w http.ResponseWriter, r *http.Request) error {
+	if err := m.limit(r, "invite"); err != nil {
+		return err
+	}
+	return m.mutate(w, r, "invites.claim_pending", nil, func(c *call) (idempotency.Result, error) {
+		var inviter string
+		var rewardedAt int64
+		err := c.tx.QueryRowContext(c.ctx, `SELECT inviter_id, rewarded_at FROM invite_attributions WHERE game_id=? AND invitee_id=?`, c.gid, c.pid).Scan(&inviter, &rewardedAt)
+		if errors.Is(err, sql.ErrNoRows) {
+			return idempotency.Result{}, httpx.NotFound("no accepted invite")
+		}
+		if err != nil {
+			return idempotency.Result{}, err
+		}
+		if rewardedAt > 0 {
+			return idempotency.Result{}, httpx.Conflict("already_paid", "invite grants were already paid")
+		}
+		verified, err := verifiedPlayer(c)
+		if err != nil {
+			return idempotency.Result{}, err
+		}
+		if !verified {
+			return idempotency.Result{}, httpx.NewError(http.StatusForbidden, "identity_required", "bind a platform identity to receive invite grants")
+		}
+		res, err := c.tx.ExecContext(c.ctx, `UPDATE invite_attributions SET rewarded_at=? WHERE game_id=? AND invitee_id=? AND rewarded_at=0`, c.now, c.gid, c.pid)
+		if err != nil {
+			return idempotency.Result{}, err
+		}
+		if n, _ := res.RowsAffected(); n != 1 {
+			return idempotency.Result{}, httpx.Conflict("already_paid", "invite grants were already paid")
+		}
+		if err := m.payInvite(c, inviter); err != nil {
+			return idempotency.Result{}, err
+		}
+		granted := map[string]int64{}
+		if m.InviteeGrant != nil {
+			granted = m.InviteeGrant
+		}
+		return idempotency.Result{Body: map[string]any{"paid": true, "grants": granted}}, nil
 	})
 }
 

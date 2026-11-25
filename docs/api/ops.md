@@ -36,7 +36,7 @@ Player (all need a session):
 ## Daily check-in
 Admin `PUT /checkin` `{cycle:[{asset:amount},...] (1-366 days), timezone (IANA, default UTC), streak_reset}`; admin `GET /checkin`.
 - `GET /checkin` -> `{timezone, today (local date), checked_in_today, streak, total, cycle_length, next_index, next_grants, next_available_at}`; 404 until configured.
-- `POST /checkin` -> `{day, streak, index, grants}` once per local day of the configured timezone; 409 `already_checked_in`. Reward = `cycle[(streak-1) mod len]`. With `streak_reset=true` missing a local day restarts at 1; with false the streak keeps counting. Source key `checkin:<local-day>:<player>`.
+- `POST /checkin` -> `{day, streak, index, grants}` once per local day of the configured timezone; 409 `already_checked_in`. Reward = `cycle[(streak-1) mod len]`. With `streak_reset=true` missing a local day restarts at 1; with false the streak keeps counting. Source key `checkin:<local-day>:<player>`. The absolute instant of the last claim is stored (`last_at`, migration 0012); "already checked in today" and streak continuity compare the local dates of that instant and of now, both in the CURRENT timezone. So an admin timezone change never opens a second claim inside the same real day (e.g. claim at 20:00Z under UTC, switch to `Pacific/Kiritimati`: the claim instant is already 2026-11-26 there, so a new claim waits for the next Kiritimati day), while a claim at 23:59 and another at 00:01 local still works. If a westward change makes an already-paid local date come round again, that date stays claimed (its ledger key exists). Rows written before migration 0012 fall back to the stored date.
 
 ## Tasks
 Admin `PUT /tasks/{id}` `{title?, metric, target>0, period: once|daily|weekly, grants, timezone?, event_id?}`, `GET /tasks`, `DELETE /tasks/{id}` (also drops progress). Daily periods roll at local midnight, weekly at ISO-week boundaries in the task timezone. A task with `event_id` is only visible, counted and claimable while that event is active.
@@ -47,7 +47,7 @@ err := mod.Progress(ctx, tx, gameID, playerID, "wins", 1) // delta 1..1e9
 ```
 Tooling may use admin `POST /progress` `{player_id, metric, delta}` -> `{tasks_updated}` (404 unknown player).
 
-Player: `GET /tasks` -> `{tasks:[{id,title,metric,target,period,grants,period_key,progress,completed,claimed,claimable}]}`; `POST /tasks/{id}/claim` -> `{task_id, period_key, grants}`; 404, 403 (event inactive), 409 `not_completed`, 409 `already_claimed` (once per period). Source key `task:<id>:<period_key>:<player>`.
+Player: `GET /tasks` -> `{tasks:[{id,title,metric,target,period,grants,period_key,progress,completed,claimed,claimable}]}`; `POST /tasks/{id}/claim` -> `{task_id, period_key, grants}`; 404, 403 (event inactive), 409 `not_completed`, 409 `already_claimed` (once per period). Source key `task:<id>:<period_key>:<player>`. A period also counts as claimed when the player's last claim instant of the task falls in the current period computed in the task's CURRENT timezone, so changing a task's timezone does not make it claimable again in the same real day/week. Progress rows keep the period key of the time they were written; after a timezone change progress continues in the new zone's period.
 
 ## Redeem codes
 Admin `POST /redeem-batches`:

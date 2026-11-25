@@ -1482,6 +1482,10 @@ paths:
       description: |
         Once per local day of the configured timezone; reward `cycle[(streak-1) mod len]`
         (ledger source key `checkin:<day>:<player>`). Request body ignored.
+        The instant of the last claim is stored; "already checked in today" and
+        streak continuity compare the local dates of that instant and of now,
+        both in the CURRENT timezone, so an admin timezone change cannot open a
+        second claim inside the same real day.
         Errors: 404 not configured; 409 `already_checked_in`; 409 `idempotency_key_reused`.
       security: [{gameSession: []}]
       parameters:
@@ -1572,6 +1576,9 @@ paths:
       summary: Claim a completed task
       description: |
         Once per period (ledger source key `task:<id>:<period_key>:<player>`). Request body ignored.
+        A period also counts as claimed when the player's last claim instant
+        falls in the current period computed in the task's CURRENT timezone, so
+        changing the timezone does not reopen a period already paid.
         Errors: 404 unknown task; 403 `forbidden` (gating event inactive); 409 `not_completed`;
         409 `already_claimed`; 409 `idempotency_key_reused`.
       security: [{gameSession: []}]
@@ -2662,8 +2669,11 @@ paths:
       description: |
         Claims the oldest `open` room of the key's tenant (optionally filtered by
         game and queue), sets it `active` with a lease of `game.match.lease_ttl`
-        (default 30s) and returns a fencing `token` (per-game counter, only
-        grows). Not under a game route: no CORS. Honours `Idempotency-Key`
+        (default 30s) and returns a random room `token` (256 bits; only its
+        SHA-256 is stored) plus the fencing `epoch` (per-game counter, only
+        grows). The room is bound to the claiming API key: heartbeat, member
+        state and result need that same key and the token. Not under a game
+        route: no CORS. Honours `Idempotency-Key`
         (scoped to the API key). Body limit 4 KiB.
 
         Errors: `400 invalid_request` (`server_id` missing/invalid, invalid
@@ -2703,7 +2713,8 @@ paths:
       summary: Extend the room lease
       description: |
         Extends the lease by `lease_ttl` (send about every `lease_ttl_ms / 3`).
-        Fenced: the token must be the room's current token.
+        Fenced: the API key must be the one that claimed the room and the
+        token the room's current token (`409 stale_token` otherwise).
 
         Errors: `404 not_found` (room unknown or of another tenant),
         `409 stale_token`, `409 room_abandoned` (lease expired; the room is
@@ -2773,9 +2784,8 @@ paths:
               required: [token, state]
               properties:
                 token:
-                  type: integer
-                  format: int64
-                  description: Fencing token from claim; a value that is not the room's current token gets `409 stale_token`.
+                  type: string
+                  description: Room token from claim; a token that is not the room's current token, or a key other than the claiming key, gets `409 stale_token`.
                 state:
                   type: string
                   enum: [connected, left]
@@ -3406,6 +3416,45 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
         '429': {$ref: '#/components/responses/RateLimited'}
         '503': {$ref: '#/components/responses/Overloaded'}
+  /v1/games/{game}/invites/claim-pending:
+    parameters:
+      - $ref: '#/components/parameters/Game'
+    post:
+      operationId: socialClaimPendingInvite
+      tags: [social]
+      x-gostack-module: social
+      summary: Collect invite grants that were pending because the caller was a guest
+      description: |
+        No body is read. Rate limited per player. Pays `InviterGrant` and
+        `InviteeGrant` of the caller's attribution exactly once (conditional
+        update of the attribution plus the unique ledger source keys
+        `invite:<invitee>:invitee|inviter`), once the caller has a verified
+        platform identity (`POST /auth/bind` or a platform login).
+        Errors: `404 not_found` (caller accepted no invite),
+        `403 identity_required` (caller is still guest-only),
+        `409 already_paid`, `429 rate_limited`.
+      security: [{gameSession: []}]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Grants paid.
+          headers:
+            Idempotent-Replayed: {$ref: '#/components/headers/IdempotentReplayed'}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [paid, grants]
+                properties:
+                  paid: {type: boolean, const: true}
+                  grants: {$ref: '#/components/schemas/Grants'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '503': {$ref: '#/components/responses/Overloaded'}
   /v1/games/{game}/invites/{code}/accept:
     parameters:
       - $ref: '#/components/parameters/Game'
@@ -3420,9 +3469,13 @@ paths:
       x-gostack-module: social
       summary: Attribute the caller (a new player) to the inviter
       description: |
-        No body is read. Rate limited per player. Grants (`InviteeGrant` to the
-        caller, `InviterGrant` to the inviter) are written to the ledger in the
-        same transaction with source keys `invite:<invitee>:invitee|inviter`.
+        No body is read. Rate limited per player. The attribution is always
+        recorded. Grants (`InviteeGrant` to the caller, `InviterGrant` to the
+        inviter, source keys `invite:<invitee>:invitee|inviter`) are written in
+        the same transaction only when the caller has a verified platform
+        identity (any `player_identities` provider other than `guest`);
+        otherwise `grants_pending` is true and the caller collects them with
+        `POST /invites/claim-pending` after binding a platform identity.
         Errors: `404 not_found` (unknown code or blocked pair), `400 self_invite`,
         `403 not_new_player` (caller older than the invite window, default 24h),
         `409 already_attributed`, `409 invite_full`, `429 rate_limited`.
@@ -3438,14 +3491,13 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [attributed, grants]
+                required: [attributed, grants_pending, grants]
                 properties:
                   attributed: {type: boolean, const: true}
+                  grants_pending: {type: boolean, description: 'True when the caller is a guest: no grant was paid yet.'}
                   grants:
-                    description: Invitee grant; `null` when none is configured.
-                    oneOf:
-                      - {$ref: '#/components/schemas/Grants'}
-                      - {type: 'null'}
+                    description: Invitee grant paid now; `{}` when pending or none is configured.
+                    $ref: '#/components/schemas/Grants'
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -4118,7 +4170,7 @@ paths:
       tags: [billing]
       x-gostack-module: billing
       summary: Compare stored balances with ledger sums and open reservations (key's tenant)
-      description: Full scan of the tenant's ledger; run off-peak.
+      description: Full scan of the key's tenant's ledger; run off-peak. Never spans tenants (keys without a tenant get `403`).
       security: [{billingKey: []}]
       responses:
         '200':
@@ -4241,7 +4293,7 @@ components:
     billingKey:
       type: http
       scheme: bearer
-      description: API key (`gsk_...`) with scope `billing`. The tenant is the key's tenant.
+      description: API key (`gsk_...`) with scope `billing`. The tenant is the key's tenant; a key without a tenant is refused with `403 forbidden` on every billing route.
     webSession:
       type: apiKey
       in: cookie
@@ -4461,6 +4513,8 @@ components:
         - self_invite
         - own_share
         - not_new_player
+        - identity_required
+        - already_paid
         # match
         - already_matched
         - ticket_active
@@ -5726,15 +5780,18 @@ components:
           description: Connection info shown to room members (≤ 1024 bytes JSON); defaults to `{}`.
     MatchClaimedRoom:
       type: object
-      required: [room_id, game_id, queue, token, lease_until, lease_ttl_ms, members]
+      required: [room_id, game_id, queue, token, epoch, lease_until, lease_ttl_ms, members]
       properties:
         room_id: {type: string}
         game_id: {type: string}
         queue: {type: string}
         token:
+          type: string
+          description: Random room token for heartbeat/state/result, valid only together with the claiming API key. Returned once (and in an Idempotency-Key replay).
+        epoch:
           type: integer
           format: int64
-          description: Fencing token for heartbeat/state/result.
+          description: Per-game claim counter (only grows); orders claims, not a credential.
         lease_until: {type: integer, format: int64}
         lease_ttl_ms: {type: integer, format: int64}
         members:
@@ -5746,9 +5803,8 @@ components:
       required: [token]
       properties:
         token:
-          type: integer
-          format: int64
-          description: Fencing token from claim; a value that is not the room's current token gets `409 stale_token`.
+          type: string
+          description: Room token from claim; a token that is not the room's current token, or a key other than the claiming key, gets `409 stale_token`.
     MatchResultEntry:
       type: object
       additionalProperties: false
@@ -5777,9 +5833,8 @@ components:
       required: [token, results]
       properties:
         token:
-          type: integer
-          format: int64
-          description: Fencing token from claim; a value that is not the room's current token gets `409 stale_token`.
+          type: string
+          description: Room token from claim; a token that is not the room's current token, or a key other than the claiming key, gets `409 stale_token`.
         results:
           type: array
           minItems: 1

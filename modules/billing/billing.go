@@ -645,6 +645,9 @@ func (s *Service) Reconcile(ctx context.Context, tenant string) ([]Mismatch, err
 
 // ReconcileIn is Reconcile over an existing transaction (e.g. the copy
 // transaction of `migrate to-postgres`). It returns nil when the books balance.
+// An empty tenant checks every tenant: that is for operator tooling only (the
+// CLI); the HTTP API refuses keys without a tenant, so it is never reachable
+// from a request.
 func ReconcileIn(ctx context.Context, tx *sql.Tx, tenant string) ([]Mismatch, error) {
 	var out []Mismatch
 	err := func() error {

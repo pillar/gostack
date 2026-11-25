@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pillar/gostack/adapters/store"
@@ -19,7 +20,8 @@ const maxBody = 16 << 10
 
 // Handler registers the /v1/billing/* routes on mux. Every route requires an
 // API key (Authorization: Bearer gsk_...) with scope "billing"; the tenant is
-// the key's tenant, never a request field. Mutations require an
+// the key's tenant, never a request field (a key without a tenant is refused
+// with 403). Mutations require an
 // Idempotency-Key header.
 func (s *Service) Handler(mux *http.ServeMux, keys auth.APIKeys) {
 	h := func(pattern string, fn func(w http.ResponseWriter, r *http.Request, tenant string) error) {
@@ -30,6 +32,11 @@ func (s *Service) Handler(mux *http.ServeMux, keys auth.APIKeys) {
 			}
 			if !k.Has(Scope) {
 				return httpx.Forbidden("api key lacks billing scope")
+			}
+			// An empty tenant means "every tenant" to ReconcileIn; that view is
+			// reserved for the operator CLI and never reachable over HTTP.
+			if strings.TrimSpace(k.TenantID) == "" {
+				return httpx.Forbidden("api key has no tenant")
 			}
 			r.Body = http.MaxBytesReader(w, r.Body, maxBody)
 			err = fn(w, r, k.TenantID)

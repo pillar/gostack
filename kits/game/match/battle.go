@@ -2,7 +2,10 @@ package match
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,20 +35,23 @@ func (m *Module) battle(next func(w http.ResponseWriter, r *http.Request, key au
 }
 
 type room struct {
-	ID     string
-	Game   string
-	Queue  string
-	Status string
-	Epoch  int64
-	Lease  int64
+	ID        string
+	Game      string
+	Queue     string
+	Status    string
+	Epoch     int64
+	Lease     int64
+	KeyID     string // API key that claimed the room
+	TokenHash string // auth.Hash of the room token issued at claim
 }
 
 // loadRoom returns the room only when its game belongs to tenant; other
 // tenants' rooms are indistinguishable from missing ones.
 func loadRoom(ctx context.Context, tx *sql.Tx, id, tenant string) (room, error) {
 	var rm room
-	err := tx.QueryRowContext(ctx, `SELECT r.room_id, r.game_id, r.queue_id, r.status, r.epoch, r.lease_until FROM match_rooms r JOIN games g ON g.game_id=r.game_id
-		WHERE r.room_id=? AND g.tenant_id=?`, id, tenant).Scan(&rm.ID, &rm.Game, &rm.Queue, &rm.Status, &rm.Epoch, &rm.Lease)
+	err := tx.QueryRowContext(ctx, `SELECT r.room_id, r.game_id, r.queue_id, r.status, r.epoch, r.lease_until, r.claim_key_id, r.token_hash
+		FROM match_rooms r JOIN games g ON g.game_id=r.game_id
+		WHERE r.room_id=? AND g.tenant_id=?`, id, tenant).Scan(&rm.ID, &rm.Game, &rm.Queue, &rm.Status, &rm.Epoch, &rm.Lease, &rm.KeyID, &rm.TokenHash)
 	if isNoRows(err) {
 		return rm, httpx.NotFound("room not found")
 	}
@@ -53,15 +59,33 @@ func loadRoom(ctx context.Context, tx *sql.Tx, id, tenant string) (room, error) 
 }
 
 var (
-	errStale     = httpx.Conflict("stale_token", "fencing token does not match the room's current token")
+	errStale     = httpx.Conflict("stale_token", "room token or API key does not match the room's current claim")
 	errAbandoned = httpx.Conflict("room_abandoned", "room lease expired; the room was abandoned")
 	errSettled   = httpx.Conflict("room_settled", "room is already settled")
 )
 
-// fenced runs fn on a room the caller holds the current fencing token for. A
-// room whose lease already ran out is abandoned (and that is committed) before
-// the request is refused with 409 room_abandoned.
-func (m *Module) fenced(ctx context.Context, key auth.APIKey, roomID string, token int64, allowSettled bool, fn func(tx *sql.Tx, rm room, now int64) error) error {
+// newRoomToken returns a random room token (256 bits); only its hash is stored.
+func newRoomToken() string {
+	var b [32]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		panic(err) // crypto/rand failure is unrecoverable
+	}
+	return "mrt_" + base64.RawURLEncoding.EncodeToString(b[:])
+}
+
+// holds reports whether key and token are the room's current claim: the API
+// key that claimed it and the random token issued with that claim.
+func (rm room) holds(key auth.APIKey, token string) bool {
+	if token == "" || rm.TokenHash == "" || rm.KeyID == "" || key.ID != rm.KeyID {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(auth.Hash(token)), []byte(rm.TokenHash)) == 1
+}
+
+// fenced runs fn on a room the caller holds the current claim for (same API
+// key and room token). A room whose lease already ran out is abandoned (and
+// that is committed) before the request is refused with 409 room_abandoned.
+func (m *Module) fenced(ctx context.Context, key auth.APIKey, roomID string, token string, allowSettled bool, fn func(tx *sql.Tx, rm room, now int64) error) error {
 	var after error
 	err := m.DB.WriteTx(ctx, func(tx *sql.Tx) error {
 		after = nil
@@ -70,7 +94,7 @@ func (m *Module) fenced(ctx context.Context, key auth.APIKey, roomID string, tok
 		if err != nil {
 			return err
 		}
-		if token <= 0 || token != rm.Epoch {
+		if !rm.holds(key, token) {
 			return errStale
 		}
 		switch rm.Status {
@@ -155,15 +179,17 @@ func (m *Module) claim(w http.ResponseWriter, r *http.Request, key auth.APIKey) 
 				return idempotency.Result{}, err
 			}
 			lease := now + m.LeaseTTL.Milliseconds()
-			if _, err := tx.ExecContext(ctx, `UPDATE match_rooms SET status='active', epoch=?, server_id=?, connection=?, lease_until=?, updated_at=? WHERE room_id=? AND status='open'`,
-				epoch, req.ServerID, string(conn), lease, now, id); err != nil {
+			token := newRoomToken()
+			if _, err := tx.ExecContext(ctx, `UPDATE match_rooms SET status='active', epoch=?, server_id=?, connection=?, lease_until=?, updated_at=?, claim_key_id=?, token_hash=?
+				WHERE room_id=? AND status='open'`,
+				epoch, req.ServerID, string(conn), lease, now, key.ID, auth.Hash(token), id); err != nil {
 				return idempotency.Result{}, err
 			}
 			rv, err := roomInfo(ctx, tx, id, now)
 			if err != nil {
 				return idempotency.Result{}, err
 			}
-			return idempotency.Result{Body: map[string]any{"room_id": id, "game_id": gid, "queue": queue, "token": epoch, "lease_until": lease,
+			return idempotency.Result{Body: map[string]any{"room_id": id, "game_id": gid, "queue": queue, "token": token, "epoch": epoch, "lease_until": lease,
 				"lease_ttl_ms": m.LeaseTTL.Milliseconds(), "members": rv.Members}}, nil
 		})
 	if err != nil {
@@ -187,7 +213,7 @@ func decodeToken(r *http.Request, v any) error {
 
 func (m *Module) heartbeat(w http.ResponseWriter, r *http.Request, key auth.APIKey) error {
 	var req struct {
-		Token int64 `json:"token"`
+		Token string `json:"token"`
 	}
 	if err := decodeToken(r, &req); err != nil {
 		return err
@@ -209,7 +235,7 @@ func (m *Module) heartbeat(w http.ResponseWriter, r *http.Request, key auth.APIK
 // reserved; the battle server decides what that means for the final result.
 func (m *Module) memberState(w http.ResponseWriter, r *http.Request, key auth.APIKey) error {
 	var req struct {
-		Token int64  `json:"token"`
+		Token string `json:"token"`
 		State string `json:"state"`
 	}
 	if err := decodeToken(r, &req); err != nil {
@@ -260,7 +286,7 @@ func (m *Module) result(w http.ResponseWriter, r *http.Request, key auth.APIKey)
 		return err
 	}
 	var req struct {
-		Token   int64         `json:"token"`
+		Token   string        `json:"token"`
 		Results []resultEntry `json:"results"`
 	}
 	if err := game.DecodeStrict(body, &req); err != nil {
