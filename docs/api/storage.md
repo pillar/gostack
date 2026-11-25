@@ -96,13 +96,14 @@ s, err := storage.NewS3(storage.S3Config{
   re-verifies every signature with an independent implementation (itself
   checked against the AWS examples), including path-style and virtual-host,
   signed/unsigned payload, session token, expiry and tampering.
-- **Not verified against real AWS S3, Cloudflare R2 or MinIO.** A live
-  integration test exists but has not passed against a real service yet
-  (2026-11-25: the only local MinIO, Homebrew `minio` RELEASE.2025-10-15T17-29-55Z,
-  crashes at startup on macOS Darwin 27 / arm64 with `SIGSEGV ... signal
-  arrived during cgo execution` in `github.com/shoenig/go-m1cpu.init`, so the
-  run was not possible on the development machine). Run it before relying on
-  the adapter; R2 uses region `auto`.
+- **Verified against a real MinIO server** (2026-11-25, MinIO built from source
+  with `CGO_ENABLED=0 go install github.com/minio/minio@latest`, localhost,
+  path-style): `scripts/drill/s3_minio.sh` → `TestLiveS3` all 9 subtests pass.
+  That run found that MinIO rejects key segments longer than 255 bytes
+  (`XMinioInvalidObjectName`); `ValidKey` now limits each segment to
+  `MaxKeySegmentLen` (255) so keys stay portable across providers.
+- **Not verified against AWS S3 or Cloudflare R2.** Run the live test against
+  them before relying on the adapter; R2 uses region `auto`.
 
 ### Live integration test
 
@@ -112,7 +113,7 @@ path-style Put/Get/Delete with unsigned and signed payloads (including an
 empty object), unknown-size streaming (3 MiB + 17 B), size limits (declared
 size over the limit, unknown size over the limit, short and long bodies →
 `ErrSizeMismatch`, nothing stored; an object exactly at the limit is stored),
-keys with dots, dashes, underscores, nested segments and the 512-byte maximum
+keys with dots, dashes, underscores, nested segments and the 512-byte maximum (segments ≤ 255 bytes)
 (and rejection of `~`), presigned GET and PUT used by a plain `net/http`
 client, a presigned GET URL refused for PUT, a tampered signature, an expired
 URL (signed 10 minutes in the past, and a 1 s TTL after 2.5 s) → 403, and

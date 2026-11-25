@@ -49,12 +49,12 @@ func readAll(t *testing.T, s Storage, key string) (string, Info) {
 }
 
 func TestValidKey(t *testing.T) {
-	for _, k := range []string{"a", "a/b-c_d.e", "users/42/avatar.png", strings.Repeat("x", MaxKeyLen)} {
+	for _, k := range []string{"a", "a/b-c_d.e", "users/42/avatar.png", strings.Repeat("x", MaxKeySegmentLen), strings.Repeat(strings.Repeat("x", 127)+"/", 4)[:MaxKeyLen-1] + "y"} {
 		if err := ValidKey(k); err != nil {
 			t.Errorf("%q: %v", k, err)
 		}
 	}
-	for _, k := range []string{"", "/a", "a/", "a//b", "..", "../x", "a/../b", "a/./b", ".", "a b", `a\b`, "ü", "a?b", "a%2e", "a\x00b", strings.Repeat("x", MaxKeyLen+1)} {
+	for _, k := range []string{"", "/a", "a/", "a//b", "..", "../x", "a/../b", "a/./b", ".", "a b", `a\b`, "ü", "a?b", "a%2e", "a\x00b", strings.Repeat("x", MaxKeyLen+1), strings.Repeat("x", MaxKeySegmentLen+1)} {
 		if err := ValidKey(k); !errors.Is(err, ErrInvalidKey) {
 			t.Errorf("%q accepted", k)
 		}

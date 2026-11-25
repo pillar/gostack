@@ -51,8 +51,11 @@ const (
 	DefaultMaxObjectBytes = 100 << 20
 	DefaultTimeout        = 60 * time.Second
 	MaxKeyLen             = 512
-	MaxPresignTTL         = 7 * 24 * time.Hour
-	defaultContentType    = "application/octet-stream"
+	// MaxKeySegmentLen bounds each '/'-separated segment: MinIO (and common
+	// filesystems) reject path components longer than 255 bytes.
+	MaxKeySegmentLen   = 255
+	MaxPresignTTL      = 7 * 24 * time.Hour
+	defaultContentType = "application/octet-stream"
 )
 
 // ValidKey enforces the portable key syntax: 1–512 bytes of [A-Za-z0-9._-]
@@ -65,6 +68,9 @@ func ValidKey(key string) error {
 	for _, seg := range strings.Split(key, "/") {
 		if seg == "" || seg == "." || seg == ".." {
 			return fmt.Errorf("%w: empty, '.' or '..' path segment", ErrInvalidKey)
+		}
+		if len(seg) > MaxKeySegmentLen {
+			return fmt.Errorf("%w: path segment longer than %d bytes", ErrInvalidKey, MaxKeySegmentLen)
 		}
 		for i := 0; i < len(seg); i++ {
 			c := seg[i]

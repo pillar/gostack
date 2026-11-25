@@ -209,7 +209,16 @@ func TestLiveS3(t *testing.T) {
 	})
 
 	t.Run("SpecialKeys", func(t *testing.T) {
-		long := prefix + strings.Repeat("k", MaxKeyLen-len(prefix))
+		// Longest valid key: segments of at most MaxKeySegmentLen up to MaxKeyLen.
+		long := prefix
+		for len(long) < MaxKeyLen {
+			n := min(MaxKeySegmentLen, MaxKeyLen-len(long)-1)
+			if n < 1 {
+				break
+			}
+			long += strings.Repeat("k", n) + "/"
+		}
+		long = strings.TrimSuffix(long, "/")
 		keys := []string{
 			prefix + "UPPER.lower_09-x",
 			prefix + "a/b/c/d/e.json",

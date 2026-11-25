@@ -80,6 +80,17 @@ APP --config CFG [--json] backup restore --from FILE --to NEW_PATH           # N
 - 1.27 GB 库从本地 file 副本恢复 + 校验 8.4–9.2 s。R2 上的 RTO 受下载带宽主导（4.3 GB 副本中恢复只需读取快照 + 之后的 LTX），需另测。
 - 副本占用约为库大小的 1.6–3.3 倍（L0 保留 5 min、多级压缩与快照）；R2 存储与 Class A 请求成本需按 sync-interval 估算。
 
+### S3 副本（MinIO）演练，2026-11-25
+
+Homebrew 的 MinIO 在本机崩溃后，改用源码编译的 MinIO（`CGO_ENABLED=0 go install github.com/minio/minio@latest`，`minio version DEVELOPMENT.GOGET`，go1.27.4）作为 S3 兼容端点（path-style，随机 root 凭据），其余环境同上。命令：`MINIO_BIN=~/go/bin/minio LITESTREAM_BIN=~/go/bin/litestream DRILL_REPLICA=s3 RUNS=2 DURATION=60s scripts/drill/litestream_minio.sh`。
+
+| 演练 | 负载 | sync-interval | 确认写入/s | DB@kill + WAL@kill | 恢复库 | 复制延迟 p50/p95/max | restore.sh | 就绪 | 丢失（存档/领奖/成绩/新玩家） | 丢失窗口 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| S1 | 8 并发无间隔，60 s，2 KiB 存档 | 10s | 1776 | 308.3 MB + 133.3 MB | 265.4 MB | 6.61 / 10.55 / 11.43 s | 2.27 s | 0.025 s | 5186/5185/5184/258（共确认 34941/34937/34935/1750） | 9.36 s |
+| S2 | 同上 | 10s | 1816 | 314.2 MB + 239.7 MB | 273.8 MB | 6.23 / 10.08 / 11.31 s | 2.50 s | 0.02 s | 5018/5016/5017/251（共 35728/35725/35723/1791） | 9.78 s |
+
+两次均：`backup verify` 通过（integrity `ok`、schema 11/11、对账 0 差异），恢复库上应用就绪并通过 API 回读；恢复结果是干净前缀（无未确认但幸存的写入）；没有确认写入始终未出现在副本中。结论与 file 副本一致：丢失窗口约为一个 sync-interval。MinIO 在本机回环上，**不代表 R2 的网络延迟与带宽**。
+
 ## 演练命令
 
 ```bash
@@ -97,6 +108,6 @@ DRILL_REPLICA=file RUNS=2 DURATION=30s WORKERS=8 PAYLOAD=8192 SEED_PLAYERS=60000
 
 ## 仍未验证
 
-- Litestream → MinIO / S3 / **Cloudflare R2** 的复制与恢复（本机 MinIO 崩溃，未执行）；R2 上的 RPO/RTO、费用与网络中断行为。
+- Litestream → **Cloudflare R2**（及 AWS S3）的复制与恢复；R2 上的 RPO/RTO、费用与网络中断行为。MinIO（本机回环）已演练，见上。
 - 1C1G 目标机上的吞吐、WAL 增长与恢复时间；本表的数据来自高配开发机与本地 SSD，不能代表目标环境。
 - `restore.sh --timestamp`（时间点恢复）与 `--owner` 未在真实 Litestream 下演练；恢复后重新启用复制（第 6 步）未演练。
