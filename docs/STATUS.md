@@ -9,7 +9,7 @@
 - 第三轮独立审查（第二批：资源发布、配额、PG 备份、realtime 总线、Google Play/微信支付、AgentKit/WebKit）：9 项问题全部修复且有回归测试——Google 确认/消耗任务重试预算覆盖数天 + 403/404 标记待处理 + 定期对账复活/重建任务；支付与广告回调豁免每游戏请求配额；微信支付按商户订单号查单补发货；促销/激励购买允许无 orderId；JWKS 与 OAuth token 刷新不在持锁期间做网络 IO；Webhook SSRF 改为显式拒绝表（含 100.64/10、NAT64、6to4 等）并复用客户端；非幂等工具步骤超时进入人工对账而非判失败；WebKit 预留过期后按代次重新预留；Publish 事务函数可重跑；PG 工具 sslpassword 等秘密不进 argv；WAL 归档用硬链接原子发布。
 - 第一轮审查（P0 主干）7 项问题已修复（见 git 历史）。
 - govulncheck：GitHub Actions 中运行；`toolchain go1.27.4`（1.27.1 标准库漏洞的修复版本）。CI 新增的 PostgreSQL / Valkey service job 尚未在 GitHub 上运行过。
-- 未运行：linux 二进制实机运行、部署脚本在真实 Linux/systemd 上运行。
+- 真实 Linux/systemd（Ubuntu 24.04、systemd 255、x86_64，2 vCPU/3.6 GiB 共享主机，服务以 `CPUQuota=100%`、`MemoryMax=768M` 运行）：install → 写数据 → upgrade（含升级前快照与校验）→ rollback → `systemctl reload` → 故意损坏的版本升级后自动回退，全部通过，数据保留；演练中发现并修复一个缺陷：崩溃循环触发 systemd 启动频率限制后，回退的 restart 被拒绝且脚本中断、服务停在宕机状态（现先 `reset-failed`，桩测试已能复现该问题）。演练后已完全卸载。
 
 ## 通用核心（PRD §5）
 | ID | 状态 | 说明 |
@@ -22,9 +22,9 @@
 | F06 队列 | 已实现 | 持久化任务（SQLite / PG `FOR UPDATE SKIP LOCKED`）：租约 token、重试退避、死信、重放、dedupe、同事务入队；Worker |
 | F07 可观测性 | 已实现 | /healthz、/readyz、内网 /metrics 与 pprof、JSON 日志脱敏；`deploy/prometheus/alerts.yml` 17 条规则（测试核对每个指标名与 label 真实暴露、runbook 锚点存在）；`docs/RUNBOOK.md`。阈值为起点值，未经实测 |
 | F08 部署 | 已实现（未在 Linux 实跑） | install/upgrade/rollback.sh、release.sh（sha256、`go version -m` SBOM，非 SPDX）；`deploy/deploy_test.go` 用桩命令在临时目录真实执行（校验和、原子切换、健康检查失败自动回滚、schema 更新时拒绝回滚） |
-| F09 容灾 | 本地演练通过 | `backup snapshot/verify/restore`；Litestream v0.5.18 演练：本地文件副本 6 次 + MinIO（S3）2 次，kill -9 → 空目录恢复 → verify → API 回读全部通过，丢失窗口约一个 sync-interval（见 `docs/DISASTER_RECOVERY.md`）；**R2 与 1C1G 未演练**。PostgreSQL：`backup snapshot/verify/restore`（pg_dump/pg_restore + 清单，PG 测试覆盖）与 PITR（WAL 归档 + `pg_basebackup`，`deploy/postgres`）本机演练 4 次通过（到时间点 T 精确截断；机器丢失 RPO 0.8–6.9 s，取决于负载与 `archive_timeout`）；远程归档与 1C1G 未演练 |
+| F09 容灾 | 本地与 R2 演练通过 | `backup snapshot/verify/restore`；Litestream v0.5.18 演练：本地文件副本 6 次 + MinIO（S3）2 次，kill -9 → 空目录恢复 → verify → API 回读全部通过，丢失窗口约一个 sync-interval（见 `docs/DISASTER_RECOVERY.md`）；**R2 与 1C1G 未演练**。PostgreSQL：`backup snapshot/verify/restore`（pg_dump/pg_restore + 清单，PG 测试覆盖）与 PITR（WAL 归档 + `pg_basebackup`，`deploy/postgres`）本机演练 4 次通过（到时间点 T 精确截断；机器丢失 RPO 0.8–6.9 s，取决于负载与 `archive_timeout`）；远程归档与 1C1G 未演练 |
 | F10 计费 | 已实现 | `modules/billing`：账户/不可变账本/预留状态机（reserved→settled/released/expired/reconciling）、幂等、对账、HTTP（`billing` scope，空租户 key 拒绝） |
-| F11 对象存储 | 已实现 | local（原子写、HMAC 预签名）与 S3 兼容（自写 SigV4，AWS 文档向量通过）；**对真实 MinIO 实测 9 项通过**；AWS S3 / R2 未实测 |
+| F11 对象存储 | 已实现 | local（原子写、HMAC 预签名）与 S3 兼容（自写 SigV4，AWS 文档向量通过）；**对真实 MinIO 与 Cloudflare R2 实测 9 项均通过**（含 R2 接受 UNSIGNED-PAYLOAD）；AWS S3 未实测 |
 | F12 Scale | 已实现（见下两节） | PostgreSQL、多实例、SQLite→PG 迁移工具、Valkey 全局限流与缓存、PG 逻辑备份与 PITR（本机演练）；PG/Valkey HA 未实现 |
 | F13 HA / Distributed | 未实现 | 配置校验拒绝 `distributed` profile |
 | 缓存（PRD §4.2） | 已实现（无内置使用方） | memory（LRU、字节计量、TTL）与 valkey；读错误降级为未命中；资金路径不使用 |
@@ -64,7 +64,7 @@
 | G14 实时通信 | 已实现（lite 单实例；scale 经 PostgreSQL 总线多实例，ADR-0005） | WebSocket 网关：token 不进 URL、Origin、连接/消息/速率预算、心跳、序号 + ack + 续传、慢消费者断开、停机 1001；本机 1000 空闲连接约 28 KiB/连接（非验收）。scale 需 `game.realtime.bus: postgres`（迁移 0015）：PG 分配每玩家 seq、表存重放窗口、LISTEN/NOTIFY 扇出；双实例测试覆盖跨实例 Send 有序连续、广播两实例且每玩家一条、跨实例续传（重放或 resume_failed）、LISTEN 断开/恢复后补齐、总线不可用时本地降级（4012 + 新 epoch + 指标）与恢复、4008/发布队列上限；本机跨实例延迟 p50≈0.43ms p99≈0.8ms（非验收）。吞吐/对其他写入的影响未压测；`bus: valkey` 未实现 |
 | G15 匹配与房间 | 已实现 | 票据（单次消费）、按 rating 窗口撮合、房间租约 + 随机 token + 绑定认领 key、结算幂等 |
 | 多游戏配额（G-A09） | 已实现 | `kits/game/quota.go`，迁移 0014：`max_players`/`save_bytes_total` 与业务写同事务条件更新计数（SQLite、PG 并发存档/恢复/删除后计数 = 实际字节且不超限）；`requests_per_minute` 每游戏限流器（Valkey 下两实例合计放行 = 配额，已测）；`analytics_events_per_day` 按实例按 UTC 日计数、启动后从埋点库补计（N 实例最多约 N×配额）；`write_concurrency` 按实例限制每游戏在途写请求（503）；管理 API GET/PUT `/v1/admin/games/{game}/quotas`、5 s 缓存、CLI `game quotas [--recount]`；每游戏指标（标签基数 = 游戏数）。测试：`kits/game/quota_test.go`（alpha 触发每项配额时 beta 不受影响）。未测：PG 单游戏计数行串行化的吞吐影响 |
-| 资源发布（PRD §22，G-A07） | 已实现（MinIO 实测；R2/CDN 未实测） | `modules/assets` + `gostack assets publish/list/rollback/verify/prune` + 模块 `assets`（manifest/entry 公共接口、管理端列表/回滚）：内容哈希不可变键 + `Cache-Control: immutable`、版本化 manifest、发布顺序资源→manifest→入口→事务切换指针、失败保留旧版本、按游戏租约串行化、去重、回滚前存在性检查、verify 全量哈希、prune 永不删除保留/当前版本引用的对象；见 `docs/api/assets.md`、`docs/ASSET_RELEASE.md` |
+| 资源发布（PRD §22，G-A07） | 已实现（MinIO 与 R2 实测；CDN 未实测） | `modules/assets` + `gostack assets publish/list/rollback/verify/prune` + 模块 `assets`（manifest/entry 公共接口、管理端列表/回滚）：内容哈希不可变键 + `Cache-Control: immutable`、版本化 manifest、发布顺序资源→manifest→入口→事务切换指针、失败保留旧版本、按游戏租约串行化、去重、回滚前存在性检查、verify 全量哈希、prune 永不删除保留/当前版本引用的对象；见 `docs/api/assets.md`、`docs/ASSET_RELEASE.md` |
 
 ## AgentKit / WebKit P1（PRD §19、§24，2026-11-25）
 验证环境：本机 macOS arm64，Go 1.27.4，PostgreSQL 17.11（临时集群）。命令：`gofmt -l .`（无输出）、`go vet ./...`、`go test -race -count=1 ./...`（SQLite）与 `GOSTACK_TEST_POSTGRES_DSN=… go test -race -count=1 ./...`（PostgreSQL，`TestSchemaEquivalence` 含迁移 0017/0018）全部通过。生成项目 `gostack init --kit agent|web|game` 在本机 `go mod tidy`（离线模块缓存）+ `go build` + `config validate` 通过，agent/web 项目各自 `serve` 后用 curl 走通一次（创建 run 至 succeeded；建站/发布/公开读/sitemap/robots/下单支付）。
@@ -81,15 +81,15 @@
 - A05 过载：写入准入满 503、埋点满丢弃计数、realtime 慢消费者断开——通过。
 - A06 任务：租约回收、旧 token 无法 Ack、跨进程 Claim 不重复——通过。
 - A07 安全：跨游戏/跨玩家/跨租户拒绝、未知字段拒绝、参数化 SQL、CSRF、两轮独立审查问题已修复、govulncheck；**无第三方渗透测试**。
-- A08 容灾：本地文件与 MinIO 副本恢复演练通过；**R2 未演练**。
-- A09 运维：脚本在桩环境通过；**真实 systemd 未演练**。
+- A08 容灾：本地文件、MinIO 与 Cloudflare R2（开发机经公网）副本恢复演练通过；R2 高写入时丢失窗口 22–24 s、中等负载 + 1 s 同步约 1 s；**目标服务器 → R2 未演练**。
+- A09 运维：install/upgrade/rollback/reload/失败升级自动回退在真实 systemd 上通过（见上）；生产机长期运行与重启演练未做。
 - A10 性能：**目标环境未执行**（本机基准见 `docs/BENCHMARK_REPORT.md`，仅供参考）。
 - A11 扩展：PG 跑同一套业务契约测试 + 多实例测试——通过。
 - 游戏专项：G-A01/02/03/04/06 通过；G-A05 通过（规则版本、对局令牌、隔离不发奖）；G-A07（资源版本切换与回滚无缺失文件）在 local 存储（SQLite/PG 测试）与真实 MinIO（`scripts/drill/assets_minio.sh`）上通过，**R2 与真实 CDN 未执行**；G-A08 真机未执行；G-A09 通过（多游戏隔离 + 每游戏资源配额，见 `docs/api/quotas.md`；配额吞吐成本未测）；G-A10 本地恢复后对账通过，R2 未执行。
 
 ## 仍需外部环境才能完成
-1. 1C1G Linux 目标机：§13/§23 压测、驱动选型确认（ADR-0001）、部署脚本与 systemd 实跑、断电模型。
-2. Cloudflare R2：S3 适配器实测、资源发布（`assets`）与 CDN 实测、Litestream→R2 复制与恢复（RPO/RTO、费用）。
+1. 1C1G Linux 目标机：§13/§23 压测、驱动选型确认（ADR-0001）、断电模型（部署脚本已在真实 systemd 上通过）。
+2. Cloudflare：CDN 实测（资源缓存命中与清除）；目标服务器 → R2 的复制 RPO/RTO 与费用。
 3. 真实平台：微信 code2session、Apple 沙盒交易与通知、Google Play 购买与 RTDN、微信支付下单与回调、AdMob 回调。
 4. 真机：Safari iPhone 与微信小游戏验证 SDK（G-A08）。
 5. 未实现：F13 HA/Distributed、Valkey HA/TLS、realtime 的 Valkey 总线；AgentKit/WebKit 仅 P1 范围（见上节“不提供”项）。

@@ -91,6 +91,22 @@ Homebrew 的 MinIO 在本机崩溃后，改用源码编译的 MinIO（`CGO_ENABL
 
 两次均：`backup verify` 通过（integrity `ok`、schema 11/11、对账 0 差异），恢复库上应用就绪并通过 API 回读；恢复结果是干净前缀（无未确认但幸存的写入）；没有确认写入始终未出现在副本中。结论与 file 副本一致：丢失窗口约为一个 sync-interval。MinIO 在本机回环上，**不代表 R2 的网络延迟与带宽**。
 
+### Cloudflare R2 演练，2026-11-25
+
+从本机（macOS，经公网）复制到 Cloudflare R2（桶位置 APAC，专用测试桶 + 仅授权该桶读写的临时 Token，演练后删除），Litestream v0.5.18，命令：`DRILL_REPLICA=s3 DRILL_S3_ENDPOINT=https://<account>.r2.cloudflarestorage.com DRILL_S3_BUCKET=<bucket> DRILL_S3_REGION=auto LITESTREAM_ACCESS_KEY_ID=… LITESTREAM_SECRET_ACCESS_KEY=… scripts/drill/litestream_minio.sh`。
+
+| 演练 | 负载 | sync-interval | 确认写入/s | 复制延迟 p50/p95/max | restore.sh | 丢失（存档/领奖/成绩/新玩家） | 丢失窗口 |
+|---|---|---|---|---|---|---|---|
+| R1 | 8 并发无间隔，60 s | 10s | 2015 | 14.8 / 22.3 / 22.9 s | 5.17 s | 12552/12554/12555/626 | 21.8 s |
+| R2 | 同上 | 10s | 2053 | 16.2 / 23.9 / 24.6 s | 6.32 s | 14370/14370/14370/718 | 23.9 s |
+| R3 | 4 并发、每操作间隔 20 ms，60 s | 1s | 186 | 1.35 / 2.15 / 2.73 s | 2.73 s | 60/57/60/3 | 0.96 s |
+| R4 | 同上 | 1s | 184 | 1.30 / 2.35 / 3.02 s | 2.77 s | 59/58/58/4 | 0.96 s |
+
+4 次均：`backup verify` 通过（integrity ok、schema 一致、账本对账 0 差异），恢复库上应用就绪并通过 API 回读；恢复结果是干净前缀（无未确认但幸存的写入），没有确认写入始终未出现在副本中。结论：
+- 高写入（约 2000 写/s）下，经公网到 R2 的复制延迟明显高于本机 MinIO（p95 约 22–24 s 对约 10 s），丢失窗口 22–24 s，仍在 PRD 的初始目标 RPO ≤ 30 s 内但余量小；中等负载 + `sync-interval: 1s` 时丢失窗口约 1 s。
+- 应用侧以「已确认写入可能丢失最近一个复制周期」为前提设计；资金类数据若要求更小 RPO，需缩短 sync-interval（R2 请求费用随之增加）或采用同步方案。
+- 网络路径为开发机到 R2，不是目标服务器到 R2；目标机上的数字需另测。
+
 ## 演练命令
 
 ```bash
@@ -108,7 +124,7 @@ DRILL_REPLICA=file RUNS=2 DURATION=30s WORKERS=8 PAYLOAD=8192 SEED_PLAYERS=60000
 
 ## 仍未验证
 
-- Litestream → **Cloudflare R2**（及 AWS S3）的复制与恢复；R2 上的 RPO/RTO、费用与网络中断行为。MinIO（本机回环）已演练，见上。
+- Litestream → R2 已从开发机演练（见上）；**目标服务器 → R2** 的 RPO/RTO、R2 费用与网络中断期间的行为未测；AWS S3 未测。
 - 1C1G 目标机上的吞吐、WAL 增长与恢复时间；本表的数据来自高配开发机与本地 SSD，不能代表目标环境。
 - `restore.sh --timestamp`（时间点恢复）与 `--owner` 未在真实 Litestream 下演练；恢复后重新启用复制（第 6 步）未演练。
 

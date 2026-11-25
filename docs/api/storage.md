@@ -117,8 +117,10 @@ s, err := storage.NewS3(storage.S3Config{
   That run found that MinIO rejects key segments longer than 255 bytes
   (`XMinioInvalidObjectName`); `ValidKey` now limits each segment to
   `MaxKeySegmentLen` (255) so keys stay portable across providers.
-- **Not verified against AWS S3 or Cloudflare R2.** Run the live test against
-  them before relying on the adapter; R2 uses region `auto`.
+- **Verified against Cloudflare R2** (2026-11-25, dedicated test bucket, region
+  `auto`, path-style, bucket-scoped API token): `TestLiveS3` all 9 subtests pass,
+  including `UNSIGNED-PAYLOAD` uploads, signed payloads, unknown-size streaming,
+  presigned GET/PUT and expiry, and wrong-credential 403s. AWS S3 not tested.
 
 ### Live integration test
 

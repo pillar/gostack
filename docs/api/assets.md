@@ -151,6 +151,6 @@ storage:
 - **Real MinIO** (`scripts/drill/assets_minio.sh`, local MinIO built from
   source): publish (1 MiB + small files), Cache-Control stored and returned on
   presigned GET, HEAD-based dedupe, rollback, verify and prune all pass.
-- **Not verified**: Cloudflare R2 / AWS S3, a real CDN in front of the bucket
+- **Verified on Cloudflare R2** (2026-11-25, `TestLiveAssetsS3`: publish → verify → second publish with dedupe → rollback → prune). **Not verified**: AWS S3, a real CDN in front of the bucket
   (cache behaviour, purge), large builds (thousands of files, upload time),
   client-side loading from the manifest.
