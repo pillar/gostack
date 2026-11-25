@@ -96,7 +96,14 @@ func DecodeStrict(b []byte, v any) error { return decodeStrict(b, v) }
 func MapWriteErr(err error) error { return mapWriteErr(err) }
 
 // RateLimit applies l to key, returning 429 with Retry-After when exhausted.
-func (k *Kit) RateLimit(l *ratelimit.Limiter, key string) error { return k.rateLimit(l, key) }
+func (k *Kit) RateLimit(l ratelimit.Allower, key string) error { return k.rateLimit(l, key) }
+
+// NewLimiter builds a rate limiter with the kit's factory (process-local when
+// Limits is nil). name must be unique per use: it scopes global keys and labels
+// metrics; onFailure applies only to a global limiter whose backend fails.
+func (k *Kit) NewLimiter(name string, perMinute int, onFailure ratelimit.OnFailure) ratelimit.Allower {
+	return ratelimit.OrLocal(k.Limits)(name, perMinute, onFailure)
+}
 
 // CurrentDocument returns the game's current published configuration and its
 // revision (0 and an empty document when none is published). q may be a

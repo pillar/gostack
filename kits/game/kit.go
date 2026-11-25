@@ -45,10 +45,13 @@ type Kit struct {
 	Now       func() time.Time
 	// SaveMerge, when set, resolves save conflicts for PUTs that send "merge": true.
 	SaveMerge SaveMergeFunc
+	// Limits builds the rate limiters (nil: process-local). The app passes a
+	// Valkey-backed factory when rate_limit.driver is valkey.
+	Limits ratelimit.Factory
 
-	authLimit  *ratelimit.Limiter
-	scoreLimit *ratelimit.Limiter
-	eventLimit *ratelimit.Limiter
+	authLimit  ratelimit.Allower
+	scoreLimit ratelimit.Allower
+	eventLimit ratelimit.Allower
 	apiKeys    auth.APIKeys
 	configs    *configCache
 }
@@ -58,9 +61,13 @@ func (k *Kit) Init() {
 	if k.Now == nil {
 		k.Now = time.Now
 	}
-	k.authLimit = ratelimit.PerMinute(k.Cfg.AuthRatePerMinute, 100_000)
-	k.scoreLimit = ratelimit.PerMinute(k.Cfg.ScoreRatePerMinute, 100_000)
-	k.eventLimit = ratelimit.PerMinute(k.Cfg.AuthRatePerMinute*4, 100_000)
+	// Failure policies when a global limiter's backend is unavailable:
+	// auth (guest/platform login per IP) and score/run submissions degrade to a
+	// per-instance bucket (still bounded, still available); analytics events
+	// fail open (P2 data, bounded by the analytics buffer which drops on overflow).
+	k.authLimit = k.NewLimiter("game_auth", k.Cfg.AuthRatePerMinute, ratelimit.FailLocal)
+	k.scoreLimit = k.NewLimiter("game_score", k.Cfg.ScoreRatePerMinute, ratelimit.FailLocal)
+	k.eventLimit = k.NewLimiter("game_events", k.Cfg.AuthRatePerMinute*4, ratelimit.FailOpen)
 	k.apiKeys = auth.APIKeys{DB: k.DB}
 	k.configs = newConfigCache()
 }
@@ -262,7 +269,7 @@ func (k *Kit) admin(next handler) http.Handler {
 
 const adminKey ctxKey = 100
 
-func (k *Kit) rateLimit(l *ratelimit.Limiter, key string) error {
+func (k *Kit) rateLimit(l ratelimit.Allower, key string) error {
 	if ok, retry := l.Allow(key); !ok {
 		if k.Metrics != nil {
 			k.Metrics.Counter("game_rate_limited_total", "").Add(1)

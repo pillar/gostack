@@ -27,6 +27,7 @@ import (
 	"github.com/pillar/gostack/adapters/postgres"
 	"github.com/pillar/gostack/adapters/sqlite"
 	"github.com/pillar/gostack/adapters/store"
+	"github.com/pillar/gostack/adapters/valkeytest"
 	"github.com/pillar/gostack/core/config"
 	"github.com/pillar/gostack/migrations"
 )
@@ -160,6 +161,7 @@ func UseScale(t testing.TB, cfg *config.Config) bool {
 	cfg.RateLimit.AcceptPerInstance = true
 	cfg.Backup.Enabled = false
 	cfg.Database.MaxOpenConnections = 4 // keep the suite within a default max_connections=100
+	valkeytest.UseValkey(t, cfg)        // global limiter + Valkey cache when GOSTACK_TEST_VALKEY_ADDR is set
 	return true
 }
 

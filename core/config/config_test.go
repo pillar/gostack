@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/pillar/gostack/core/config"
 )
@@ -123,5 +124,69 @@ func TestScaleProfile(t *testing.T) {
 		"GOSTACK_DATABASE_MAX_OPEN_CONNECTIONS": "20"}), nil)
 	if err != nil || got.Database.MaxOpenConnections != 20 || got.Database.DSNRef != "env:D" {
 		t.Fatalf("env scale config: %+v %v", got.Database, err)
+	}
+}
+
+func valkeyScale() config.Config {
+	c := scale()
+	c.RateLimit.AcceptPerInstance = false
+	c.RateLimit.Driver, c.Cache.Driver = "valkey", "valkey"
+	c.Valkey.Address, c.Valkey.KeyPrefix = "10.0.0.5:6379", "mygame:"
+	return c
+}
+
+func TestValkeyDrivers(t *testing.T) {
+	c := valkeyScale()
+	if err := c.Validate(); err != nil {
+		t.Fatalf("scale with global limiter and valkey cache rejected: %v", err)
+	}
+	c.Cache.Driver = "memory" // valkey only for the limiter
+	c.Valkey.PasswordRef, c.Valkey.Username, c.Valkey.DB = "env:VK", "app", 3
+	if err := c.Validate(); err != nil {
+		t.Fatalf("limiter-only valkey rejected: %v", err)
+	}
+	c = valkeyScale()
+	c.RateLimit.Driver, c.RateLimit.AcceptPerInstance = "local", true // valkey only for the cache
+	if err := c.Validate(); err != nil {
+		t.Fatalf("cache-only valkey rejected: %v", err)
+	}
+	for name, mut := range map[string]func(*config.Config){
+		"no address":        func(c *config.Config) { c.Valkey.Address = "" },
+		"bad address":       func(c *config.Config) { c.Valkey.Address = "valkey" },
+		"no prefix":         func(c *config.Config) { c.Valkey.KeyPrefix = "" },
+		"bad prefix":        func(c *config.Config) { c.Valkey.KeyPrefix = "a b" },
+		"literal password":  func(c *config.Config) { c.Valkey.PasswordRef = "hunter2" },
+		"user no password":  func(c *config.Config) { c.Valkey.Username = "u" },
+		"redundant ack":     func(c *config.Config) { c.RateLimit.AcceptPerInstance = true },
+		"unknown limiter":   func(c *config.Config) { c.RateLimit.Driver = "redis" },
+		"unknown cache":     func(c *config.Config) { c.Cache.Driver = "memcached" },
+		"slow limiter":      func(c *config.Config) { c.RateLimit.Timeout = 2 * time.Second },
+		"local without ack": func(c *config.Config) { c.RateLimit.Driver = "local" },
+		"valkey under lite": func(c *config.Config) {
+			*c = config.Defaults()
+			c.Cache.Driver = "valkey"
+			c.Valkey.Address, c.Valkey.KeyPrefix = "h:1", "p:"
+		},
+		"limiter under lite": func(c *config.Config) {
+			*c = config.Defaults()
+			c.RateLimit.Driver = "valkey"
+			c.Valkey.Address, c.Valkey.KeyPrefix = "h:1", "p:"
+		},
+		"orphan valkey block": func(c *config.Config) {
+			c.Cache.Driver, c.RateLimit.Driver, c.RateLimit.AcceptPerInstance = "memory", "local", true
+		},
+	} {
+		c := valkeyScale()
+		mut(&c)
+		if err := c.Validate(); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	got, err := config.Load("", env(map[string]string{"GOSTACK_PROFILE": "scale", "GOSTACK_DATABASE_DRIVER": "postgres",
+		"GOSTACK_DATABASE_DSN_REF": "env:D", "GOSTACK_QUEUE_DRIVER": "postgres", "GOSTACK_RATE_LIMIT_DRIVER": "valkey",
+		"GOSTACK_CACHE_DRIVER": "valkey", "GOSTACK_VALKEY_ADDRESS": "127.0.0.1:6379", "GOSTACK_VALKEY_KEY_PREFIX": "g:",
+		"GOSTACK_VALKEY_PASSWORD_REF": "env:VK"}), nil)
+	if err != nil || got.Valkey.Address != "127.0.0.1:6379" || got.RateLimit.Driver != "valkey" || got.Cache.Driver != "valkey" {
+		t.Fatalf("env valkey config: %+v %v", got.Valkey, err)
 	}
 }

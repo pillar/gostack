@@ -41,7 +41,7 @@ type Module struct {
 	RequestsPerMinute    int // per-player limit on friend requests, invites and shares (default 30)
 
 	once    sync.Once
-	limiter *ratelimit.Limiter
+	limiter ratelimit.Allower
 }
 
 func (m *Module) init() {
@@ -63,7 +63,7 @@ func (m *Module) init() {
 		if m.InviteWindow <= 0 {
 			m.InviteWindow = 24 * time.Hour
 		}
-		m.limiter = ratelimit.PerMinute(m.RequestsPerMinute, 100_000)
+		m.limiter = m.Kit.NewLimiter("social_requests", m.RequestsPerMinute, ratelimit.FailLocal)
 	})
 }
 

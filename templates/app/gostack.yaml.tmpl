@@ -22,9 +22,15 @@ database:
 #   profile: scale
 #   database: {driver: postgres, dsn_ref: "env:DATABASE_URL", max_open_connections: 10, read_connections: 4}
 #   queue: {driver: postgres}
-#   rate_limit: {accept_per_instance: true}   # limiters are per instance; no global limiter yet
+#   # Global rate limits shared by all instances (Valkey, single primary; docs/adr/0004-valkey.md):
+#   rate_limit: {driver: valkey, timeout: 50ms}
+#   valkey: {address: "10.0.0.5:6379", password_ref: "env:VALKEY_PASSWORD", db: 0, key_prefix: "{{.Name}}:"}
+#   cache: {driver: valkey, timeout: 100ms, max_value_bytes: 1048576}   # optional; memory also works
+#   # Without Valkey, acknowledge that every limit applies per instance instead:
+#   # rate_limit: {driver: local, accept_per_instance: true}
 # The PostgreSQL database must use LC_COLLATE 'C'. Copy existing SQLite data with
 # `migrate to-postgres --from data/app.db --to-dsn-ref env:DATABASE_URL`.
+# App.Cache: bounded in-process LRU (lite) or Valkey (scale). Never business facts.
 cache:
   driver: memory
   max_bytes: 33554432

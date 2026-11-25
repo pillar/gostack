@@ -24,13 +24,16 @@ import (
 	"github.com/pillar/gostack/adapters/postgres"
 	"github.com/pillar/gostack/adapters/sqlite"
 	"github.com/pillar/gostack/adapters/store"
+	"github.com/pillar/gostack/adapters/valkey"
 	"github.com/pillar/gostack/core/config"
 	"github.com/pillar/gostack/core/httpx"
 	"github.com/pillar/gostack/core/observability"
 	"github.com/pillar/gostack/kits/game"
 	"github.com/pillar/gostack/migrations"
+	"github.com/pillar/gostack/modules/cache"
 	"github.com/pillar/gostack/modules/idempotency"
 	"github.com/pillar/gostack/modules/jobs"
+	"github.com/pillar/gostack/modules/ratelimit"
 	"github.com/pillar/gostack/modules/webauth"
 )
 
@@ -58,6 +61,15 @@ type App struct {
 	WebAuth *webauth.Module
 	// Mod holds the optional modules enabled by configuration.
 	Mod Modules
+	// Cache is the configured cache (cache.driver memory or valkey). It must
+	// only hold recomputable, briefly-stale-tolerant data, never business facts;
+	// treat Get errors as misses (cache.GetOrMiss). Nothing built in uses it.
+	Cache cache.Cache
+	// Limits builds rate limiters per rate_limit.driver (local or global);
+	// application routes should use it for their own budgets.
+	Limits ratelimit.Factory
+	// Valkey is the shared connection when a valkey driver is configured (else nil).
+	Valkey *valkey.Client
 	// LogLevel, when set (serve does), is retuned by log.level on reload.
 	LogLevel *slog.LevelVar
 
@@ -178,8 +190,13 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 	a.Jobs = &jobs.Queue{DB: a.DB}
+	if err := a.initValkey(ctx, cfg); err != nil {
+		a.Close()
+		return nil, err
+	}
 	if cfg.Auth.Web.Enabled {
-		a.WebAuth = &webauth.Module{DB: a.DB, Cfg: cfg.Auth.Web, Secure: cfg.Environment == "production", ClientIP: ip, Log: log}
+		a.WebAuth = &webauth.Module{DB: a.DB, Cfg: cfg.Auth.Web, Secure: cfg.Environment == "production", ClientIP: ip, Log: log,
+			Limits: a.Limits}
 		a.WebAuth.Init()
 		a.OnReload(func(_, n config.Config) {
 			a.WebAuth.SetRates(n.Auth.Web.IPRatePerMinute, n.Auth.Web.AccountRatePerMinute)
@@ -195,7 +212,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger) (*App, error)
 			platforms["wechat"] = &game.WeChatVerifier{Apps: p.Apps, Endpoint: p.Endpoint}
 		}
 		a.Game = &game.Kit{DB: a.DB, Analytics: game.NewAnalytics(a.Analytics, cfg.Game.AnalyticsBuffer, log),
-			Cfg: cfg.Game, ClientIP: ip, Platforms: platforms, Metrics: a.Metrics, Log: log}
+			Cfg: cfg.Game, ClientIP: ip, Platforms: platforms, Metrics: a.Metrics, Log: log, Limits: a.Limits}
 		a.Game.Init()
 		a.OnReload(func(_, n config.Config) { a.Game.SetRates(n.Game.AuthRatePerMinute, n.Game.ScoreRatePerMinute) })
 	}
@@ -260,6 +277,9 @@ func (a *App) Close() error {
 	}
 	if a.DB != nil {
 		errs = append(errs, a.DB.Close())
+	}
+	if a.Valkey != nil {
+		errs = append(errs, a.Valkey.Close())
 	}
 	return errors.Join(errs...)
 }
