@@ -1,6 +1,6 @@
 {
   "name": "@pillar/gostack-game-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "GoStack GameKit TypeScript SDK (engine-agnostic core with browser and WeChat adapters)",
   "type": "module",
   "license": "MIT",
