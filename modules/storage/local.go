@@ -78,6 +78,8 @@ type localMeta struct {
 	Size        int64  `json:"size"`
 	ContentType string `json:"content_type"`
 	SHA256      string `json:"sha256"`
+	// CacheControl is optional so objects written before it existed still read.
+	CacheControl string `json:"cache_control,omitempty"`
 }
 
 func (l *Local) path(key string) string {
@@ -87,12 +89,22 @@ func (l *Local) path(key string) string {
 }
 
 // Put writes atomically; size -1 means unknown (still bounded by MaxObjectBytes).
-func (l *Local) Put(ctx context.Context, key string, r io.Reader, size int64, contentType string) (err error) {
+func (l *Local) Put(ctx context.Context, key string, r io.Reader, size int64, contentType string) error {
+	return l.PutObject(ctx, key, r, size, PutOptions{ContentType: contentType})
+}
+
+// PutObject is Put with options. The Cache-Control is stored in the metadata
+// trailer and reported by Get/Stat; Handler still serves presigned downloads
+// with "private, no-store" (they are bearer capabilities, not CDN objects).
+func (l *Local) PutObject(ctx context.Context, key string, r io.Reader, size int64, o PutOptions) (err error) {
 	if err := ValidKey(key); err != nil {
 		return err
 	}
-	ct, err := validContentType(contentType)
+	ct, err := validContentType(o.ContentType)
 	if err != nil {
+		return err
+	}
+	if err := validCacheControl(o.CacheControl); err != nil {
 		return err
 	}
 	if size > l.c.MaxObjectBytes {
@@ -116,7 +128,7 @@ func (l *Local) Put(ctx context.Context, key string, r io.Reader, size int64, co
 	if err != nil {
 		return err
 	}
-	meta, err := json.Marshal(localMeta{Key: key, Size: n, ContentType: ct, SHA256: hex.EncodeToString(h.Sum(nil))})
+	meta, err := json.Marshal(localMeta{Key: key, Size: n, ContentType: ct, SHA256: hex.EncodeToString(h.Sum(nil)), CacheControl: o.CacheControl})
 	if err != nil {
 		return err
 	}
@@ -182,7 +194,34 @@ func (l *Local) Get(ctx context.Context, key string) (io.ReadCloser, Info, error
 	}
 	ctx, cancel := withTimeout(ctx, l.c.Timeout)
 	body := fileBody{Reader: ctxReader{ctx, io.NewSectionReader(f, 0, m.Size)}, f: f}
-	return cancelOnClose{body, cancel}, Info{Key: key, Size: m.Size, ContentType: m.ContentType, ETag: `"` + m.SHA256 + `"`}, nil
+	return cancelOnClose{body, cancel}, m.info(), nil
+}
+
+func (m localMeta) info() Info {
+	return Info{Key: m.Key, Size: m.Size, ContentType: m.ContentType, ETag: `"` + m.SHA256 + `"`, CacheControl: m.CacheControl}
+}
+
+// Stat reads an object's metadata trailer.
+func (l *Local) Stat(_ context.Context, key string) (Info, error) {
+	if err := ValidKey(key); err != nil {
+		return Info{}, err
+	}
+	f, err := os.Open(l.path(key))
+	if errors.Is(err, fs.ErrNotExist) {
+		return Info{}, ErrNotFound
+	}
+	if err != nil {
+		return Info{}, err
+	}
+	defer f.Close()
+	m, err := readTrailer(f)
+	if err != nil {
+		return Info{}, err
+	}
+	if m.Key != key {
+		return Info{}, fmt.Errorf("storage: object file for %q holds key %q", key, m.Key)
+	}
+	return m.info(), nil
 }
 
 func readTrailer(f *os.File) (localMeta, error) {
@@ -302,4 +341,8 @@ func (l *Local) Handler() http.Handler {
 	})
 }
 
-var _ Storage = (*Local)(nil)
+var (
+	_ Storage      = (*Local)(nil)
+	_ ObjectPutter = (*Local)(nil)
+	_ Stater       = (*Local)(nil)
+)

@@ -13,6 +13,13 @@ type Storage interface {
 }
 ```
 
+Both adapters also implement two optional interfaces (used by `modules/assets`):
+`ObjectPutter.PutObject(ctx, key, r, size, PutOptions{ContentType, CacheControl})`
+stores a `Cache-Control` with the object (S3: request header, returned on GET/HEAD;
+local: metadata trailer, reported by `Get`/`Stat` but the presign handler still
+sends `private, no-store`), and `Stater.Stat(ctx, key)` returns `Info` without
+the body (S3: HEAD; local: trailer read). `Info.CacheControl` carries the stored value.
+
 Errors: `ErrNotFound`, `ErrTooLarge`, `ErrInvalidKey`, `ErrSizeMismatch`,
 `ErrContentType` (use `errors.Is`); S3 HTTP failures return an error carrying
 status and S3 error code (never credentials).

@@ -154,8 +154,9 @@ func TestVerifierAgainstAWSVectors(t *testing.T) {
 // ---- Fake S3 ----
 
 type fakeObject struct {
-	body        []byte
-	contentType string
+	body         []byte
+	contentType  string
+	cacheControl string
 }
 
 type fakeS3 struct {
@@ -210,9 +211,9 @@ func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer f.mu.Unlock()
 	switch r.Method {
 	case http.MethodPut:
-		f.objects[key] = fakeObject{body, r.Header.Get("Content-Type")}
+		f.objects[key] = fakeObject{body, r.Header.Get("Content-Type"), r.Header.Get("Cache-Control")}
 		w.Header().Set("ETag", `"`+vHash(body)[:32]+`"`)
-	case http.MethodGet:
+	case http.MethodGet, http.MethodHead:
 		o, ok := f.objects[key]
 		if !ok {
 			f.fail(w, 404, "NoSuchKey")
@@ -221,7 +222,12 @@ func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", o.contentType)
 		w.Header().Set("ETag", `"`+vHash(o.body)[:32]+`"`)
 		w.Header().Set("Content-Length", strconv.Itoa(len(o.body)))
-		w.Write(o.body)
+		if o.cacheControl != "" {
+			w.Header().Set("Cache-Control", o.cacheControl)
+		}
+		if r.Method == http.MethodGet {
+			w.Write(o.body)
+		}
 	case http.MethodDelete:
 		delete(f.objects, key)
 		w.WriteHeader(204)
@@ -405,6 +411,32 @@ func TestS3ConfigValidation(t *testing.T) {
 		mut(&c)
 		if _, err := NewS3(c); err == nil {
 			t.Errorf("accepted %+v", c)
+		}
+	}
+}
+
+// PutObject stores Cache-Control; Stat (HEAD) reports size and metadata
+// without a body and maps 404 to ErrNotFound.
+func TestS3PutObjectCacheControlAndStat(t *testing.T) {
+	for _, sign := range []bool{false, true} {
+		s, _, _ := newFakeS3(t, true, sign, "")
+		ctx := context.Background()
+		cc := "public, max-age=31536000, immutable"
+		if err := s.PutObject(ctx, "a/app.js", strings.NewReader("console.log(1)"), 14, PutOptions{ContentType: "text/javascript", CacheControl: cc}); err != nil {
+			t.Fatal(err)
+		}
+		info, err := s.Stat(ctx, "a/app.js")
+		if err != nil || info.Size != 14 || info.CacheControl != cc || info.ContentType != "text/javascript" {
+			t.Fatalf("stat %+v %v", info, err)
+		}
+		if _, got := readAll(t, s, "a/app.js"); got.CacheControl != cc {
+			t.Fatalf("get cache control %q", got.CacheControl)
+		}
+		if _, err := s.Stat(ctx, "missing"); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("stat missing: %v", err)
+		}
+		if err := s.PutObject(ctx, "k", strings.NewReader("x"), 1, PutOptions{CacheControl: "bad\nvalue\x01"}); err == nil {
+			t.Fatal("control characters in cache control accepted")
 		}
 	}
 }

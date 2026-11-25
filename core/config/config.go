@@ -193,6 +193,7 @@ type GameConfig struct {
 	Commerce   CommerceConfig   `yaml:"commerce" json:"commerce"`
 	Realtime   RealtimeConfig   `yaml:"realtime" json:"realtime"`
 	Settlement SettlementConfig `yaml:"settlement" json:"settlement"`
+	Assets     AssetsConfig     `yaml:"assets" json:"assets"`
 }
 
 type PlatformConfig struct {

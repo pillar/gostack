@@ -11,7 +11,7 @@ import (
 // Optional modules. Zero values mean "use the module's documented default".
 
 // GameKit feature packages that can be listed in game.modules.
-var implementedGameModules = []string{"ops", "experiments", "social", "match", "commerce", "realtime"}
+var implementedGameModules = []string{"ops", "experiments", "social", "match", "commerce", "realtime", "assets"}
 
 type OpsConfig struct {
 	RedeemPerPlayerPerMinute int `yaml:"redeem_per_player_per_minute" json:"redeem_per_player_per_minute"`
@@ -91,6 +91,21 @@ type RealtimeConfig struct {
 type SettlementConfig struct {
 	// Interval between scheduling passes; 0 disables automatic scheduling (admin/CLI still work).
 	Interval time.Duration `yaml:"interval" json:"interval"`
+}
+
+// AssetsConfig configures the static asset release API (game module "assets",
+// modules/assets). Releases are published with `gostack assets publish`.
+type AssetsConfig struct {
+	// PublicBaseURL is the CDN/bucket URL that serves object keys
+	// (e.g. https://cdn.example.com/); when set, manifests carry absolute URLs
+	// and /assets/entry redirects to it. Empty: no URLs, entry redirects to a
+	// presigned storage URL.
+	PublicBaseURL string `yaml:"public_base_url" json:"public_base_url"`
+	// ManifestMaxAge is the Cache-Control max-age of /assets/manifest and
+	// /assets/entry (default 60s).
+	ManifestMaxAge time.Duration `yaml:"manifest_max_age" json:"manifest_max_age"`
+	// EntryURLTTL is the presigned entry URL lifetime without PublicBaseURL (default 10m, max 7d).
+	EntryURLTTL time.Duration `yaml:"entry_url_ttl" json:"entry_url_ttl"`
 }
 
 type BillingConfig struct {
@@ -218,6 +233,22 @@ func (c Config) validateModules() []error {
 	}
 	if c.Environment == "production" && cm.AllowUnboundTransactions {
 		add("production: game.commerce.allow_unbound_transactions weakens cross-player replay protection; not allowed")
+	}
+
+	ac := c.Game.Assets
+	if c.HasGameModule("assets") && c.Storage.Driver == "" {
+		add("game.modules: assets requires storage.driver (local or s3)")
+	}
+	if ac.PublicBaseURL != "" {
+		u, err := url.Parse(ac.PublicBaseURL)
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
+			add("game.assets.public_base_url must be an absolute http(s) URL without query or fragment")
+		} else if c.Environment == "production" && u.Scheme != "https" {
+			add("production: game.assets.public_base_url must use https")
+		}
+	}
+	if ac.ManifestMaxAge < 0 || ac.EntryURLTTL < 0 || ac.EntryURLTTL > 7*24*time.Hour {
+		add("game.assets.manifest_max_age must be non-negative and entry_url_ttl within 0..168h")
 	}
 
 	st := c.Storage

@@ -124,11 +124,20 @@ func (s *S3) do(ctx context.Context, method, key string, body io.Reader, size in
 // uploads are first spooled to a temp file (bounded by MaxObjectBytes), never
 // buffered in memory.
 func (s *S3) Put(ctx context.Context, key string, r io.Reader, size int64, contentType string) error {
+	return s.PutObject(ctx, key, r, size, PutOptions{ContentType: contentType})
+}
+
+// PutObject is Put with options; CacheControl is sent as the object's
+// Cache-Control header (stored by S3/R2/MinIO and returned on GET).
+func (s *S3) PutObject(ctx context.Context, key string, r io.Reader, size int64, o PutOptions) error {
 	if err := ValidKey(key); err != nil {
 		return err
 	}
-	ct, err := validContentType(contentType)
+	ct, err := validContentType(o.ContentType)
 	if err != nil {
+		return err
+	}
+	if err := validCacheControl(o.CacheControl); err != nil {
 		return err
 	}
 	if size > s.c.MaxObjectBytes {
@@ -158,7 +167,11 @@ func (s *S3) Put(ctx context.Context, key string, r io.Reader, size int64, conte
 			payload = hex.EncodeToString(h.Sum(nil))
 		}
 	}
-	resp, err := s.do(ctx, http.MethodPut, key, body, size, payload, http.Header{"Content-Type": {ct}})
+	hdr := http.Header{"Content-Type": {ct}}
+	if o.CacheControl != "" {
+		hdr.Set("Cache-Control", o.CacheControl)
+	}
+	resp, err := s.do(ctx, http.MethodPut, key, body, size, payload, hdr)
 	if err != nil {
 		var se error
 		for _, e := range []error{ErrTooLarge, ErrSizeMismatch} {
@@ -198,8 +211,33 @@ func (s *S3) Get(ctx context.Context, key string) (io.ReadCloser, Info, error) {
 		}
 		return nil, Info{}, responseError("GET", key, resp)
 	}
-	info := Info{Key: key, Size: resp.ContentLength, ContentType: resp.Header.Get("Content-Type"), ETag: resp.Header.Get("ETag")}
-	return cancelOnClose{resp.Body, cancel}, info, nil
+	return cancelOnClose{resp.Body, cancel}, headerInfo(key, resp), nil
+}
+
+func headerInfo(key string, resp *http.Response) Info {
+	return Info{Key: key, Size: resp.ContentLength, ContentType: resp.Header.Get("Content-Type"),
+		ETag: resp.Header.Get("ETag"), CacheControl: resp.Header.Get("Cache-Control")}
+}
+
+// Stat issues a HEAD request.
+func (s *S3) Stat(ctx context.Context, key string) (Info, error) {
+	if err := ValidKey(key); err != nil {
+		return Info{}, err
+	}
+	ctx, cancel := withTimeout(ctx, s.c.Timeout)
+	defer cancel()
+	resp, err := s.do(ctx, http.MethodHead, key, nil, 0, EmptySHA256, nil)
+	if err != nil {
+		return Info{}, err
+	}
+	defer resp.Body.Close()
+	switch {
+	case resp.StatusCode == http.StatusNotFound:
+		return Info{}, ErrNotFound
+	case resp.StatusCode != http.StatusOK:
+		return Info{}, &s3Error{Op: "HEAD", Key: key, Status: resp.StatusCode} // HEAD responses carry no error body
+	}
+	return headerInfo(key, resp), nil
 }
 
 // Delete removes key (S3 reports success for missing keys too).
@@ -231,4 +269,8 @@ func (s *S3) Presign(_ context.Context, method, key string, ttl time.Duration) (
 	return s.signer.Presign(method, s.objectURL(key), s.c.Now(), ttl).String(), nil
 }
 
-var _ Storage = (*S3)(nil)
+var (
+	_ Storage      = (*S3)(nil)
+	_ ObjectPutter = (*S3)(nil)
+	_ Stater       = (*S3)(nil)
+)
