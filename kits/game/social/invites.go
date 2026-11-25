@@ -32,7 +32,7 @@ func (m *Module) createInvite(w http.ResponseWriter, r *http.Request) error {
 		}
 		for i := 0; i < 10; i++ {
 			code := randomCode(8)
-			res, err := c.tx.ExecContext(c.ctx, `INSERT OR IGNORE INTO invite_codes(game_id,code,inviter_id,created_at) VALUES(?,?,?,?)`, c.gid, code, c.pid, c.now)
+			res, err := c.tx.ExecContext(c.ctx, `INSERT INTO invite_codes(game_id,code,inviter_id,created_at) VALUES(?,?,?,?) ON CONFLICT DO NOTHING`, c.gid, code, c.pid, c.now)
 			if err != nil {
 				return idempotency.Result{}, err
 			}
@@ -214,7 +214,7 @@ func (m *Module) openShare(w http.ResponseWriter, r *http.Request) error {
 		} else if bl {
 			return idempotency.Result{}, httpx.NotFound("share not found")
 		}
-		res, err := c.tx.ExecContext(c.ctx, `INSERT OR IGNORE INTO share_opens(game_id,share_id,opener_id,created_at) VALUES(?,?,?,?)`, c.gid, id, c.pid, c.now)
+		res, err := c.tx.ExecContext(c.ctx, `INSERT INTO share_opens(game_id,share_id,opener_id,created_at) VALUES(?,?,?,?) ON CONFLICT DO NOTHING`, c.gid, id, c.pid, c.now)
 		if err != nil {
 			return idempotency.Result{}, err
 		}

@@ -21,7 +21,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/auth"
 	"github.com/pillar/gostack/core/httpx"
 	"github.com/pillar/gostack/core/observability"
@@ -104,7 +104,7 @@ type Handler func(ctx context.Context, gameID, playerID string, msg Message) err
 // Module wires the gateway into GameKit.
 type Module struct {
 	Kit       *game.Kit
-	DB        *sqlite.DB
+	DB        *store.DB
 	Now       func() time.Time
 	Metrics   *observability.Registry
 	Log       *slog.Logger

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -20,7 +21,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pillar/gostack/adapters/postgres"
 	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/config"
 	"github.com/pillar/gostack/core/httpx"
 	"github.com/pillar/gostack/core/observability"
@@ -46,8 +49,8 @@ type App struct {
 	// never change at runtime; read hot keys through Config().
 	Cfg       config.Config
 	Log       *slog.Logger
-	DB        *sqlite.DB
-	Analytics *sqlite.DB
+	DB        *store.DB
+	Analytics *store.DB
 	Jobs      *jobs.Queue
 	Metrics   *observability.Registry
 	Game      *game.Kit
@@ -76,19 +79,27 @@ func storageOptions(d config.DatabaseConfig, path string, lock bool) sqlite.Opti
 }
 
 // OpenDB opens and migrates the main database following the PRD init order:
-// instance lock → write connection → migrate → read pool.
-func OpenDB(ctx context.Context, cfg config.Config, lock bool) (*sqlite.DB, error) {
+// instance lock → write connection → migrate → read pool (SQLite), or
+// connect → migrate under an advisory lock (PostgreSQL; lock is ignored).
+func OpenDB(ctx context.Context, cfg config.Config, lock bool) (*store.DB, error) {
+	if cfg.Database.Driver == store.Postgres {
+		return openPostgres(ctx, cfg.Database, cfg.Database.DSNRef, "", true)
+	}
 	o := storageOptions(cfg.Database, cfg.Database.Path, lock)
+	return openSQLite(ctx, o, migrations.SQLite, "sqlite")
+}
+
+func openSQLite(ctx context.Context, o sqlite.Options, fsys fs.FS, dir string) (*store.DB, error) {
 	db, err := sqlite.Open(o)
 	if err != nil {
 		return nil, err
 	}
-	ms, err := sqlite.LoadMigrations(migrations.SQLite, "sqlite")
+	ms, err := store.LoadMigrations(fsys, dir)
 	if err == nil {
 		_, err = db.Migrate(ctx, ms)
 	}
 	if err == nil {
-		err = db.OpenReaders(o)
+		err = sqlite.OpenReaders(db, o)
 	}
 	if err != nil {
 		db.Close()
@@ -97,27 +108,62 @@ func OpenDB(ctx context.Context, cfg config.Config, lock bool) (*sqlite.DB, erro
 	return db, nil
 }
 
-func openAnalytics(ctx context.Context, cfg config.Config) (*sqlite.DB, error) {
-	d := cfg.Database
-	d.Synchronous = "NORMAL" // P2 data: loss of the last transactions on power failure is acceptable
-	d.ReadConnections = 1
-	o := storageOptions(d, cfg.Database.AnalyticsPath, true)
-	db, err := sqlite.Open(o)
+// AnalyticsSchema is the PostgreSQL schema holding the analytics tables.
+const AnalyticsSchema = "gostack_analytics"
+
+// postgresOptions resolves the DSN secret reference and builds adapter options.
+func postgresOptions(d config.DatabaseConfig, dsnRef, schema string) (postgres.Options, error) {
+	dsn, err := config.ResolveSecret(dsnRef)
+	if err != nil {
+		return postgres.Options{}, fmt.Errorf("database dsn: %w", err)
+	}
+	return postgres.Options{DSN: dsn, MaxOpenConns: d.MaxOpenConnections, ReadConns: d.ReadConnections,
+		WriteQueue: d.WriteQueue, Schema: schema}, nil
+}
+
+// openPostgres connects and, when migrate is set, applies the PostgreSQL
+// migrations (main, or analytics when schema is AnalyticsSchema).
+func openPostgres(ctx context.Context, d config.DatabaseConfig, dsnRef, schema string, migrate bool) (*store.DB, error) {
+	o, err := postgresOptions(d, dsnRef, schema)
 	if err != nil {
 		return nil, err
 	}
-	ms, err := sqlite.LoadMigrations(migrations.Analytics, "analytics")
-	if err == nil {
-		_, err = db.Migrate(ctx, ms)
+	if schema == AnalyticsSchema {
+		o.MaxOpenConns, o.ReadConns = 2, 1
 	}
-	if err == nil {
-		err = db.OpenReaders(o)
-	}
+	db, err := postgres.Open(ctx, o)
 	if err != nil {
-		db.Close()
 		return nil, err
+	}
+	if migrate {
+		fsys, dir := migrations.Main(store.Postgres)
+		if schema == AnalyticsSchema {
+			fsys, dir = migrations.AnalyticsFor(store.Postgres)
+		}
+		ms, err := store.LoadMigrations(fsys, dir)
+		if err == nil {
+			_, err = db.Migrate(ctx, ms)
+		}
+		if err != nil {
+			db.Close()
+			return nil, err
+		}
 	}
 	return db, nil
+}
+
+func openAnalytics(ctx context.Context, cfg config.Config) (*store.DB, error) {
+	d := cfg.Database
+	if d.Driver == store.Postgres {
+		ref := d.AnalyticsDSNRef
+		if ref == "" {
+			ref = d.DSNRef
+		}
+		return openPostgres(ctx, d, ref, AnalyticsSchema, true)
+	}
+	d.Synchronous = "NORMAL" // P2 data: loss of the last transactions on power failure is acceptable
+	d.ReadConnections = 1
+	return openSQLite(ctx, storageOptions(d, cfg.Database.AnalyticsPath, true), migrations.Analytics, "analytics")
 }
 
 // New opens storage and builds the application. Caller must Close it.

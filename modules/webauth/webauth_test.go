@@ -13,10 +13,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pillar/gostack/adapters/pgtest"
 	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/config"
 	"github.com/pillar/gostack/core/httpx"
-	"github.com/pillar/gostack/migrations"
 	"github.com/pillar/gostack/modules/webauth"
 )
 
@@ -24,7 +25,7 @@ type env struct {
 	t   *testing.T
 	srv *httptest.Server
 	m   *webauth.Module
-	db  *sqlite.DB
+	db  *store.DB
 	now atomic.Int64 // unix ms
 }
 
@@ -32,18 +33,7 @@ func setup(t *testing.T, mut func(*webauth.Module)) *env {
 	t.Helper()
 	o := sqlite.Options{Path: filepath.Join(t.TempDir(), "app.db"), ReadConnections: 2, Synchronous: "FULL",
 		BusyTimeout: time.Second, WALAutocheckpoint: 1000, WriteQueue: 64}
-	db, err := sqlite.Open(o)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ms, _ := sqlite.LoadMigrations(migrations.SQLite, "sqlite")
-	if _, err := db.Migrate(context.Background(), ms); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.OpenReaders(o); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { db.Close() })
+	db := pgtest.Open(t, o)
 	e := &env{t: t, db: db}
 	e.now.Store(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).UnixMilli())
 	cfg := config.Defaults().Auth.Web

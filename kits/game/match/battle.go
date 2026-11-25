@@ -151,7 +151,7 @@ func (m *Module) claim(w http.ResponseWriter, r *http.Request, key auth.APIKey) 
 				return idempotency.Result{}, err
 			}
 			var epoch int64
-			if err := tx.QueryRowContext(ctx, `INSERT INTO match_epochs(game_id,epoch) VALUES(?,1) ON CONFLICT(game_id) DO UPDATE SET epoch=epoch+1 RETURNING epoch`, gid).Scan(&epoch); err != nil {
+			if err := tx.QueryRowContext(ctx, `INSERT INTO match_epochs(game_id,epoch) VALUES(?,1) ON CONFLICT(game_id) DO UPDATE SET epoch=match_epochs.epoch+1 RETURNING epoch`, gid).Scan(&epoch); err != nil {
 				return idempotency.Result{}, err
 			}
 			lease := now + m.LeaseTTL.Milliseconds()

@@ -14,7 +14,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/observability"
 )
 
@@ -64,7 +64,7 @@ func (st *stream) dropFront() {
 // Hub owns all realtime connections and player streams of this process.
 type Hub struct {
 	opts      Options
-	db        *sqlite.DB
+	db        *store.DB
 	now       func() time.Time
 	metrics   *observability.Registry
 	log       *slog.Logger
@@ -85,7 +85,7 @@ type Hub struct {
 	wg      sync.WaitGroup
 }
 
-func newHub(o Options, db *sqlite.DB, now func() time.Time, m *observability.Registry, log *slog.Logger, h Handler) *Hub {
+func newHub(o Options, db *store.DB, now func() time.Time, m *observability.Registry, log *slog.Logger, h Handler) *Hub {
 	var b [6]byte
 	_, _ = rand.Read(b[:])
 	hub := &Hub{opts: o, db: db, now: now, metrics: m, log: log, onMessage: h, epoch: hex.EncodeToString(b[:]),

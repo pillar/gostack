@@ -16,7 +16,7 @@ import (
 	"time"
 	_ "time/tzdata" // IANA zones must not depend on the host image
 
-	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/httpx"
 	"github.com/pillar/gostack/kits/game"
 	"github.com/pillar/gostack/modules/ratelimit"
@@ -25,7 +25,7 @@ import (
 // Module wires the ops feature package.
 type Module struct {
 	Kit *game.Kit
-	DB  *sqlite.DB
+	DB  *store.DB
 	Now func() time.Time // defaults to time.Now
 	// Redeem attempts per minute per player and per client IP (defaults 10 / 60).
 	RedeemPerPlayerPerMinute int

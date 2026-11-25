@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pillar/gostack/adapters/pgtest"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/app"
 	"github.com/pillar/gostack/core/auth"
 	"github.com/pillar/gostack/core/config"
@@ -54,6 +56,7 @@ func newEnv(t *testing.T, mutate ...func(*config.Config)) *env {
 	for _, m := range mutate {
 		m(&cfg)
 	}
+	pgtest.UseScale(t, &cfg) // PostgreSQL when GOSTACK_TEST_POSTGRES_DSN is set
 	if err := cfg.Validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -476,8 +479,7 @@ func TestEventsBatch(t *testing.T) {
 	if n != 2 {
 		t.Fatalf("stored events=%d want 2 (dedupe by event_id)", n)
 	}
-	var mainEvents int
-	if err := e.a.DB.Read.QueryRow(`SELECT count(*) FROM sqlite_master WHERE name='analytics_events'`).Scan(&mainEvents); err != nil || mainEvents != 0 {
+	if inMain, err := store.TableExists(context.Background(), e.a.DB.Read, e.a.DB.Dialect, "analytics_events"); err != nil || inMain {
 		t.Fatal("analytics table must not live in the main database")
 	}
 }

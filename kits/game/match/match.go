@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/auth"
 	"github.com/pillar/gostack/kits/game"
 	"github.com/pillar/gostack/modules/idempotency"
@@ -28,7 +28,7 @@ import (
 // Module serves the matchmaking API. Zero options take the documented defaults.
 type Module struct {
 	Kit *game.Kit
-	DB  *sqlite.DB
+	DB  *store.DB
 	Now func() time.Time
 	Log *slog.Logger
 

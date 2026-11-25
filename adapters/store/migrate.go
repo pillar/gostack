@@ -1,4 +1,4 @@
-package sqlite
+package store
 
 import (
 	"context"
@@ -63,22 +63,59 @@ func LoadMigrations(fsys fs.FS, dir string) ([]Migration, error) {
 	return out, nil
 }
 
-const migrationsTable = `CREATE TABLE IF NOT EXISTS schema_migrations (
+var migrationsTable = map[string]string{
+	SQLite: `CREATE TABLE IF NOT EXISTS schema_migrations (
   version INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
   checksum TEXT NOT NULL,
   applied_at INTEGER NOT NULL
-) STRICT`
+) STRICT`,
+	Postgres: `CREATE TABLE IF NOT EXISTS schema_migrations (
+  version BIGINT PRIMARY KEY,
+  name TEXT NOT NULL,
+  checksum TEXT NOT NULL,
+  applied_at BIGINT NOT NULL
+)`,
+}
 
-// MigrationStatusOf compares embedded migrations with the database.
-func MigrationStatusOf(ctx context.Context, q *sql.DB, ms []Migration) ([]MigrationStatus, error) {
+// tableExistsSQL counts tables named ? (in the current schema on PostgreSQL).
+var tableExistsSQL = map[string]string{
+	SQLite:   `SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?`,
+	Postgres: `SELECT count(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name=?`,
+}
+
+type querier interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+// TableExists reports whether table exists (in the current schema on PostgreSQL).
+func TableExists(ctx context.Context, q querier, dialect, table string) (bool, error) {
+	s, ok := tableExistsSQL[dialect]
+	if !ok {
+		return false, fmt.Errorf("store: unknown dialect %q", dialect)
+	}
+	var n int
+	err := q.QueryRowContext(ctx, s, table).Scan(&n)
+	return n > 0, err
+}
+
+// MigrationStatus compares embedded migrations with this database.
+func (db *DB) MigrationStatus(ctx context.Context, ms []Migration) ([]MigrationStatus, error) {
+	return MigrationStatusOf(ctx, db.Write, db.Dialect, ms)
+}
+
+// MigrationStatusOf compares embedded migrations with the database q of the
+// given dialect.
+func MigrationStatusOf(ctx context.Context, q querier, dialect string, ms []Migration) ([]MigrationStatus, error) {
 	applied := map[int][2]string{}
 	appliedAt := map[int]int64{}
-	var exists int
-	if err := q.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE type='table' AND name='schema_migrations'`).Scan(&exists); err != nil {
+	exists, err := TableExists(ctx, q, dialect, "schema_migrations")
+	if err != nil {
 		return nil, err
 	}
-	if exists == 1 {
+	if exists {
 		rows, err := q.QueryContext(ctx, `SELECT version, name, checksum, applied_at FROM schema_migrations`)
 		if err != nil {
 			return nil, err
@@ -115,14 +152,48 @@ func MigrationStatusOf(ctx context.Context, q *sql.DB, ms []Migration) ([]Migrat
 	return out, nil
 }
 
+// migrateLockKey is the PostgreSQL advisory lock key held while migrating.
+const migrateLockKey int64 = 0x67736d696772 // "gsmigr"
+
 // Migrate applies pending migrations, each in its own transaction. It refuses to
 // run when an applied migration's checksum changed or the database has versions
-// unknown to this binary.
+// unknown to this binary. On PostgreSQL the run holds a session advisory lock so
+// instances starting together migrate one at a time.
 func (db *DB) Migrate(ctx context.Context, ms []Migration) (applied []int, err error) {
-	if _, err := db.Write.ExecContext(ctx, migrationsTable); err != nil {
+	if db.Dialect != Postgres {
+		return db.migrate(ctx, ms, db.Write, func(fn func(*sql.Tx) error) error { return db.WriteTx(ctx, fn) })
+	}
+	c, err := db.Write.Conn(ctx)
+	if err != nil {
 		return nil, err
 	}
-	st, err := MigrationStatusOf(ctx, db.Write, ms)
+	defer c.Close()
+	if _, err := c.ExecContext(ctx, `SELECT pg_advisory_lock(?)`, migrateLockKey); err != nil {
+		return nil, err
+	}
+	defer c.ExecContext(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock(?)`, migrateLockKey)
+	return db.migrate(ctx, ms, c, func(fn func(*sql.Tx) error) error {
+		tx, err := c.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		if err := fn(tx); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		return tx.Commit()
+	})
+}
+
+func (db *DB) migrate(ctx context.Context, ms []Migration, q querier, inTx func(func(*sql.Tx) error) error) (applied []int, err error) {
+	ddl, ok := migrationsTable[db.Dialect]
+	if !ok {
+		return nil, fmt.Errorf("store: unknown dialect %q", db.Dialect)
+	}
+	if _, err := q.ExecContext(ctx, ddl); err != nil {
+		return nil, err
+	}
+	st, err := MigrationStatusOf(ctx, q, db.Dialect, ms)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +210,7 @@ func (db *DB) Migrate(ctx context.Context, ms []Migration) (applied []int, err e
 		if !pending[m.Version] {
 			continue
 		}
-		err := db.WriteTx(ctx, func(tx *sql.Tx) error {
+		err := inTx(func(tx *sql.Tx) error {
 			if _, err := tx.ExecContext(ctx, m.SQL); err != nil {
 				return fmt.Errorf("apply %s: %w", m.Name, err)
 			}

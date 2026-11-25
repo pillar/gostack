@@ -20,19 +20,30 @@ import (
 
 // Config is an immutable snapshot after Load; callers must not mutate it.
 type Config struct {
-	Profile     string         `yaml:"profile" json:"profile"`
-	Environment string         `yaml:"environment" json:"environment"` // development | production
-	HTTP        HTTPConfig     `yaml:"http" json:"http"`
-	Database    DatabaseConfig `yaml:"database" json:"database"`
-	Cache       CacheConfig    `yaml:"cache" json:"cache"`
-	Queue       QueueConfig    `yaml:"queue" json:"queue"`
-	Backup      BackupConfig   `yaml:"backup" json:"backup"`
-	Log         LogConfig      `yaml:"log" json:"log"`
-	Kits        []string       `yaml:"kits" json:"kits"`
-	Game        GameConfig     `yaml:"game" json:"game"`
-	Auth        AuthConfig     `yaml:"auth" json:"auth"`
-	Billing     BillingConfig  `yaml:"billing" json:"billing"`
-	Storage     StorageConfig  `yaml:"storage" json:"storage"`
+	Profile     string          `yaml:"profile" json:"profile"`
+	Environment string          `yaml:"environment" json:"environment"` // development | production
+	HTTP        HTTPConfig      `yaml:"http" json:"http"`
+	Database    DatabaseConfig  `yaml:"database" json:"database"`
+	Cache       CacheConfig     `yaml:"cache" json:"cache"`
+	Queue       QueueConfig     `yaml:"queue" json:"queue"`
+	Backup      BackupConfig    `yaml:"backup" json:"backup"`
+	Log         LogConfig       `yaml:"log" json:"log"`
+	Kits        []string        `yaml:"kits" json:"kits"`
+	Game        GameConfig      `yaml:"game" json:"game"`
+	Auth        AuthConfig      `yaml:"auth" json:"auth"`
+	Billing     BillingConfig   `yaml:"billing" json:"billing"`
+	Storage     StorageConfig   `yaml:"storage" json:"storage"`
+	RateLimit   RateLimitConfig `yaml:"rate_limit" json:"rate_limit"`
+}
+
+// RateLimitConfig describes how request budgets are enforced. Every limiter
+// implemented today (game auth/score, web auth, redeem, social, match) is
+// process-local: with N instances the effective budget is up to N times the
+// configured one. Profile scale (multi-instance) refuses to start until the
+// operator acknowledges that with accept_per_instance: true, so a local
+// limiter is never mistaken for a global one (PRD §3).
+type RateLimitConfig struct {
+	AcceptPerInstance bool `yaml:"accept_per_instance" json:"accept_per_instance"`
 }
 
 // AuthConfig groups optional end-user authentication modules.
@@ -87,6 +98,16 @@ type DatabaseConfig struct {
 	WALAutocheckpoint int `yaml:"wal_autocheckpoint" json:"wal_autocheckpoint"`
 	// WriteQueue bounds how many callers may wait for the single write connection.
 	WriteQueue int `yaml:"write_queue" json:"write_queue"`
+	// DSNRef is the PostgreSQL connection string as a secret reference
+	// (env:NAME or file:/path); profile scale only.
+	DSNRef string `yaml:"dsn_ref" json:"dsn_ref"`
+	// AnalyticsDSNRef is the PostgreSQL connection for analytics (profile
+	// scale). Analytics tables live in the schema gostack_analytics; empty
+	// means the main database (same server, separate schema and pool).
+	AnalyticsDSNRef string `yaml:"analytics_dsn_ref" json:"analytics_dsn_ref"`
+	// MaxOpenConnections bounds the PostgreSQL write pool per instance
+	// (profile scale; read_connections bounds the read pool).
+	MaxOpenConnections int `yaml:"max_open_connections" json:"max_open_connections"`
 	// AcceptNormalSyncRisk must be true to run synchronous=NORMAL in production
 	// (committed transactions may be lost on power failure).
 	AcceptNormalSyncRisk bool `yaml:"accept_normal_sync_risk" json:"accept_normal_sync_risk"`
@@ -284,6 +305,11 @@ func fields(c *Config) map[string]func(string) error {
 		"DATABASE_SYNCHRONOUS":             str(&c.Database.Synchronous),
 		"DATABASE_BUSY_TIMEOUT":            dur(&c.Database.BusyTimeout),
 		"DATABASE_WAL_AUTOCHECKPOINT":      integer(&c.Database.WALAutocheckpoint),
+		"DATABASE_DSN_REF":                 str(&c.Database.DSNRef),
+		"DATABASE_ANALYTICS_DSN_REF":       str(&c.Database.AnalyticsDSNRef),
+		"DATABASE_MAX_OPEN_CONNECTIONS":    integer(&c.Database.MaxOpenConnections),
+		"QUEUE_DRIVER":                     str(&c.Queue.Driver),
+		"RATE_LIMIT_ACCEPT_PER_INSTANCE":   boolean(&c.RateLimit.AcceptPerInstance),
 		"CACHE_MAX_BYTES":                  i64(&c.Cache.MaxBytes),
 		"QUEUE_WORKERS":                    integer(&c.Queue.Workers),
 		"BACKUP_ENABLED":                   boolean(&c.Backup.Enabled),
@@ -309,10 +335,10 @@ func fields(c *Config) map[string]func(string) error {
 
 // Implemented capability matrix. Anything else is rejected rather than pretended.
 var (
-	implementedProfiles = map[string]bool{"lite": true}
-	implementedDB       = map[string]bool{"sqlite": true}
+	implementedProfiles = map[string]bool{"lite": true, "scale": true}
+	implementedDB       = map[string]bool{"sqlite": true, "postgres": true}
 	implementedCache    = map[string]bool{"memory": true}
-	implementedQueue    = map[string]bool{"sqlite": true}
+	implementedQueue    = map[string]bool{"sqlite": true, "postgres": true}
 	implementedBackup   = map[string]bool{"litestream": true}
 	implementedKits     = map[string]bool{"game": true}
 	implementedPlatform = map[string]bool{"wechat": true}
@@ -324,7 +350,7 @@ func (c Config) Validate() error {
 	add := func(format string, a ...any) { errs = append(errs, fmt.Errorf(format, a...)) }
 
 	if !implementedProfiles[c.Profile] {
-		add("profile %q is not implemented (implemented: lite)", c.Profile)
+		add("profile %q is not implemented (implemented: lite, scale)", c.Profile)
 	}
 	if c.Environment != "development" && c.Environment != "production" {
 		add("environment must be development or production")
@@ -354,31 +380,16 @@ func (c Config) Validate() error {
 	if !implementedDB[c.Database.Driver] {
 		add("database.driver %q is not implemented", c.Database.Driver)
 	}
-	if c.Database.Path == "" || c.Database.AnalyticsPath == "" {
-		add("database.path and database.analytics_path are required")
-	}
-	if c.Database.Path == c.Database.AnalyticsPath {
-		add("database.analytics_path must differ from database.path (analytics is isolated from critical writes)")
-	}
-	if c.Database.WriteConnections != 1 {
-		add("database.write_connections must be 1 for sqlite (single writer)")
-	}
 	if c.Database.ReadConnections < 1 || c.Database.ReadConnections > 64 {
 		add("database.read_connections must be within [1,64]")
 	}
-	switch strings.ToUpper(c.Database.Synchronous) {
-	case "FULL", "NORMAL":
-	default:
-		add("database.synchronous must be FULL or NORMAL")
-	}
-	if c.Database.BusyTimeout < 0 || c.Database.CacheSizeKiB < 0 || c.Database.MmapSize < 0 || c.Database.WALAutocheckpoint < 0 {
-		add("database numeric settings must be non-negative")
-	}
-	if c.Database.WALAutocheckpoint == 0 && !(c.Backup.Enabled && c.Backup.Driver == "litestream") {
-		add("database.wal_autocheckpoint=0 is only allowed when litestream backup manages checkpoints")
-	}
 	if c.Database.WriteQueue < 1 {
 		add("database.write_queue must be >= 1")
+	}
+	if c.Database.Driver == "postgres" {
+		errs = append(errs, c.validatePostgres()...)
+	} else {
+		errs = append(errs, c.validateSQLite()...)
 	}
 	if !implementedCache[c.Cache.Driver] {
 		add("cache.driver %q is not implemented", c.Cache.Driver)
@@ -445,10 +456,11 @@ func (c Config) Validate() error {
 		if !strings.HasPrefix(c.HTTP.Listen, "127.0.0.1:") && !strings.HasPrefix(c.HTTP.Listen, "[::1]:") && len(c.HTTP.TrustedProxies) == 0 {
 			add("production: http.listen is public without trusted_proxies; bind loopback or protect the origin explicitly")
 		}
-		if strings.ToUpper(c.Database.Synchronous) != "FULL" && !c.Database.AcceptNormalSyncRisk {
+		if c.Database.Driver == "sqlite" && strings.ToUpper(c.Database.Synchronous) != "FULL" && !c.Database.AcceptNormalSyncRisk {
 			add("production: database.synchronous=NORMAL requires database.accept_normal_sync_risk=true")
 		}
 	}
+	errs = append(errs, c.validateProfile()...)
 	errs = append(errs, c.validateModules()...)
 	return errors.Join(errs...)
 }

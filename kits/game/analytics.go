@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/httpx"
 	"github.com/pillar/gostack/modules/ratelimit"
 )
@@ -19,7 +19,7 @@ import (
 // through a bounded in-memory buffer. When the buffer is full events are dropped
 // and counted; ingestion never touches the main database (G07, G-A06).
 type Analytics struct {
-	DB  *sqlite.DB
+	DB  *store.DB
 	Log *slog.Logger
 
 	ch       chan analyticsRow
@@ -35,7 +35,7 @@ type analyticsRow struct {
 	Properties                                                          []byte
 }
 
-func NewAnalytics(db *sqlite.DB, buffer int, log *slog.Logger) *Analytics {
+func NewAnalytics(db *store.DB, buffer int, log *slog.Logger) *Analytics {
 	return &Analytics{DB: db, Log: log, ch: make(chan analyticsRow, buffer), done: make(chan struct{})}
 }
 
@@ -70,8 +70,8 @@ func (a *Analytics) Run(ctx context.Context, drainTimeout time.Duration) {
 		fctx, cancel := context.WithTimeout(context.WithoutCancel(parent), 10*time.Second)
 		defer cancel()
 		err := a.DB.WriteTx(fctx, func(tx *sql.Tx) error {
-			st, err := tx.PrepareContext(fctx, `INSERT OR IGNORE INTO analytics_events(event_id,game_id,player_id,session_id,event_name,schema_version,platform,client_version,client_time,server_time,properties)
-				VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
+			st, err := tx.PrepareContext(fctx, `INSERT INTO analytics_events(event_id,game_id,player_id,session_id,event_name,schema_version,platform,client_version,client_time,server_time,properties)
+				VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`)
 			if err != nil {
 				return err
 			}

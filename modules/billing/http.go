@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/auth"
 	"github.com/pillar/gostack/core/httpx"
 )
@@ -33,7 +33,7 @@ func (s *Service) Handler(mux *http.ServeMux, keys auth.APIKeys) {
 			}
 			r.Body = http.MaxBytesReader(w, r.Body, maxBody)
 			err = fn(w, r, k.TenantID)
-			if errors.Is(err, sqlite.ErrOverloaded) {
+			if errors.Is(err, store.ErrOverloaded) {
 				return httpx.Overloaded("write queue full")
 			}
 			return err

@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/httpx"
 )
 
@@ -51,7 +51,7 @@ func (k APIKey) Has(scope string) bool { return slices.Contains(k.Scopes, scope)
 
 // APIKeys stores keys in the main database. Lookups always hit the database so
 // revocation takes effect immediately (no cache can mask it).
-type APIKeys struct{ DB *sqlite.DB }
+type APIKeys struct{ DB *store.DB }
 
 const apiKeyPrefix = "gsk_"
 

@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pillar/gostack/adapters/pgtest"
 	"github.com/pillar/gostack/core/config"
 )
 
@@ -25,6 +26,7 @@ func testConfig(t *testing.T) config.Config {
 	c.Database.Path = filepath.Join(dir, "app.db")
 	c.Database.AnalyticsPath = filepath.Join(dir, "analytics.db")
 	c.Kits = []string{"game"}
+	pgtest.UseScale(t, &c) // PostgreSQL when GOSTACK_TEST_POSTGRES_DSN is set
 	return c
 }
 

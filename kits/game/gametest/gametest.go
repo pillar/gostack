@@ -12,9 +12,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/pillar/gostack/adapters/pgtest"
 	"github.com/pillar/gostack/app"
 	"github.com/pillar/gostack/core/auth"
 	"github.com/pillar/gostack/core/config"
@@ -29,6 +31,8 @@ type Options struct {
 	Routes func(mux *http.ServeMux, a *app.App)
 	// Mutate adjusts the application config before start.
 	Mutate func(*config.Config)
+	// SQLite keeps profile lite even when GOSTACK_TEST_POSTGRES_DSN is set.
+	SQLite bool
 }
 
 // Env is a running test server.
@@ -38,6 +42,10 @@ type Env struct {
 	URL string
 	// AdminToken is an admin-scoped API key for tenant "default".
 	AdminToken string
+	// Cfg is the configuration the app runs with.
+	Cfg   config.Config
+	hooks app.Hooks
+	stop  func()
 }
 
 // New starts an Env; it is closed by t.Cleanup.
@@ -52,6 +60,9 @@ func New(t *testing.T, o Options) *Env {
 	cfg.Game.ScoreRatePerMinute = 10000
 	if o.Mutate != nil {
 		o.Mutate(&cfg)
+	}
+	if !o.SQLite {
+		pgtest.UseScale(t, &cfg) // PostgreSQL when GOSTACK_TEST_POSTGRES_DSN is set
 	}
 	if err := cfg.Validate(); err != nil {
 		t.Fatal(err)
@@ -78,18 +89,47 @@ func New(t *testing.T, o Options) *Env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(a.Handler(app.Hooks{Routes: o.Routes}))
-	bg, cancel := context.WithCancel(ctx)
+	return start(t, a, cfg, app.Hooks{Routes: o.Routes}, tok)
+}
+
+// Instance starts another application instance on the same database (profile
+// scale only: SQLite refuses a second instance) with its own HTTP server, as a
+// second process behind a load balancer would run.
+func (e *Env) Instance(t *testing.T) *Env {
+	t.Helper()
+	return Attach(t, e.Cfg, Options{Routes: e.hooks.Routes}, e.AdminToken)
+}
+
+// Attach starts an app with cfg on an existing database (no games or keys are
+// created); adminToken is recorded for requests.
+func Attach(t *testing.T, cfg config.Config, o Options, adminToken string) *Env {
+	t.Helper()
+	a, err := app.New(context.Background(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return start(t, a, cfg, app.Hooks{Routes: o.Routes}, adminToken)
+}
+
+func start(t *testing.T, a *app.App, cfg config.Config, hooks app.Hooks, tok string) *Env {
+	srv := httptest.NewServer(a.Handler(hooks))
+	bg, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { a.Game.Analytics.Run(bg, time.Second); close(done) }()
-	t.Cleanup(func() {
+	e := &Env{T: t, App: a, URL: srv.URL, AdminToken: tok, Cfg: cfg, hooks: hooks}
+	e.stop = sync.OnceFunc(func() {
 		srv.Close()
 		cancel()
-		<-done
+		<-done // analytics flushed
 		a.Close()
 	})
-	return &Env{T: t, App: a, URL: srv.URL, AdminToken: tok}
+	t.Cleanup(e.stop)
+	return e
 }
+
+// Stop shuts the instance down (HTTP server, analytics flush, databases); it is
+// also run at cleanup.
+func (e *Env) Stop() { e.stop() }
 
 // Resp is a decoded HTTP response.
 type Resp struct {

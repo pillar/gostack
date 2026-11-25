@@ -82,7 +82,7 @@ func (m *Module) makeFriends(c *call, a, b string) error {
 		}
 	}
 	for _, pair := range [][2]string{{a, b}, {b, a}} {
-		if _, err := c.tx.ExecContext(c.ctx, `INSERT OR IGNORE INTO friendships(game_id,player_id,friend_id,created_at) VALUES(?,?,?,?)`, c.gid, pair[0], pair[1], c.now); err != nil {
+		if _, err := c.tx.ExecContext(c.ctx, `INSERT INTO friendships(game_id,player_id,friend_id,created_at) VALUES(?,?,?,?) ON CONFLICT DO NOTHING`, c.gid, pair[0], pair[1], c.now); err != nil {
 			return err
 		}
 	}

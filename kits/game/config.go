@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/auth"
 	"github.com/pillar/gostack/core/httpx"
 )
@@ -349,7 +349,7 @@ func (k *Kit) configAt(ctx context.Context, q queryer, gameID string, rev int64)
 }
 
 // CreateGame registers a game (G01). Used by the admin API and CLI.
-func CreateGame(ctx context.Context, db *sqlite.DB, tenant, id, name string, origins []string) error {
+func CreateGame(ctx context.Context, db *store.DB, tenant, id, name string, origins []string) error {
 	if !idPattern.MatchString(id) {
 		return httpx.BadRequest("game_id must match [a-z0-9][a-z0-9_-]{0,31}")
 	}
@@ -366,14 +366,14 @@ func CreateGame(ctx context.Context, db *sqlite.DB, tenant, id, name string, ori
 			id, tenant, name, string(o), now, now)
 		return err
 	})
-	if sqlite.IsUniqueViolation(err) {
+	if store.IsUniqueViolation(err) {
 		return httpx.Conflict("conflict", "game already exists")
 	}
 	return err
 }
 
 // PublishConfig validates and stores doc as the next revision.
-func PublishConfig(ctx context.Context, db *sqlite.DB, gameID string, doc []byte, by, note string) (int64, error) {
+func PublishConfig(ctx context.Context, db *store.DB, gameID string, doc []byte, by, note string) (int64, error) {
 	if _, err := ParseDocument(doc); err != nil {
 		return 0, err
 	}
@@ -397,7 +397,7 @@ func PublishConfig(ctx context.Context, db *sqlite.DB, gameID string, doc []byte
 }
 
 // RollbackConfig republishes an earlier revision's document as a new revision (history stays append-only).
-func RollbackConfig(ctx context.Context, db *sqlite.DB, gameID string, to int64, by string) (int64, error) {
+func RollbackConfig(ctx context.Context, db *store.DB, gameID string, to int64, by string) (int64, error) {
 	var raw string
 	err := db.Write.QueryRowContext(ctx, `SELECT document FROM config_revisions WHERE game_id=? AND revision=?`, gameID, to).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -478,7 +478,7 @@ func (k *Kit) adminRollbackConfig(w http.ResponseWriter, r *http.Request) error 
 
 // mapWriteErr converts write-queue saturation into 503 overloaded.
 func mapWriteErr(err error) error {
-	if errors.Is(err, sqlite.ErrOverloaded) {
+	if errors.Is(err, store.ErrOverloaded) {
 		return httpx.Overloaded("write queue full")
 	}
 	return err

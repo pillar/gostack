@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/config"
 	"github.com/pillar/gostack/kits/game"
 	"github.com/pillar/gostack/migrations"
@@ -31,7 +31,7 @@ type schemaSummary struct {
 	Drift   bool  `json:"drift"`
 }
 
-func summarize(st []sqlite.MigrationStatus, ms []sqlite.Migration) schemaSummary {
+func summarize(st []store.MigrationStatus, ms []store.Migration) schemaSummary {
 	s := schemaSummary{Known: len(ms), Pending: []int{}, Unknown: []int{}, Drifted: []int{}}
 	known := map[int]bool{}
 	for _, m := range ms {
@@ -59,6 +59,9 @@ const backupUsage = "usage: backup snapshot --to FILE | backup verify FILE | bac
 func backupCmd(ctx context.Context, cfg config.Config, cfgErr error, args []string, asJSON bool, env Env) error {
 	if len(args) == 0 {
 		return UsageError{backupUsage}
+	}
+	if cfgErr == nil && cfg.Database.Driver == store.Postgres {
+		return errors.New("backup snapshot/verify/restore work on SQLite files only; back up PostgreSQL with pg_dump or base backups + WAL archiving (PITR), see docs/adr/0003-postgres-scale.md")
 	}
 	fs := flag.NewFlagSet("backup", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -299,7 +302,7 @@ func VerifyBackup(ctx context.Context, file string) (VerifyReport, error) {
 		fail("integrity_check failed")
 	}
 
-	ms, err := sqlite.LoadMigrations(migrations.SQLite, "sqlite")
+	ms, err := store.LoadMigrations(migrations.SQLite, "sqlite")
 	if err != nil {
 		return rep, err
 	}
@@ -315,7 +318,7 @@ func VerifyBackup(ctx context.Context, file string) (VerifyReport, error) {
 	}
 	if !tables["schema_migrations"] {
 		fail("no schema_migrations table (not a GoStack database)")
-	} else if st, err := sqlite.MigrationStatusOf(ctx, db, ms); err != nil {
+	} else if st, err := store.MigrationStatusOf(ctx, db, store.SQLite, ms); err != nil {
 		fail("migration status: " + err.Error())
 	} else {
 		rep.Schema = summarize(st, ms)

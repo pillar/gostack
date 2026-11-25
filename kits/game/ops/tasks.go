@@ -189,7 +189,8 @@ func (m *Module) progress(ctx context.Context, tx *sql.Tx, gameID, playerID, met
 			}
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO ops_task_progress(game_id,player_id,task_id,period_key,progress) VALUES(?,?,?,?,?)
-			ON CONFLICT(game_id,player_id,task_id,period_key) DO UPDATE SET progress=min(progress+excluded.progress, 1000000000000000)`,
+			ON CONFLICT(game_id,player_id,task_id,period_key) DO UPDATE SET progress=CASE WHEN ops_task_progress.progress+excluded.progress > 1000000000000000 THEN 1000000000000000
+				ELSE ops_task_progress.progress+excluded.progress END`,
 			gameID, playerID, t.ID, periodKey(t.Period, t.Timezone, now), delta); err != nil {
 			return n, err
 		}

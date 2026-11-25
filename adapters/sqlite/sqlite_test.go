@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/migrations"
 )
 
@@ -20,21 +21,21 @@ func opts(t *testing.T) sqlite.Options {
 	}
 }
 
-func openMigrated(t *testing.T, o sqlite.Options) *sqlite.DB {
+func openMigrated(t *testing.T, o sqlite.Options) *store.DB {
 	t.Helper()
 	db, err := sqlite.Open(o)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	ms, err := sqlite.LoadMigrations(migrations.SQLite, "sqlite")
+	ms, err := store.LoadMigrations(migrations.SQLite, "sqlite")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Migrate(context.Background(), ms); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.OpenReaders(o); err != nil {
+	if err := sqlite.OpenReaders(db, o); err != nil {
 		t.Fatal(err)
 	}
 	return db
@@ -95,16 +96,16 @@ func TestMigrationsIdempotentAndDriftDetected(t *testing.T) {
 	o := opts(t)
 	db := openMigrated(t, o)
 	ctx := context.Background()
-	ms, _ := sqlite.LoadMigrations(migrations.SQLite, "sqlite")
+	ms, _ := store.LoadMigrations(migrations.SQLite, "sqlite")
 	applied, err := db.Migrate(ctx, ms)
 	if err != nil || len(applied) != 0 {
 		t.Fatalf("second migrate applied=%v err=%v", applied, err)
 	}
-	st, err := sqlite.MigrationStatusOf(ctx, db.Read, ms)
-	if err != nil || sqlite.Pending(st) {
+	st, err := store.MigrationStatusOf(ctx, db.Read, store.SQLite, ms)
+	if err != nil || store.Pending(st) {
 		t.Fatalf("status pending after migrate: %+v %v", st, err)
 	}
-	tampered := append([]sqlite.Migration(nil), ms...)
+	tampered := append([]store.Migration(nil), ms...)
 	tampered[0].Checksum = "x"
 	if _, err := db.Migrate(ctx, tampered); err == nil {
 		t.Fatal("drift not detected")
@@ -145,7 +146,7 @@ func TestWriteQueueBounded(t *testing.T) {
 	for db.Stats().WriteWaiting < 2 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
-	if err := db.WriteTx(ctx, func(*sql.Tx) error { return nil }); !errors.Is(err, sqlite.ErrOverloaded) {
+	if err := db.WriteTx(ctx, func(*sql.Tx) error { return nil }); !errors.Is(err, store.ErrOverloaded) {
 		t.Fatalf("err=%v want ErrOverloaded", err)
 	}
 	close(release)
@@ -181,5 +182,59 @@ func TestLedgerAppendOnly(t *testing.T) {
 	}
 	if _, err := db.Write.Exec(`INSERT INTO players(game_id,player_id,created_at) VALUES('missing','p',0)`); err == nil {
 		t.Fatal("foreign key not enforced")
+	}
+}
+
+// Migration 0011 numbers existing billing ledger rows per account in rowid
+// order (seq) and keeps the ledger append-only afterwards.
+func TestBillingLedgerSeqBackfill(t *testing.T) {
+	o := opts(t)
+	db, err := sqlite.Open(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	ms, _ := store.LoadMigrations(migrations.SQLite, "sqlite")
+	var upTo10 []store.Migration
+	for _, m := range ms {
+		if m.Version <= 10 {
+			upTo10 = append(upTo10, m)
+		}
+	}
+	if _, err := db.Migrate(ctx, upTo10); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`INSERT INTO billing_accounts(tenant_id,id,currency,created_at,updated_at) VALUES('t','a','USD',0,0),('t','b','USD',0,0)`,
+		`INSERT INTO billing_ledger_entries(id,tenant_id,account_id,type,amount,delta_available,delta_reserved,idempotency_key,created_at) VALUES
+			('z1','t','a','credit',1,1,0,'k1',5),('y2','t','b','credit',1,1,0,'k2',5),('x3','t','a','credit',1,1,0,'k3',5)`,
+	} {
+		if _, err := db.Write.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Migrate(ctx, ms); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := db.Write.Query(`SELECT id, seq FROM billing_ledger_entries ORDER BY id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]int64{}
+	for rows.Next() {
+		var id string
+		var seq int64
+		if err := rows.Scan(&id, &seq); err != nil {
+			t.Fatal(err)
+		}
+		got[id] = seq
+	}
+	rows.Close()
+	if got["z1"] != 1 || got["x3"] != 2 || got["y2"] != 1 {
+		t.Fatalf("seq backfill %v", got)
+	}
+	if _, err := db.Write.Exec(`UPDATE billing_ledger_entries SET amount=2`); err == nil {
+		t.Fatal("ledger update allowed after 0011")
 	}
 }

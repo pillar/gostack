@@ -21,8 +21,17 @@
 | F07 可观测性 | 部分 | /healthz、/readyz、内网 /metrics（Prometheus 文本）与 pprof、JSON 日志与敏感字段脱敏；**告警规则与故障手册未编写** |
 | F08 部署 | 模板 | systemd 单元模板（生成项目内）；**安装/升级/回滚脚本未实现，未在 Linux 实测** |
 | F09 容灾 | 模板 | Litestream 配置模板；**R2 复制与恢复演练未执行（A08 未通过）** |
-| F10–F13 | 未实现 | 通用计费、对象存储、Scale、HA |
+| F10、F11、F13 | 未实现 | 通用计费、对象存储、HA（本行未随 F12 重新核实） |
+| F12 Scale | 部分（见下节） | PostgreSQL 存储、多实例、PG 任务队列、SQLite→PG 迁移工具；Valkey/全局限流/HA/PG 备份未实现 |
 | 6.2 组提交写入调度器 | 未实现 | 首期用串行短事务 + 有界准入（见 ADR-0002），组提交需基准证明收益 |
+
+## F12 Scale：PostgreSQL（2026-11-25，ADR-0003）
+验证环境：本机 macOS arm64，PostgreSQL 17.11（临时集群，max_connections=100），Go 1.27.4。
+- 命令与结果：`./scripts/ci.sh`（未设 `GOSTACK_TEST_POSTGRES_DSN`，SQLite）通过；`GOSTACK_TEST_POSTGRES_DSN=postgres://postgres@127.0.0.1:55432/postgres?sslmode=disable ./scripts/ci.sh`（SQLite + PostgreSQL 各跑一遍 `go test -race -count=1 ./...`）通过。PG 运行：178 个顶层测试中 175 通过、3 个跳过（SQLite 备份演练、`migrate status` 未知版本检测——两者操作 SQLite 文件；realtime 模块在 scale 下被配置拒绝），0 失败。kits/game/*、modules/{jobs,billing,webauth}、app 的存储测试在该模式下各自使用新建的 PG 数据库；adapters/sqlite、tests/fault、deploy 仍跑 SQLite。
+- 已实现且有测试：`adapters/store` 方言无关句柄；`adapters/postgres`（pgx stdlib、SERIALIZABLE + 40001/40P01 有界重试、fn 吞错仍重试、读池只读、`?`→`$n` 改写单测、C 排序校验、analytics 独立 schema）；`migrations/postgres{,_analytics}` 与 SQLite 逐版本对应，`TestSchemaEquivalence` 比较 60 张表的列/主键/唯一约束/索引/外键/触发器；账本 UPDATE/DELETE/TRUNCATE 被拒；迁移 advisory lock 并发启动；配置校验（scale/lite/distributed、realtime、local storage、litestream、`rate_limit.accept_per_instance`）；`migrate status|up`、`doctor`、`game reconcile` 在 PG 上运行，`backup *` 在 PG 配置下报错并指向 pg_dump/PITR。
+- 多实例（`tests/scale`）：两个 App 实例共享一个 PG 库，并发领奖/购买/幂等重放、赛季结算、撮合、任务 Claim 均只生效一次。
+- SQLite→PG 迁移（`migrate to-postgres`）：经 HTTP 在 SQLite 上写入玩家/会话/存档/分数/隔离记录/账本/邮件/好友/撮合票/计费/网页用户/任务/埋点 → 服务运行时迁移被拒（实例锁）→ 停服后迁移，逐表行数与摘要一致、对账 0 差异 → 再次迁移因目标非空被拒 → 在 PG 上启动应用，11 个读接口响应与迁移前逐字节一致，幂等重放一致，identity 序列续号正常。
+- 未验证 / 未实现：Scale 性能预算（PRD §13/§23）未压测；PG 备份/PITR 与恢复演练；Valkey 与全局限流；PG HA；pgmq（不使用）；实时模块多实例；在线双写迁移。热点行在 SERIALIZABLE 下产生大量序列化失败重试（测试中可见数百次），吞吐影响未测量。
 
 ## GameKit（PRD §20）
 | ID | 状态 | 测试 |

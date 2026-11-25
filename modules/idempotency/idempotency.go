@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/httpx"
 )
 
@@ -53,7 +53,7 @@ type Result struct {
 // stored response is returned (replayed=true) without calling fn; a different
 // hash yields 409 idempotency_key_reused. Errors from fn roll everything back and
 // nothing is recorded, so the client may retry with the same key.
-func Do(ctx context.Context, db *sqlite.DB, scope, key, op string, body []byte, fn func(tx *sql.Tx) (Result, error)) (status int, resp []byte, replayed bool, err error) {
+func Do(ctx context.Context, db *store.DB, scope, key, op string, body []byte, fn func(tx *sql.Tx) (Result, error)) (status int, resp []byte, replayed bool, err error) {
 	if key != "" && !ValidKey(key) {
 		return 0, nil, false, httpx.BadRequest("Idempotency-Key must be 1-128 printable ASCII characters")
 	}
@@ -93,9 +93,10 @@ func Do(ctx context.Context, db *sqlite.DB, scope, key, op string, body []byte, 
 			return nil
 		}
 		now := time.Now()
-		// INSERT OR REPLACE also overwrites an expired record with the same key.
-		_, err = tx.ExecContext(ctx, `INSERT OR REPLACE INTO idempotency_records(scope,key,op,request_hash,response_code,response_body,created_at,expires_at)
-			VALUES(?,?,?,?,?,?,?,?)`, scope, key, op, hash, status, resp, now.UnixMilli(), now.Add(DefaultTTL).UnixMilli())
+		// The upsert also overwrites an expired record with the same key.
+		_, err = tx.ExecContext(ctx, `INSERT INTO idempotency_records(scope,key,op,request_hash,response_code,response_body,created_at,expires_at)
+			VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(scope,key) DO UPDATE SET op=excluded.op, request_hash=excluded.request_hash,
+			response_code=excluded.response_code, response_body=excluded.response_body, created_at=excluded.created_at, expires_at=excluded.expires_at`, scope, key, op, hash, status, resp, now.UnixMilli(), now.Add(DefaultTTL).UnixMilli())
 		return err
 	})
 	return status, resp, replayed, err
@@ -112,7 +113,7 @@ func Write(w http.ResponseWriter, status int, body []byte, replayed bool) {
 }
 
 // PurgeExpired deletes expired records.
-func PurgeExpired(ctx context.Context, db *sqlite.DB) (int64, error) {
+func PurgeExpired(ctx context.Context, db *store.DB) (int64, error) {
 	var n int64
 	err := db.WriteTx(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `DELETE FROM idempotency_records WHERE expires_at<=?`, time.Now().UnixMilli())

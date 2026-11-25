@@ -1,4 +1,5 @@
-// Package jobs is the durable SQLite task queue (PRD §8).
+// Package jobs is the durable task queue (PRD §8): the jobs table in SQLite
+// (profile lite) or PostgreSQL (profile scale, queue.driver postgres).
 //
 // Semantics: at-least-once. A claim grants a lease and a random lease token;
 // Ack/Nack/Extend must present the token, so a worker whose lease expired and
@@ -16,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pillar/gostack/adapters/sqlite"
+	"github.com/pillar/gostack/adapters/store"
 	"github.com/pillar/gostack/core/httpx"
 )
 
@@ -44,7 +45,7 @@ type Claimed struct {
 }
 
 type Queue struct {
-	DB  *sqlite.DB
+	DB  *store.DB
 	Now func() time.Time
 }
 
@@ -119,10 +120,17 @@ func (q *Queue) Claim(ctx context.Context, types []string, lease time.Duration) 
 			return err
 		}
 		filter, args := typeFilter(types)
+		// PostgreSQL (several instances may claim concurrently): skip rows another
+		// claimer has locked instead of queueing behind it. SERIALIZABLE (WriteTx)
+		// is what guarantees a job is leased once; SKIP LOCKED only reduces conflicts.
+		lock := ""
+		if q.DB.IsPostgres() {
+			lock = " FOR UPDATE SKIP LOCKED"
+		}
 		var id string
 		err := tx.QueryRowContext(ctx, `SELECT id FROM jobs WHERE
 			((status IN ('pending','retry_wait') AND run_at<=?) OR (status='running' AND lease_until<?))`+filter+`
-			ORDER BY run_at LIMIT 1`, append([]any{now, now}, args...)...).Scan(&id)
+			ORDER BY run_at, id LIMIT 1`+lock, append([]any{now, now}, args...)...).Scan(&id)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
