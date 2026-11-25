@@ -19,7 +19,7 @@ status and S3 error code (never credentials).
 
 ## Common behaviour
 
-- **Keys**: 1–512 bytes, segments of `[A-Za-z0-9._-]` separated by single `/`;
+- **Keys**: 1–512 bytes, segments of 1–255 bytes of `[A-Za-z0-9._-]` separated by single `/`;
   no leading/trailing `/`, no empty, `.` or `..` segment. Such keys never need
   URL escaping. Map user-supplied names to keys yourself (e.g. IDs).
 - **Size limit**: `MaxObjectBytes` (default 100 MiB). A declared size above the
