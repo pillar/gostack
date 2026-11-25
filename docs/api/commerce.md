@@ -71,7 +71,11 @@ Every verified callback is recorded in `commerce_inbox` under
 - `failed` is recorded when a verified event hits a business error that may clear
   later, for example `product_not_mapped`. The event's writes are rolled back
   (SAVEPOINT) and the error is returned (e.g. 422), so the provider retries. A
-  re-delivery processes the event again.
+  re-delivery processes the event again. Any business error below 500 (including
+  a 409 from `ApplyLedger`) is handled this way. Grants for IAP, ad rewards and
+  match results are intentionally uncapped (`Kit.Grant` in `kits/game/ext.go`
+  documents this), so `stack_limit` and `unknown_asset` cannot occur here; the
+  business errors that can still occur are listed per route below.
 - Callbacks that fail verification are not recorded.
 
 Callback success body: `{"status":"processed|ignored","duplicate":false,"reason":"...","order_id":"..."}`.
@@ -115,8 +119,13 @@ Errors: 404 `not_found` (placement), 409 `ad_cap_reached`, 409 `too_many_intents
 
 ### POST /v1/games/{game}/callbacks/{provider}
 App Store Server Notifications V2 for the game (`provider` = `apple`). Body
-`{"signedPayload":"..."}` (max 256 KiB). Both the outer payload and the embedded
+`{"signedPayload":"..."}` (max 256 KiB; larger is 413 `payload_too_large`). Both the outer payload and the embedded
 `signedTransactionInfo` are verified, along with bundle id and environment.
+Errors: 400 `invalid_request` (body is not `{"signedPayload": ...}`), 400
+`invalid_signature`/`bundle_mismatch`/`environment_mismatch`, 404
+`provider_not_configured`. Business errors are recorded as `failed` and returned
+so Apple retries: 422 `product_not_mapped` (store product not mapped) and 409
+`product_mismatch` (store product differs from the order's product).
 - `ONE_TIME_CHARGE`: the purchase is delivered to the token's player if the
   token is known. Otherwise the order is stored as `paid` and waits for verify.
 - `REFUND`, `REVOKE`: grants are reversed (see Refunds).
@@ -141,7 +150,7 @@ App Store Server Notifications V2 for the game (`provider` = `apple`). Body
   (decoded values). Repeated parameters are rejected.
 
 Errors: 401 `invalid_signature`, 400 `invalid_request`, 404 `provider_not_configured`,
-503 `key_fetch_failed`. A verified callback that cannot be credited returns 200
+413 `payload_too_large` (POST body or query string over 16 KiB), 503 `key_fetch_failed`. A verified callback that cannot be credited returns 200
 with `status: "ignored"` and one of these reasons: `unknown_token`,
 `token_used`, `token_expired`, `placement_removed`, `daily_cap_reached`.
 
@@ -170,7 +179,7 @@ becomes `refund_shortfall`, for manual review.
 - `GET /v1/admin/games/{game}/orders?state=&player_id=&limit=` (limit 1–200,
   default 50), newest first: `{"orders":[order...]}`. Use
   `?state=refund_shortfall` for the review queue.
-- `POST /v1/admin/games/{game}/orders/{order_id}/resolve` with body
+- `POST /v1/admin/games/{game}/orders/{order}/resolve` with body
   `{"waive":false}` retries recovering `outstanding` from current balances.
   `{"waive":true}` also writes off the remainder. The order becomes
   `refund_compensated` when nothing is outstanding or the remainder was waived.

@@ -55,11 +55,14 @@ mux.Handle("/v1/files/", l.Handler())
   - `PUT` → stores the body with the request `Content-Type`; 200.
   - Errors (JSON envelope): 403 `forbidden` (bad/expired signature, wrong
     method), 404 `not_found` (missing object or invalid key path),
-    405 `method_not_allowed`, 413 `payload_too_large`, 400 `invalid_request`
+    405 `method_not_allowed` (any method other than GET and PUT, with `Allow: GET, PUT`), 413 `payload_too_large`, 400 `invalid_request`
     (length mismatch, bad content type).
   - A presigned PUT URL does not bind content type or size; size is bounded by
-    `MaxObjectBytes` (and by the server's global body limit, which must be at
-    least `MaxObjectBytes` on this route for large uploads).
+    `MaxObjectBytes`. When the route is mounted by the application (`app/modules.go`),
+    the global `http.max_body_bytes` limit (default 1 MiB, configurable up to 64 MiB)
+    also applies to presigned PUT bodies: a larger body is rejected with
+    413 `payload_too_large` regardless of `MaxObjectBytes`, so raise
+    `http.max_body_bytes` to at least the largest upload you intend to allow.
   - URLs are bearer capabilities until they expire; there is no revocation
     other than rotating the secret.
 

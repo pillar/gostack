@@ -89,7 +89,7 @@ alert on any mismatch.
 Mount with `svc.Handler(mux, auth.APIKeys{DB: db})`. Every route requires
 `Authorization: Bearer gsk_…` with scope `billing`; the tenant is the key's
 tenant. Bodies are strict JSON (unknown fields rejected), max 16 KiB. Every
-POST requires an `Idempotency-Key` header.
+POST requires an `Idempotency-Key` header (checked first; missing is 400) and a JSON body: every POST needs at least `{}`, even `release` and `uncertain` whose fields are all optional. An empty body is `400 invalid_request` ("empty body"); unknown fields and trailing data are 400 as well.
 
 | Method | Path | Body | Success |
 |---|---|---|---|

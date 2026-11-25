@@ -16,14 +16,14 @@ spends items. Social invite grants follow the same rule.
 |---|---|
 | `GET /announcements?platform=` | public / optional auth. Active ones (`starts_at <= now < ends_at`, 0 = open), filtered by platform when the announcement lists platforms (a client that sends no platform only sees unrestricted ones). Ordered by priority desc, starts_at desc. `{"announcements":[{id,title,body,priority,starts_at,ends_at,platforms}]}` |
 | admin `GET /announcements` | all |
-| admin `PUT /announcements/{id}` | create or replace `{title (required), body, priority, starts_at, ends_at, platforms[]}`; 400 on `ends_at <= starts_at` |
+| admin `PUT /announcements/{id}` | create or replace `{title (required), body, priority, starts_at, ends_at, platforms[]}`. Limits: title ≤200 bytes, body ≤8000 bytes, ≤8 platforms, request body ≤16 KiB; 400 on a violation or on `ends_at <= starts_at` |
 | admin `DELETE /announcements/{id}` | 204 / 404 |
 
 ## Events (活动)
 `GET /events` (public / optional auth) returns active events `{id,title,starts_at,ends_at,timezone,metadata}`. Admin `GET /events`, `PUT /events/{id}` `{title, starts_at, ends_at (both required), timezone (IANA, default UTC), metadata (JSON object <= 8KiB)}`, `DELETE /events/{id}`. The timezone is descriptive for clients; the window itself is absolute. A task may name an `event_id` (below).
 
 ## Mail
-Admin `POST /mail` `{player_id | broadcast:true, title, body, grants?, expires_at?}` -> 201 `{mail_id, broadcast}`. Exactly one of `player_id` / `broadcast`. A broadcast is stored once; per-player state (read/claimed/deleted) is created lazily on first read/claim/delete, so sending to a million players writes one row. A broadcast is visible to players registered at or before it was sent (players who register later do not receive old broadcasts). Supports `Idempotency-Key`. Admin `GET /mail` (latest 100 with `claimed_count`), `DELETE /mail/{id}` (recall for everyone; already paid grants stay).
+Admin `POST /mail` `{player_id | broadcast:true, title, body, grants?, expires_at?}` -> 201 `{mail_id, broadcast}`. Exactly one of `player_id` / `broadcast`. A broadcast is stored once; per-player state (read/claimed/deleted) is created lazily on first read/claim/delete, so sending to a million players writes one row. A broadcast is visible to players registered at or before it was sent (players who register later do not receive old broadcasts). Honours `Idempotency-Key` (scoped to the game's admin operations; a retry with the same key and body replays the first 201). Admin `GET /mail` (latest 100 with `claimed_count`), `DELETE /mail/{id}` (recall for everyone; already paid grants stay).
 
 Player (all need a session):
 - `GET /mail` -> `{"mail":[{id,title,body,grants,created_at,expires_at,read,claimed,claimable}]}` newest first, max 100; expired and deleted mail are hidden.
@@ -53,7 +53,7 @@ Player: `GET /tasks` -> `{tasks:[{id,title,metric,target,period,grants,period_ke
 Admin `POST /redeem-batches`:
 - N single-use codes: `{count: 1..10000, grants, expires_at?, label?}`
 - one shared code: `{shared:true, code? (4-32 letters/digits, generated if absent), max_redemptions>=1, grants, expires_at?}`; each player may redeem it once, total redemptions are capped.
--> 201 `{batch_id, shared, max_redemptions, codes:[...]}`. **Plaintext codes appear only in this response**; the database stores `SHA-256(game_id ":" normalized_code)`. Generated codes look like `ABCD-EFGH-JKMN` (12 symbols, about 59 bits). Matching ignores case, dashes and spaces. 409 `code_exists` for a duplicate custom code. Admin `GET /redeem-batches` (counts only), `DELETE /redeem-batches/{id}` disables a batch (204, idempotent).
+-> 201 `{batch_id, shared, max_redemptions, codes:[...]}`. **Plaintext codes appear only in this response**; the database stores `SHA-256(game_id ":" normalized_code)`. Generated codes look like `ABCD-EFGH-JKMN` (12 symbols, about 59 bits). Matching ignores case, dashes and spaces. 409 `code_exists` for a duplicate custom code. Admin `GET /redeem-batches` (counts only), `DELETE /redeem-batches/{id}` disables a batch (204, repeatable on an existing batch; an unknown batch id returns 404 `not_found`).
 
 Player `POST /redeem` `{code}` -> 200 `{batch_id, grants}`.
 - Unknown, malformed, expired, disabled and exhausted codes all return the same 400 `invalid_code` (no enumeration oracle).

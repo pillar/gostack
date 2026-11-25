@@ -6,7 +6,7 @@
 
 - 基础路径：`/v1/games/{game}`，`{game}` 为公开 game_id（`[a-z0-9][a-z0-9_-]{0,31}`）。
 - 认证：`Authorization: Bearer <access_token>`。token 不放 URL。
-- 请求/响应体均为 JSON（`Content-Type: application/json`），默认请求体上限 1 MiB（存档、埋点另有更小上限）。
+- 请求/响应体均为 JSON（`Content-Type: application/json`），默认请求体上限 1 MiB（存档、埋点另有更小上限）；各接口上限见对应小节，超限返回 `413 payload_too_large`。
 - 每个响应带 `X-Request-ID` 头；错误响应体：
 
 ```json
@@ -55,9 +55,9 @@
 
 首次注册请求不支持幂等键，客户端不应自动重试（超时重试可能产生第二个游客）；带凭据的再次登录可安全重试。
 
-首次注册：空 body `{}`，返回新玩家与一次性展示的 `guest_secret`（客户端须持久保存）。
+首次注册：空 body `{}`，返回 `201`（新玩家与一次性展示的 `guest_secret`，客户端须持久保存）。
 
-再次登录：`{"guest_id": "gst_...", "guest_secret": "..."}`，返回同一玩家与新会话；`"rotate": true` 时返回新的 `guest_secret`，旧值立即失效。
+再次登录：`{"guest_id": "gst_...", "guest_secret": "..."}`，返回 `200`、同一玩家与新会话；`"rotate": true` 时返回新的 `guest_secret`，旧值立即失效。
 
 ```json
 { "player_id": "plr_...", "guest_id": "gst_...", "guest_secret": "... 或 null",
@@ -66,11 +66,11 @@
 
 ### POST /auth/platform
 
-`{"platform": "wechat", "code": "..."}`。服务端调用平台接口验证（微信 code2session），按 (game, platform, openid) 找到或创建玩家，返回同上结构（无 guest 字段）。未配置平台时返回 `501 not_implemented`。
+`{"platform": "wechat", "code": "..."}`。服务端调用平台接口验证（微信 code2session），按 (game, platform, openid) 找到或创建玩家，首次创建玩家返回 `201`（`created: true`），已有身份再次登录返回 `200`；结构同上（无 guest 字段）。未配置平台时返回 `501 not_implemented`。
 
 ### POST /auth/bind（需认证）
 
-`{"platform": "wechat", "code": "..."}`，把平台身份绑定到当前玩家。身份已属于其他玩家时 `409 identity_conflict`，不覆盖任何数据。返回 `{"player_id": "...", "platform": "wechat"}`。
+`{"platform": "wechat", "code": "..."}`，把平台身份绑定到当前玩家。身份已属于其他玩家时 `409 identity_conflict`，不覆盖任何数据。返回 `{"player_id": "...", "platform": "wechat"}`。该接口不做 IP 限流（`/auth/guest`、`/auth/platform` 按 IP 限流）。
 
 ### POST /auth/logout（需认证）
 
@@ -86,12 +86,12 @@
 
 返回该游戏当前发布配置中 `client` 段：`{"revision": 3, "data": {...}}`，带 `ETag: "3"`（带引号的强 ETag）；请求带 `If-None-Match` 且未变化时返回 `304`。未发布任何配置时 `{"revision": 0, "data": {}}`。不需要认证。
 
-灰度（`rollouts`）：按文档顺序把命中的 rollout 的 `client` 浅合并（顶层键覆盖）到 `client` 上，后者覆盖前者。命中条件：`enabled` 为 true；`platforms` 非空时须包含请求的 `platform`；设置了 `min_client_version`/`max_client_version` 时请求须带 `client_version` 且满足 `min ≤ v ≤ max`（两端包含）；`percent < 100` 时须有分桶键且 `sha256(game_id, rollout id, key) % 100 < percent`。分桶键：带有效 token 时为 `player_id`（此时忽略 `bucket_key`）；否则为 `bucket_key` 查询参数（≤128 字符，建议用安装 ID）；都没有时只命中 `percent = 100` 的 rollout。无效或过期 token 在此接口被忽略（不返回 401）。
+灰度（`rollouts`）：按文档顺序把命中的 rollout 的 `client` 浅合并（顶层键覆盖）到 `client` 上，后者覆盖前者。命中条件：`enabled` 为 true；`platforms` 非空时须包含请求的 `platform`；设置了 `min_client_version`/`max_client_version` 时请求须带 `client_version` 且满足 `min ≤ v ≤ max`（两端包含）；`percent < 100` 时须有分桶键且 `sha256(game_id, rollout id, key) % 100 < percent`。分桶键：带有效 token 时为 `player_id`（此时忽略 `bucket_key`）；否则为 `bucket_key` 查询参数（≤128 字符，建议用安装 ID）；都没有时只命中 `percent = 100` 的 rollout。无效或过期 token 在此接口被忽略（不返回 401）；这与 `GET /boards/{board}` 不同（后者对无效 token 返回 401）。
 - 有命中时响应多一个 `"rollouts": ["r1"]`（命中的 id），ETag 变为 `"<revision>-<命中 id 集合的哈希>"`；命中集合变化或发布新版本都会改变 ETag，304 行为不变。无命中时响应与 ETag 与旧契约完全相同。
 - `client_version` 为 1–4 段点分非负整数（如 `1`、`1.2`、`1.2.3`），缺省段按 0 比较；格式错误返回 400。
 - 停止开关：把该 rollout 的 `enabled` 改为 false（或删除）并重新发布配置，下一次拉取即生效；也可用 rollback 回到旧 revision。
 
-配置文档（管理员发布）结构（除 `client/boards/rewards` 外各段均可选）：
+配置文档（管理员发布）结构（`client`、`boards`、`rewards` 及其余各段均可选；缺省的 `client` 视为 `{}`）：
 
 ```json
 {
@@ -146,6 +146,8 @@
 
 ### POST /saves/{slot}/restore（支持幂等键）
 
+请求体 ≤1 KiB。
+
 `{"revision": 2, "expected_revision": 4}`：当前版本须等于 `expected_revision`（否则 `409 revision_conflict`），把历史版本 2 的 payload/schema_version/checksum 作为新 revision（5）提交，返回同 PUT 的存档结构。历史版本不存在 `404 not_found`；其 schema 低于 `min_schema_version` 时 `409 schema_outdated`。
 
 ### DELETE /saves/{slot}?expected_revision=4（支持幂等键）
@@ -156,7 +158,7 @@
 
 ### GET /boards/{board}?limit=50&cursor=...&season=...
 
-不需要认证；带 token 时附带 `me`。
+不需要认证；带有效 token 时附带 `me`，带无效/过期 token 返回 `401`（客户端应去掉 token 重试）；玩家在该榜/赛季没有已接受成绩时省略 `me`。
 
 ```json
 { "board": "main", "season": "2026-11-24", "entries": [ {"rank": 1, "player_id": "plr_...", "score": 900, "achieved_at": 0} ],
@@ -167,7 +169,7 @@
 
 ### POST /boards/{board}/scores（需认证，支持幂等键）
 
-`{"score": 900, "rule_version": 3, "run_token": "run_..."}` → `{"status": "accepted|quarantined", "best": 900, "season": "..."}`。`rule_version`、`run_token` 可选，仅在榜单配置要求时必须。超出 `[min_score,max_score]` 返回 400；超过 `quarantine_above` 的成绩进入隔离，不上榜，等待人工审核。
+请求体 ≤4 KiB。`{"score": 900, "rule_version": 3, "run_token": "run_..."}` → `{"status": "accepted|quarantined", "best": 900, "season": "..."}`。`rule_version`、`run_token` 可选，仅在榜单配置要求时必须。超出 `[min_score,max_score]` 返回 400；超过 `quarantine_above` 的成绩进入隔离，不上榜，等待人工审核。
 
 - 规则版本：榜单 `rule_version > 0` 时，提交的 `rule_version` 必须相等，否则 `409 rule_version_mismatch`（`details.rule_version` 为当前版本）。
 - 对局令牌：榜单 `require_run: true` 时必须携带 `run_token`（缺失 400）。令牌一次性：已用 `409 run_token_used`，过期 `409 run_token_expired`，不属于本玩家/本榜/本游戏 `409 run_token_invalid`。从领取令牌到提交的时长小于 `min_run_ms` 时成绩进入隔离（原因 `run shorter than min_run_ms`）。未要求令牌的榜单若携带令牌也会校验并消耗。带同一 `Idempotency-Key` 的重试返回首次结果，不会报令牌已用。
@@ -222,15 +224,15 @@
 
 ## 管理接口（API Key，`Authorization: Bearer gsk_...`，需 `admin` 权限）
 
-- `POST /v1/admin/games` `{"game_id": "demo", "name": "Demo", "allowed_origins": ["https://example.com"]}`
-- `PUT /v1/admin/games/{game}/config` body 为配置文档 → `{"revision": n}`
+- `POST /v1/admin/games` `{"game_id": "demo", "name": "Demo", "allowed_origins": ["https://example.com"]}` → `201 {"game_id": "demo"}`；`game_id` 已存在（game_id 全局唯一，包括其他租户创建的）返回 `409 conflict`
+- `PUT /v1/admin/games/{game}/config` body 为配置文档（≤1 MiB）→ `{"revision": n}`
 - `POST /v1/admin/games/{game}/config/rollback` `{"revision": n}` → 以旧内容发布新 revision
 
 以下接口要求 API Key 的租户拥有该游戏（否则 404）。玩家 token 调用返回 401。
 
 ### POST /v1/admin/games/{game}/players/{player}/adjust
 
-`{"deltas": {"coin": 500, "gem": -3}, "reason": "工单 42 补偿", "source_key": "ticket-42"}`：运营调整余额（账本 kind `adjust`，来源 `adjust:<source_key>`）。`reason` 1–500 字符必填；`source_key` 1–128 个可见 ASCII 字符，在游戏内唯一：同键同玩家同 deltas 重复调用返回 `"replayed": true` 且不重复入账，内容不同返回 `409 source_key_reused`。原因与操作的 API Key id 记录在审计表 `wallet_adjustments`。扣减致负 `409 insufficient_funds`；超过 `max_stack` `409 stack_limit`；存在目录时资产须在目录中（400）；玩家不属于该游戏 `404`。返回 `{"source_key": "...", "replayed": false, "balances": {...}}`。
+`{"deltas": {"coin": 500, "gem": -3}, "reason": "工单 42 补偿", "source_key": "ticket-42"}`：运营调整余额（账本 kind `adjust`，来源 `adjust:<source_key>`）。`reason` 1–500 字符必填；`source_key` 1–128 个可见 ASCII 字符，在游戏内唯一：同键同玩家同 deltas 重复调用返回 `"replayed": true` 且不重复入账，内容不同返回 `409 source_key_reused`。请求体 ≤16 KiB。原因与操作的 API Key id 记录在审计表 `wallet_adjustments`。扣减致负 `409 insufficient_funds`；超过 `max_stack` `409 stack_limit`；存在目录时资产须在目录中（400）；玩家不属于该游戏 `404`。返回 `{"source_key": "...", "replayed": false, "balances": {...}}`。
 
 ### GET /v1/admin/games/{game}/quarantine?status=pending&limit=50&after=0
 

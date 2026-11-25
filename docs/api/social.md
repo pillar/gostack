@@ -22,12 +22,12 @@ Blocked, hidden (not searchable) and unknown players are indistinguishable: all 
 | Route | Result |
 |---|---|
 | `GET /friends` | `{"friends":[{player_id,display_name,at}]}` |
-| `POST /friends/requests` `{"player_id"` or `"friend_code"}` | `201 {"status":"pending"}`; `200 {"status":"accepted"}` when the target had already asked the caller |
+| `POST /friends/requests` `{"player_id"` or `"friend_code"}` | `201 {"status":"pending","player_id"}`; `200 {"status":"accepted","player_id"}` when the target had already asked the caller (`player_id` is the resolved target, also when a `friend_code` was sent) |
 | `GET /friends/requests` | `{"incoming":[..],"outgoing":[..]}` |
-| `POST /friends/requests/{player_id}/accept` | `{"status":"accepted"}`; `{player_id}` is the requester |
-| `POST /friends/requests/{player_id}/decline` | recipient declines |
-| `DELETE /friends/requests/{player_id}` | sender cancels |
-| `DELETE /friends/{player_id}` | removes the friendship on both sides |
+| `POST /friends/requests/{player_id}/accept` | `{"status":"accepted","player_id"}`; `{player_id}` is the requester |
+| `POST /friends/requests/{player_id}/decline` | recipient declines: `{"status":"declined","player_id"}` |
+| `DELETE /friends/requests/{player_id}` | sender cancels: `{"status":"cancelled","player_id"}` |
+| `DELETE /friends/{player_id}` | removes the friendship on both sides: `{"removed":true,"player_id"}` |
 
 Friendship is stored as two symmetric rows written in one transaction together with the deletion of any pending requests between the pair.
 
@@ -37,8 +37,8 @@ Errors: `400` self request or not exactly one of `player_id`/`friend_code`; `404
 | Route | Result |
 |---|---|
 | `GET /blocks` | `{"blocks":[{player_id,at}]}` |
-| `POST /blocks/{player_id}` | `{"blocked":true}`; idempotent. In one transaction: records the block, removes the friendship and deletes pending requests in both directions. |
-| `DELETE /blocks/{player_id}` | `{"blocked":false}` (never fails for an absent block) |
+| `POST /blocks/{player_id}` | `{"blocked":true,"player_id"}`; idempotent. In one transaction: records the block, removes the friendship and deletes pending requests in both directions. |
+| `DELETE /blocks/{player_id}` | `{"blocked":false,"player_id"}` (never fails for an absent block) |
 
 While either side blocks the other: friend requests both ways, share opens and invite accepts return 404, and the pair never appears on each other's friend boards. Errors: `400` self block, `404` unknown player, `409 block_limit`.
 
@@ -53,7 +53,7 @@ While either side blocks the other: friend requests both ways, share opens and i
 |---|---|
 | `POST /invites` | `201 {"code":"K7M2QX9A"}`; `409 invite_limit` |
 | `GET /invites` | `{"invites":[{code,created_at,accepted}]}` |
-| `POST /invites/{code}/accept` | `{"attributed":true,"grants":{..}}` |
+| `POST /invites/{code}/accept` | `{"attributed":true,"grants":{..}}`; `grants` is `null` when no `InviteeGrant` is configured |
 
 Accepting: the caller must have been created within the invite window (default 24h) else `403 not_new_player`; own code `400 self_invite`; unknown code or blocked pair `404`; a player is attributed once per game (`409 already_attributed`, enforced by the primary key on the invitee); inviters stop earning after `MaxAcceptsPerInviter` invitees (`409 invite_full`). Optional grants go through `game.ApplyLedger` in the same transaction with source keys `invite:<invitee>:inviter` and `invite:<invitee>:invitee`, so a retry or race can never grant twice. Codes are per game.
 

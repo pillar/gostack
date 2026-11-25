@@ -21,6 +21,8 @@ GET /v1/games/{game}/realtime   (WebSocket upgrade)
 | 401 | unauthorized | `Authorization` 头存在但无效、会话不存在或过期 |
 | 503 | overloaded | 已达 `MaxConnections`（含未认证连接）或网关正在关闭 |
 
+以上 JSON 错误信封只覆盖握手之前的检查。通过这些检查后，真正的 WebSocket 握手由 `github.com/coder/websocket` 的 `Accept` 处理：普通 `GET`（缺少或不含 `Upgrade`/`Connection` 头，或 HTTP 版本低于 1.1）返回 `426`，`Sec-WebSocket-Version` 不是 13 或 `Sec-WebSocket-Key` 缺失/格式错误返回 `400`；这些响应是库写出的纯文本（`http.Error`），**不是** JSON 错误信封，也没有 `request_id` 体字段，客户端不应对它们做 JSON 解析。
+
 认证二选一：
 
 1. 非浏览器客户端：升级请求带 `Authorization: Bearer <access_token>`。

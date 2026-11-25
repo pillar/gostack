@@ -22,7 +22,7 @@ Battle state (ticks, positions) never touches SQLite; the module writes only on 
 | `GET /match/tickets/{id}` | own ticket only (others `404`) |
 | `DELETE /match/tickets/{id}` | cancels a waiting ticket (repeatable); `409 already_matched`, `409 ticket_closed` |
 
-`POST` honours `Idempotency-Key`. Ticket status: `waiting`, `matched`, `expired` (TTL elapsed), `cancelled`, `abandoned` (room lease lost), `done` (room settled). `expired` and `abandoned` are reported as soon as time passes, even before the sweep persists them, and a stale ticket never blocks creating a new one.
+`POST` and `DELETE` both honour `Idempotency-Key` (the cancel is scoped per ticket id; a replay returns the stored response). Ticket status: `waiting`, `matched`, `expired` (TTL elapsed), `cancelled`, `abandoned` (room lease lost), `done` (room settled). `expired` and `abandoned` are reported as soon as time passes, even before the sweep persists them, and a stale ticket never blocks creating a new one.
 
 Status response once matched:
 ```json
@@ -44,9 +44,9 @@ Claims the oldest unassigned room of the key's tenant (optionally filtered). `20
 ```
 `204` when there is no room. `token` is the fencing token: taken from a per-game counter, so it only grows. `connection` must be a JSON object up to 1024 bytes. Honours `Idempotency-Key`.
 
-**Heartbeat** `POST /v1/match/rooms/{room}/heartbeat` `{"token":7}` -> `{"room_id","lease_until"}`; extends the lease by `LeaseTTL` (default 30s). Send it about every `lease_ttl_ms / 3`.
+**Heartbeat** `POST /v1/match/rooms/{room}/heartbeat` `{"token":7}` (body ≤1 MiB, same limit as member state; `413` above) -> `{"room_id","lease_until"}`; extends the lease by `LeaseTTL` (default 30s). Send it about every `lease_ttl_ms / 3`.
 
-**Member state** `POST /v1/match/rooms/{room}/members/{player}/state` `{"token":7,"state":"left|connected"}`. Report a player disconnecting (`left`) or rejoining (`connected`). The slot stays reserved; the battle server decides how a leaver is scored in the final result. `404` for non-members.
+**Member state** `POST /v1/match/rooms/{room}/members/{player}/state` `{"token":7,"state":"left|connected"}` (body ≤1 MiB). Other body limits: claim ≤4 KiB, result ≤256 KiB. Report a player disconnecting (`left`) or rejoining (`connected`). The slot stays reserved; the battle server decides how a leaver is scored in the final result. `404` for non-members.
 
 **Fencing errors** (all `409`): `stale_token` (token is not the room's current token, was never issued, or the room was never claimed), `room_abandoned` (lease expired: the room is marked abandoned in that same call, its players' tickets become `abandoned`), `room_settled`. A server that lost its lease cannot heartbeat, change state or settle.
 

@@ -17,7 +17,8 @@ Package `kits/game/experiments`, migration `0008_game_experiments.sql`. Client r
 - `PUT /experiments/{id}` `{layer, status: draft|running|stopped, variants:[{id, weight 1..10000, params object <=4KiB}] (1-10), control (a variant id), traffic_percent (required, integer 0..100), platforms?, min_client_version?}` -> experiment (running ones include `slice_start`/`slice_end`). Unknown fields are rejected.
   - draft may be edited freely and started (`status:"running"`).
   - running: `layer`, `variants`, `control` are frozen (409 `immutable_while_running`); `traffic_percent`, `platforms`, `min_client_version` may change; back to draft is 409 `invalid_transition`; `status:"stopped"` is the kill switch.
-  - stopped is terminal: any change is 409 `experiment_stopped` (create a new experiment id to rerun).
+  - stopped is terminal: any `PUT` of a stopped experiment is 409 `experiment_stopped`, even when the body is identical to the stored one (create a new experiment id to rerun).
+  - Body limits: `PUT` ≤64 KiB; `POST /experiments/exposures` ≤8 KiB (`413 payload_too_large` above).
 - `POST /experiments/{id}/stop` kill switch: status becomes stopped, effective immediately for every request after commit; idempotent (200 on repeat, 404 unknown).
 - `GET /experiments`, `GET /experiments/{id}`.
 - `DELETE /experiments/{id}` draft or stopped only (409 `experiment_running`); removes its exposures.
