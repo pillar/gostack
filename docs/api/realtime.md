@@ -1,8 +1,11 @@
 # GameKit 实时通信（G14 WebSocket 网关）
 
-实现：`kits/game/realtime`（依赖 `github.com/coder/websocket`）。状态：单实例实现，P2。
+实现：`kits/game/realtime`（依赖 `github.com/coder/websocket`）。状态：P2；lite 单实例 Hub，scale 多实例经 PostgreSQL 总线（ADR-0005）。
 
-**仅单实例语义**：连接、消息序号和重放缓冲都保存在进程内存中。多实例部署时每个实例只看到自己的连接，`Send`/`Broadcast` 不会跨实例送达；跨实例需要共享消息总线，**未实现**，配置不得声称支持多实例实时推送。服务重启后序号和缓冲全部丢失（客户端会收到 `resume_failed`，须通过 HTTP 重新拉取状态）。不按消息写 SQLite。
+两种部署语义：
+
+- **lite（`game.realtime.bus: none`，默认）**：连接、消息序号和重放缓冲都在进程内存中，不按消息写库。服务重启后序号和缓冲全部丢失（客户端收到 `resume_failed`，须通过 HTTP 重新拉取状态）。
+- **scale（`game.realtime.bus: postgres`，scale 下启用本模块时必填）**：多个实例共享每玩家一条消息流。序号由 PostgreSQL 分配（`realtime_streams`），消息与重放窗口落库（`realtime_messages`），经 LISTEN/NOTIFY 扇出到每个实例，由各实例投递给自己的连接。详见下文"多实例（PostgreSQL 总线）"。
 
 ## 连接
 
@@ -76,6 +79,7 @@ GET /v1/games/{game}/realtime   (WebSocket upgrade)
 2. 重连并认证后**立即**发送 `resume`；在收到 `resumed`/`resume_failed` 之前到达的业务消息应忽略（服务端会在 `resumed` 之后按序重发）。
 3. 续传成功条件：`epoch` 相同，且 `last_seq+1 … 当前 seq` 全部仍在该玩家的缓冲中。否则 `resume_failed`（缓冲溢出、超龄、已被 ack 释放、服务端重启、epoch 不同）。
 4. 玩家离线时 `Send` 的消息也进入缓冲（受 `ReplayBuffer`/`ReplayMaxBytes`/`ReplayMaxAge`/`MaxStreams` 限制），可在重连后续传取回。不续传的新连接只接收 `welcome.seq` 之后的消息。
+5. 多实例（总线）下续传可落在任何实例，判定见"多实例"一节；结果要么是正确的按序重放，要么是 `resume_failed`，不会跳号或重复。
 
 ## 关闭码
 
@@ -88,6 +92,7 @@ GET /v1/games/{game}/realtime   (WebSocket upgrade)
 | 4003 | token 属于其他游戏（首消息认证） |
 | 4008 | 慢消费者：未发送的实时消息超过 `SendQueue`、需要的消息已被挤出缓冲、写超时或控制消息队列满 |
 | 4009 | 同一玩家的新连接替换了最旧连接 |
+| 4012 | 该玩家在本实例的消息流被重置（仅总线模式：降级为本地流 / 总线恢复 / 无法补齐的缺口 / epoch 变化）；客户端应重连并发送 `resume`（将得到 `resumed` 或 `resume_failed`） |
 | 4029 | 入站消息速率超限 |
 
 心跳超时（`PingInterval` 后 `PongTimeout` 内无 pong）的连接被视为死连接，直接断开（不发关闭帧）。
@@ -112,21 +117,49 @@ GET /v1/games/{game}/realtime   (WebSocket upgrade)
 | WriteTimeout | 5s | 单帧写超时 |
 | SessionRecheck | 1m | 会话重新校验间隔 |
 | MessageTimeout | 5s | 应用处理器与认证查询超时 |
+| BusQueue | 4096 | 仅总线：等待发布的 Send/Broadcast 数，满则 `ErrOverloaded`（`game.realtime.bus_queue`） |
 
-离线缓冲最坏内存约为 `MaxStreams × ReplayMaxBytes`（默认约 64 MiB）加在线流缓冲；`Broadcast` 只发给本实例当前在线的玩家，工作量受 MaxConnections 约束。
+离线缓冲最坏内存约为 `MaxStreams × ReplayMaxBytes`（默认约 64 MiB）加在线流缓冲；lite 下 `Broadcast` 只发给本实例当前在线的玩家，工作量受 MaxConnections 约束。所有限额均为每实例。
+
+## 多实例（PostgreSQL 总线，profile scale）
+
+配置：`game.realtime.bus: postgres`（环境变量 `GOSTACK_GAME_REALTIME_BUS`），要求 `database.driver: postgres`；LISTEN 会话使用 `database.dsn_ref`，每实例额外占用 1 个 PostgreSQL 连接。`bus: valkey` 未实现，配置校验拒绝。迁移 0015 建表。
+
+**序号所有权**：每玩家一行 `realtime_streams(epoch, last_seq)` 是唯一权威。每条消息在一个写事务里取 `last_seq+1`、写入 `realtime_messages`、裁剪该玩家超出 `ReplayBuffer` 的旧行并 `pg_notify`；同一玩家的提交被该行串行化，通知按提交顺序到达所有实例，所以 seq 跨实例单调、连续。epoch 在该行创建时生成，之后不变。任一实例的 `welcome` 给出相同的 epoch 与（该实例已知的）当前 seq。
+
+**投递**：`Send` 只入每实例有界队列（不等待数据库），单个发布协程按 FIFO 批量写库——同一实例对同一玩家的发送顺序保持；不同实例的发送之间没有相对顺序，只有 seq 给出的全序。每个实例的 LISTEN 会话把通知投递给本实例该玩家的连接；通知缺失或载荷过大（>7900 字节不内联）时从表补齐；表也无法补齐（已被裁剪/过期）时以 4012 关闭该玩家在本实例的连接，客户端续传得到正确重放或 `resume_failed`。
+
+**广播**：`Broadcast` 通过一条 NOTIFY 发到所有实例，每个实例为自己当前有连接的该游戏玩家各落一条消息（各自 seq）；同一玩家同时连在多个实例只得到一条。`data` 须放得进一条通知（默认 `MaxPayloadBytes` 4096 满足），否则 `ErrTooLarge`。返回值是调用时连在**本实例**的玩家数。不同实例发出的广播之间没有相对顺序。
+
+**续传**（任一实例）：先把表中 `last_seq` 之后的消息与本实例缓冲合并（合并后仍受 `ReplayBuffer`/`ReplayMaxBytes` 约束），再判定：epoch 相同、`last_seq ≤ 当前 seq`、`last_seq+1 …` 全在 → `resumed` + 按序重放；否则 `resume_failed`。共享窗口 = 每玩家最近 `ReplayBuffer` 条且未超过 `ReplayMaxAge`（各实例定期删除过期行）；离线玩家的消息也在窗口里，可在任何实例取回。`ack` 只释放本实例内存，不删除表中的行（同一窗口内对已 ack 的消息续传可能成功，这是正确重放）。
+
+**故障与降级**：总线健康 = LISTEN 已连接且最近一次发布失败后的退避期已过（`Hub.Stats().BusUp`，gauge `realtime_bus_up`）。
+
+| 情况 | 行为 |
+|---|---|
+| 本实例 LISTEN 断开 / 发布写库失败（含超时、写入准入满） | `Send`/`Broadcast` 仍立即返回；消息只在本实例投递（`realtime_bus_degraded_total{reason=bus_down\|publish_failed}`）。玩家在本实例的流切换为新的本地 epoch：其连接先以 4012 关闭，重连后 `welcome` 为本地 epoch，之后的本地消息实时送达；触发切换的那条消息不实时送达（旧 epoch 续传 → `resume_failed` → HTTP 重拉）。连在其他实例的玩家收不到这些消息。 |
+| LISTEN 重连（100ms→5s 抖动退避） | 所有本地流 4012 重置回共享流；共享流从表补齐断线期间其他实例发布的消息（按序、无重复）。 |
+| 其他实例发布期间本实例 LISTEN 断开 | 本实例重连后补齐，消息延迟送达而非丢失（在窗口内）。 |
+| 发布队列满 | `Send`/`Broadcast` 返回 `ErrOverloaded`，`realtime_send_dropped_total{reason="bus_queue"}`。 |
+| `Hub.Close` | 先发布队列中剩余消息（受关闭 ctx 约束），再断开 LISTEN、关闭连接（1001）。 |
+
+总线指标：`realtime_bus_up`（gauge）、`realtime_bus_published_total`、`realtime_bus_degraded_total{reason=bus_down|publish_failed|sync}`、`realtime_bus_reconnects_total`、`realtime_bus_connect_failures_total`、`realtime_bus_disconnects_total`、`realtime_bus_fills_total`（从表补齐）、`realtime_bus_errors_total{reason=load|cleanup|decode}`、`realtime_stream_resets_total{reason=degraded|bus_restored|gap|epoch|load_failed}`。
+
+本机跨实例投递延迟（Apple M5 Pro，PostgreSQL 17.11 本地，`go test -race`，`TestBusLatency` 串行 300 次，Send → 另一实例的客户端读到帧）：p50 ≈ 0.43ms、p95 ≈ 0.61ms、p99 ≈ 0.7–0.8ms、max ≈ 1.3ms。仅本机数字，非目标环境验收。
 
 ## 服务端 API
 
 ```go
-m := &realtime.Module{Kit: a.Game, DB: a.DB, Metrics: a.Metrics, Options: opts, OnMessage: h}
+m := &realtime.Module{Kit: a.Game, DB: a.DB, Metrics: a.Metrics, Options: opts, OnMessage: h,
+	Bus: &realtime.PostgresBus{DSN: dsn}} // Bus 仅 scale；nil = 进程内 Hub。经配置启用时由 app 接线
 m.Routes(mux)
 hub := m.Hub()
 err := hub.Send(gameID, playerID, "mail", payload)  // 非阻塞；ErrClosed/ErrTooLarge/ErrInvalidType/ErrOverloaded
-n, err := hub.Broadcast(gameID, "news", payload)    // 返回送达的在线玩家数
+n, err := hub.Broadcast(gameID, "news", payload)    // 返回调用时连在本实例的玩家数
 err = hub.Close(ctx)                                // 1001 关闭全部连接，等待至 ctx 结束后强制断开
 ```
 
-关闭顺序：`Hub.Close` 须在关闭数据库之前调用（`http.Server.Shutdown` 不管理已升级的连接）。
+关闭顺序：`Hub.Close` 须在关闭数据库之前调用（`http.Server.Shutdown` 不管理已升级的连接）。经配置接线时 `App.Serve` 与 `App.Close` 会调用（`Module.Close` 对未创建的 Hub 是空操作）。
 
 ## 指标（observability.Registry）
 
@@ -140,5 +173,6 @@ err = hub.Close(ctx)                                // 1001 关闭全部连接�
 
 ## 未实现 / 未验证
 
-- 多实例共享总线、房间（room）接口、匹配票据：未实现。
+- Valkey 总线、房间（room）接口、匹配票据：未实现。
+- 总线模式的吞吐上限、对其他业务写入的影响、PostgreSQL 主从切换下的行为：未测试/未压测。
 - PRD §13 的 3000 空闲连接 30 分钟、活跃连接吞吐/延迟：未在 1C1G 目标环境测量。测试中仅有本机 1000 空闲连接的 goroutine/堆增量记录（客户端与服务端同进程）。

@@ -35,7 +35,7 @@
 - 已实现且有测试：`adapters/store` 方言无关句柄；`adapters/postgres`（pgx stdlib、SERIALIZABLE + 40001/40P01 有界重试、fn 吞错仍重试、读池只读、`?`→`$n` 改写单测、C 排序校验、analytics 独立 schema）；`migrations/postgres{,_analytics}` 与 SQLite 逐版本对应，`TestSchemaEquivalence` 比较 60 张表的列/主键/唯一约束/索引/外键/触发器；账本 UPDATE/DELETE/TRUNCATE 被拒；迁移 advisory lock 并发启动；配置校验（scale/lite/distributed、realtime、local storage、litestream、`rate_limit.accept_per_instance`）；`migrate status|up`、`doctor`、`game reconcile` 在 PG 上运行，`backup *` 在 PG 配置下报错并指向 pg_dump/PITR。
 - 多实例（`tests/scale`）：两个 App 实例共享一个 PG 库，并发领奖/购买/幂等重放、赛季结算、撮合、任务 Claim 均只生效一次。
 - SQLite→PG 迁移（`migrate to-postgres`）：经 HTTP 在 SQLite 上写入玩家/会话/存档/分数/隔离记录/账本/邮件/好友/撮合票/计费/网页用户/任务/埋点 → 服务运行时迁移被拒（实例锁）→ 停服后迁移，逐表行数与摘要一致、对账 0 差异 → 再次迁移因目标非空被拒 → 在 PG 上启动应用，11 个读接口响应与迁移前逐字节一致，幂等重放一致，identity 序列续号正常。
-- 未验证 / 未实现：Scale 性能预算（PRD §13/§23）未压测；PG 备份/PITR 与恢复演练；PG HA；pgmq（不使用）；实时模块多实例；在线双写迁移。热点行在 SERIALIZABLE 下产生大量序列化失败重试（测试中可见数百次），吞吐影响未测量。
+- 未验证 / 未实现：Scale 性能预算（PRD §13/§23）未压测；PG 备份/PITR 与恢复演练；PG HA；pgmq（不使用）；在线双写迁移。热点行在 SERIALIZABLE 下产生大量序列化失败重试（测试中可见数百次），吞吐影响未测量。
 
 ## F12 Scale：Valkey 全局限流与缓存（2026-11-25，ADR-0004）
 验证环境：本机 macOS arm64，Valkey 9.2.0（临时实例，无持久化）、PostgreSQL 17.11（临时集群），Go 1.27.4。CI 配置为 `valkey/valkey:8` 服务容器（本次未在 CI 上运行）。
@@ -59,7 +59,7 @@
 | G11 商业化 | 已实现（未接真实平台） | Apple JWS（x5c 链到配置根证书）、通知 V2、退款与不足额补偿、AdMob SSV / HMAC 广告回调、inbox 去重、outbox；**只用测试生成的证书/密钥验证**；Google Play、微信支付未实现（配置拒绝） |
 | G12 实验 | 已实现 | 稳定分桶、层互斥、曝光去重、停止开关、结果统计 |
 | G13 社交 | 已实现 | 资料与隐私、好友/请求/拉黑、好友码、邀请（游客奖励延迟到绑定后）、分享归因、好友榜 |
-| G14 实时通信 | 已实现（仅单实例） | WebSocket 网关：token 不进 URL、Origin、连接/消息/速率预算、心跳、序号 + ack + 续传、慢消费者断开、停机 1001；本机 1000 空闲连接约 28 KiB/连接（非验收）；scale 下被配置拒绝 |
+| G14 实时通信 | 已实现（lite 单实例；scale 经 PostgreSQL 总线多实例，ADR-0005） | WebSocket 网关：token 不进 URL、Origin、连接/消息/速率预算、心跳、序号 + ack + 续传、慢消费者断开、停机 1001；本机 1000 空闲连接约 28 KiB/连接（非验收）。scale 需 `game.realtime.bus: postgres`（迁移 0015）：PG 分配每玩家 seq、表存重放窗口、LISTEN/NOTIFY 扇出；双实例测试覆盖跨实例 Send 有序连续、广播两实例且每玩家一条、跨实例续传（重放或 resume_failed）、LISTEN 断开/恢复后补齐、总线不可用时本地降级（4012 + 新 epoch + 指标）与恢复、4008/发布队列上限；本机跨实例延迟 p50≈0.43ms p99≈0.8ms（非验收）。吞吐/对其他写入的影响未压测；`bus: valkey` 未实现 |
 | G15 匹配与房间 | 已实现 | 票据（单次消费）、按 rating 窗口撮合、房间租约 + 随机 token + 绑定认领 key、结算幂等 |
 
 ## 验收项对照
@@ -81,4 +81,4 @@
 2. Cloudflare R2：S3 适配器实测、Litestream→R2 复制与恢复（RPO/RTO、费用）。
 3. 真实平台：微信 code2session、Apple 沙盒交易与通知、AdMob 回调。
 4. 真机：Safari iPhone 与微信小游戏验证 SDK（G-A08）。
-5. 未实现：F13 HA/Distributed、PG 备份/PITR、Valkey HA/TLS、realtime 多实例、Google Play/微信支付、CDN 资源发布（G-A07）、WebKit/AgentKit（PRD §24）。
+5. 未实现：F13 HA/Distributed、PG 备份/PITR、Valkey HA/TLS、realtime Valkey 总线、Google Play/微信支付、CDN 资源发布（G-A07）、WebKit/AgentKit（PRD §24）。

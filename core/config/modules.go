@@ -85,7 +85,16 @@ type RealtimeConfig struct {
 	WriteTimeout    time.Duration `yaml:"write_timeout" json:"write_timeout"`
 	SessionRecheck  time.Duration `yaml:"session_recheck" json:"session_recheck"`
 	MessageTimeout  time.Duration `yaml:"message_timeout" json:"message_timeout"`
+	// Bus connects the hubs of several instances: "none" (default; in-process
+	// hub, profile lite) or "postgres" (LISTEN/NOTIFY + realtime tables on the
+	// main database; required for the realtime module under profile scale).
+	Bus string `yaml:"bus" json:"bus"`
+	// BusQueue bounds Send/Broadcast calls waiting for the bus publisher.
+	BusQueue int `yaml:"bus_queue" json:"bus_queue"`
 }
+
+// implementedRealtimeBuses are the accepted game.realtime.bus values ("" = none).
+var implementedRealtimeBuses = map[string]bool{"": true, "none": true, "postgres": true}
 
 // SettlementConfig controls automatic season settlement (boards with a settlement section).
 type SettlementConfig struct {
@@ -174,9 +183,15 @@ func (c Config) validateModules() []error {
 	nonNeg("game.realtime", int64(r.MaxConnections), int64(r.MaxPerPlayer), r.MaxMessageBytes, int64(r.InboundBurst),
 		int64(r.SendQueue), int64(r.MaxPayloadBytes), int64(r.ReplayBuffer), int64(r.ReplayMaxBytes), int64(r.ReplayMaxAge),
 		int64(r.MaxStreams), int64(r.PingInterval), int64(r.PongTimeout), int64(r.AuthTimeout), int64(r.WriteTimeout),
-		int64(r.SessionRecheck), int64(r.MessageTimeout))
+		int64(r.SessionRecheck), int64(r.MessageTimeout), int64(r.BusQueue))
 	if r.InboundRate < 0 {
 		add("game.realtime.inbound_rate must be non-negative")
+	}
+	switch {
+	case !implementedRealtimeBuses[r.Bus]:
+		add("game.realtime.bus %q is not implemented (implemented: none, postgres)", r.Bus)
+	case r.Bus == "postgres" && c.Database.Driver != "postgres":
+		add("game.realtime.bus postgres requires database.driver postgres (profile scale)")
 	}
 	cm := c.Game.Commerce
 	if a := cm.Apple; a != nil {

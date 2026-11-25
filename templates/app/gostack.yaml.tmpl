@@ -65,6 +65,8 @@ game:
   #     admob: { kind: admob }
   # realtime:
   #   max_connections: 4000
+  #   bus: none                  # none (lite, in-process hub) | postgres (required under profile scale)
+  #   bus_queue: 4096            # bus only: Send/Broadcast calls waiting for the publisher
 {{else}}kits: []
 {{end}}
 # Optional email/password login with cookie sessions (/v1/auth/*); see GoStack docs/SECURITY.md.

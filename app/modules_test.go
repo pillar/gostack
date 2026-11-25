@@ -24,8 +24,8 @@ func allModulesConfig(t *testing.T) config.Config {
 	c.Game.Modules = []string{"ops", "experiments", "social", "match", "commerce", "realtime"}
 	c.Billing.Enabled = true
 	if pgtest.Enabled() {
-		// Profile scale rejects the in-process realtime hub and local object storage.
-		c.Game.Modules = c.Game.Modules[:5]
+		// Profile scale: realtime runs on the PostgreSQL bus; local object storage is rejected.
+		c.Game.Realtime.Bus = "postgres"
 		return c
 	}
 	c.Storage.Driver = "local"
@@ -97,7 +97,7 @@ func TestModulesWiredByConfig(t *testing.T) {
 		}
 	}
 	if pgtest.Enabled() {
-		if a.Mod.Ops == nil || a.Mod.Match == nil || a.Mod.Billing == nil || a.Mod.Realtime != nil {
+		if a.Mod.Ops == nil || a.Mod.Match == nil || a.Mod.Billing == nil || a.Mod.Realtime == nil || a.Mod.Realtime.Bus == nil {
 			t.Fatal("modules not constructed as configured for profile scale")
 		}
 	} else if a.Mod.Ops == nil || a.Mod.Realtime == nil || a.Mod.Billing == nil || a.Mod.Storage == nil {
@@ -138,7 +138,6 @@ func TestModuleConfigValidation(t *testing.T) {
 
 // Serve closes realtime connections (1001) on shutdown and runs module loops.
 func TestServeWithModulesShutsDownRealtime(t *testing.T) {
-	pgtest.SkipIfPostgres(t, "the realtime module is rejected under profile scale (in-process hub)")
 	c := allModulesConfig(t)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

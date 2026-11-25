@@ -125,7 +125,7 @@ func (c *conn) run(player, tokHash string) {
 		}
 	}
 	c.player, c.tokHash = player, tokHash
-	epoch, last, ok := h.attach(c)
+	epoch, last, ok := h.attach(c.ctx, c)
 	if !ok {
 		c.close(websocket.StatusGoingAway, "server shutting down", "shutdown")
 		return
@@ -316,7 +316,7 @@ func (c *conn) writer(welcome []byte, done chan struct{}) {
 				}
 				continue
 			}
-			ok, epoch, cur := c.h.resume(c, x.resume.epoch, x.resume.last)
+			ok, epoch, cur := c.h.resume(c.ctx, c, x.resume.epoch, x.resume.last)
 			var b []byte
 			if ok {
 				c.h.count("realtime_resume_total", "ok")

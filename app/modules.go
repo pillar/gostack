@@ -75,7 +75,14 @@ func (a *App) initModules(cfg config.Config) error {
 				InboundRate: r.InboundRate, InboundBurst: r.InboundBurst, SendQueue: r.SendQueue, MaxPayloadBytes: r.MaxPayloadBytes,
 				ReplayBuffer: r.ReplayBuffer, ReplayMaxBytes: r.ReplayMaxBytes, ReplayMaxAge: r.ReplayMaxAge, MaxStreams: r.MaxStreams,
 				PingInterval: r.PingInterval, PongTimeout: r.PongTimeout, AuthTimeout: r.AuthTimeout, WriteTimeout: r.WriteTimeout,
-				SessionRecheck: r.SessionRecheck, MessageTimeout: r.MessageTimeout}}
+				SessionRecheck: r.SessionRecheck, MessageTimeout: r.MessageTimeout, BusQueue: r.BusQueue}}
+			if r.Bus == "postgres" {
+				dsn, err := config.ResolveSecret(cfg.Database.DSNRef)
+				if err != nil {
+					return fmt.Errorf("game.realtime.bus: database dsn: %w", err)
+				}
+				m.Realtime.Bus = &realtime.PostgresBus{DSN: dsn}
+			}
 		}
 	}
 	if cfg.Billing.Enabled {

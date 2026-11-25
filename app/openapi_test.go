@@ -177,7 +177,7 @@ func TestOpenAPIRoutesExist(t *testing.T) {
 	ops := apiOperations(t, doc)
 	checked := 0
 	for _, op := range ops {
-		if pgtest.Enabled() && (op.Module == "realtime" || op.Module == "storage-local") {
+		if pgtest.Enabled() && op.Module == "storage-local" {
 			continue // rejected by configuration validation under profile scale
 		}
 		checked++

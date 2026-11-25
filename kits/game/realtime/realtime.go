@@ -2,10 +2,14 @@
 // per-player connections with heartbeats, per-player message sequence numbers,
 // bounded replay for reconnects and backpressure.
 //
-// Single-instance only: the Hub keeps connections, sequence numbers and replay
-// buffers in process memory. Several instances behind a load balancer would each
-// see only their own connections; that needs a shared bus, which is not
-// implemented. Nothing is written to SQLite per message.
+// Without a bus (profile lite) the Hub keeps connections, sequence numbers and
+// replay buffers in process memory and nothing is written per message.
+//
+// With a PostgresBus (profile scale, game.realtime.bus: postgres) several
+// instances share one message stream per player: PostgreSQL assigns every seq
+// (realtime_streams), keeps the replay window (realtime_messages) and fans
+// messages out with LISTEN/NOTIFY to every instance, which delivers them to its
+// own connections. See docs/adr/0005-realtime-scale.md.
 package realtime
 
 import (
@@ -49,6 +53,7 @@ type Options struct {
 	WriteTimeout    time.Duration // per-frame write deadline (5s)
 	SessionRecheck  time.Duration // re-validate the session while connected (1m)
 	MessageTimeout  time.Duration // OnMessage handler deadline (5s)
+	BusQueue        int           // bus only: Send/Broadcast calls queued for the publisher (4096)
 }
 
 func (o Options) withDefaults() Options {
@@ -76,6 +81,7 @@ func (o Options) withDefaults() Options {
 	def(&o.ReplayBuffer, 64)
 	def(&o.ReplayMaxBytes, 16384)
 	def(&o.MaxStreams, 4000)
+	def(&o.BusQueue, 4096)
 	dur(&o.ReplayMaxAge, 2*time.Minute)
 	dur(&o.PingInterval, 25*time.Second)
 	dur(&o.PongTimeout, 10*time.Second)
@@ -110,6 +116,9 @@ type Module struct {
 	Log       *slog.Logger
 	Options   Options
 	OnMessage Handler // nil: application messages are rejected (unknown_type)
+	// Bus connects the hubs of several instances (profile scale). nil keeps
+	// the in-process hub. DB must be PostgreSQL when Bus is set.
+	Bus *PostgresBus
 
 	once sync.Once
 	hub  *Hub
@@ -139,9 +148,19 @@ func (m *Module) Hub() *Hub {
 		if log == nil {
 			log = slog.New(slog.DiscardHandler)
 		}
-		m.hub = newHub(m.Options.withDefaults(), db, now, met, log, m.OnMessage)
+		m.hub = newHub(m.Options.withDefaults(), db, now, met, log, m.OnMessage, m.Bus)
 	})
 	return m.hub
+}
+
+// Close closes the hub if it was created (see Hub.Close); it is a no-op
+// otherwise and safe to call more than once.
+func (m *Module) Close(ctx context.Context) error {
+	m.once.Do(func() {}) // a later Hub() call must not start a hub after Close
+	if m.hub == nil {
+		return nil
+	}
+	return m.hub.Close(ctx)
 }
 
 // Routes registers GET /v1/games/{game}/realtime.
@@ -156,6 +175,7 @@ const (
 	CodeForbidden    websocket.StatusCode = 4003 // token of another game
 	CodeSlowConsumer websocket.StatusCode = 4008 // outbound queue overflow / write timeout
 	CodeReplaced     websocket.StatusCode = 4009 // replaced by a newer connection of the player
+	CodeStreamReset  websocket.StatusCode = 4012 // the player's stream changed epoch (bus degraded/restored, gap): reconnect and resume
 	CodeRateLimited  websocket.StatusCode = 4029 // inbound rate limit exceeded
 )
 

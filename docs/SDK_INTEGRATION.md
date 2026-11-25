@@ -78,7 +78,7 @@ rt.on('resync', () => { /* 续传失败：用 HTTP 重新拉取邮件、钱包�
 rt.connect();
 ```
 
-服务端需启用 `game.modules: [realtime]`（仅 lite profile，单实例语义）。token 绝不能放在 URL 中（服务端 `400 token_in_url`）。协议细节：`docs/api/realtime.md`。
+服务端需启用 `game.modules: [realtime]`（scale 下另需 `game.realtime.bus: postgres`；关闭码 4012 表示流被重置，SDK 按普通断线重连并续传）。token 绝不能放在 URL 中（服务端 `400 token_in_url`）。协议细节：`docs/api/realtime.md`。
 
 ## 6. 引擎集成示例（未经测试）
 

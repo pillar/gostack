@@ -86,8 +86,8 @@ func (c Config) validateProfile() []error {
 		if c.Backup.Enabled {
 			add("backup.enabled (litestream) applies to SQLite only; back up PostgreSQL with pg_dump / PITR")
 		}
-		if c.HasGameModule("realtime") {
-			add("game module realtime is not supported under profile scale: its hub is in-process and would split players across instances")
+		if c.HasGameModule("realtime") && c.Game.Realtime.Bus != "postgres" {
+			add("game module realtime under profile scale requires game.realtime.bus: postgres (the in-process hub would split players across instances)")
 		}
 		if c.Storage.Driver == "local" {
 			add("storage.driver local is not supported under profile scale: objects on one instance's disk are invisible to the others (use s3)")

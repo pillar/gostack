@@ -112,6 +112,6 @@ TCP → http.Server (ReadHeaderTimeout 5s, MaxHeaderBytes)
 
 ## 8. 未实现 / 未验证（不要据此宣传能力）
 
-- 未实现：distributed profile、Valkey 缓存与全局限流、pgmq、PostgreSQL HA/故障切换、PG 备份自动化、实时模块多实例广播、在线双写迁移、组提交写调度器（ADR-0002）、Google Play / 微信支付等其他 IAP、订阅、邮箱验证/找回密码/MFA、管理后台 UI。
+- 未实现：distributed profile、Valkey 缓存与全局限流、pgmq、PostgreSQL HA/故障切换、PG 备份自动化、实时模块 Valkey 总线（PostgreSQL 总线已实现，ADR-0005）、在线双写迁移、组提交写调度器（ADR-0002）、Google Play / 微信支付等其他 IAP、订阅、邮箱验证/找回密码/MFA、管理后台 UI。
 - 未验证：PRD §13/§23 性能预算（未在 1C1G 目标环境压测）、断电模型下的持久性、Safari iPhone 与微信小游戏真机（G-A08）、真实微信 / Apple / AdMob 端点、Linux 实机部署权限。
 - 引擎集成示例（Cocos/Laya/Three.js，见 `docs/SDK_INTEGRATION.md`）未经测试。
