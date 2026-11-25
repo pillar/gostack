@@ -479,6 +479,7 @@ func createOrder(t *testing.T, e *env, tenant, acct string, amount int64) web.Or
 func TestWebhookSigningRetryAndIdempotency(t *testing.T) {
 	e := newEnv(t, false)
 	e.k.Client = web.NewWebhookClient(true) // the test receiver listens on loopback
+	e.k.Cfg.WebhookAllowPrivateNetworks = true
 	ctx := context.Background()
 	type hit struct {
 		id, ts, sig string
@@ -549,8 +550,11 @@ func TestWebhookSigningRetryAndIdempotency(t *testing.T) {
 	// The default client refuses private/loopback targets (SSRF guard), and
 	// the last attempt marks the delivery failed.
 	e.k.Client = nil
+	e.k.Cfg.WebhookAllowPrivateNetworks = false
 	e.k.Cfg.WebhookMaxAttempts = 1
-	h2, err := e.k.CreateWebhook(ctx, "ta", recv.URL+"/other", nil)
+	// (A literal loopback IP is refused at creation; a host name is checked
+	// on its resolved address when delivering.)
+	h2, err := e.k.CreateWebhook(ctx, "ta", strings.Replace(recv.URL, "127.0.0.1", "localhost", 1)+"/other", nil)
 	must(t, err)
 	o2 := createOrder(t, e, "ta", "wallet", 10)
 	errs := e.runJobs(t)

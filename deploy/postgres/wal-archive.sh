@@ -8,8 +8,10 @@
 # durably stored; never overwrite an existing archive file with different
 # content (a second cluster archiving into the same directory must fail
 # loudly). Re-archiving an identical file succeeds (PostgreSQL may retry after
-# a crash). The copy goes to a temporary name, is fsynced and renamed, so a
-# reader (restore_command) never sees a partial segment.
+# a crash). The copy goes to a temporary name, is fsynced and hard-linked to
+# the final name (ln refuses an existing name atomically, unlike mv), so a
+# reader (restore_command) never sees a partial segment and a concurrently
+# archived segment is never replaced. ARCHIVE_DIR must support hard links.
 #
 # For off-machine archives use a tool built for it (pgBackRest, WAL-G) or point
 # ARCHIVE_DIR at storage that survives loss of the database host; a directory
@@ -30,18 +32,30 @@ esac
   exit 1
 }
 dst="$dir/$name"
-if [ -e "$dst" ]; then
-  if cmp -s "$src" "$dst"; then
-    exit 0
-  fi
+refuse() {
   echo "wal-archive: $dst exists with different content; refusing to overwrite (two clusters archiving to one directory?)" >&2
   exit 1
+}
+if [ -e "$dst" ]; then
+  cmp -s "$src" "$dst" && exit 0
+  refuse
 fi
 tmp="$dir/.$name.tmp.$$"
 trap 'rm -f "$tmp"' EXIT
 cp "$src" "$tmp"
 # fsync the file (GNU coreutils: sync FILE); fall back to a global sync.
 sync "$tmp" 2>/dev/null || sync
-mv "$tmp" "$dst"
+# Publish with a hard link: unlike mv, ln fails atomically when $dst already
+# exists, so a segment stored concurrently (after the check above) is never
+# replaced. The archive directory must support hard links.
+if ! ln "$tmp" "$dst" 2>/dev/null; then
+  if [ -e "$dst" ]; then
+    cmp -s "$tmp" "$dst" || refuse
+  else
+    echo "wal-archive: cannot link $dst (does the archive filesystem support hard links?)" >&2
+    exit 1
+  fi
+fi
+rm -f "$tmp"
 trap - EXIT
 sync "$dir" 2>/dev/null || sync

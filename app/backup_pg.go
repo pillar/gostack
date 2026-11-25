@@ -20,6 +20,7 @@ import (
 	"os"
 	osexec "os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -93,8 +94,8 @@ type PGVerifyReport struct {
 
 // ---------------------------------------------------------------- DSN handling
 
-// pgDSN is a parsed libpq connection string (URL or key=value form) so the
-// password can be passed to pg_dump/pg_restore through PGPASSWORD instead of argv.
+// pgDSN is a parsed libpq connection string (URL or key=value form) so its
+// secrets can be passed to pg_dump/pg_restore outside argv (see toolEnv).
 type pgDSN struct {
 	u  *url.URL
 	kv [][2]string
@@ -191,13 +192,39 @@ func (d pgDSN) dbName() string {
 	return ""
 }
 
-// render returns the connection string, with or without the password.
+// secretParams are the libpq connection parameters that must never reach a
+// child process's argv (visible to other local users in ps and /proc).
+// password travels in PGPASSWORD; libpq has no environment variable for the
+// others (there is no PGSSLPASSWORD), so toolEnv writes them to a temporary
+// 0600 service file named by PGSERVICEFILE/PGSERVICE. Paths such as sslkey or
+// passfile are not secrets and stay in the DSN.
+var secretParams = []string{"password", "sslpassword", "oauth_client_secret"}
+
+// param returns a connection parameter (URL query or key=value form; for
+// key=value the last occurrence wins, as in libpq).
+func (d pgDSN) param(name string) string {
+	if d.u != nil {
+		return d.u.Query().Get(name)
+	}
+	v := ""
+	for _, f := range d.kv {
+		if f[0] == name {
+			v = f[1]
+		}
+	}
+	return v
+}
+
+// render returns the connection string, with or without the secret
+// parameters (password, sslpassword, ...); without them it is safe for argv.
 func (d pgDSN) render(withPassword bool) string {
 	if d.u != nil {
 		u := *d.u
 		q := u.Query()
 		if !withPassword {
-			q.Del("password")
+			for _, k := range secretParams {
+				q.Del(k)
+			}
 			if u.User != nil {
 				u.User = url.User(u.User.Username())
 			}
@@ -207,7 +234,7 @@ func (d pgDSN) render(withPassword bool) string {
 	}
 	var b strings.Builder
 	for _, f := range d.kv {
-		if f[0] == "password" && !withPassword {
+		if !withPassword && slices.Contains(secretParams, f[0]) {
 			continue
 		}
 		if b.Len() > 0 {
@@ -235,20 +262,61 @@ func (d pgDSN) withDB(name string) pgDSN {
 	return pgDSN{kv: append(kv, [2]string{"dbname", name})}
 }
 
-// toolEnv is the environment for pg_dump/pg_restore: the password (if the DSN
-// has one) travels in PGPASSWORD, never in argv.
-func (d pgDSN) toolEnv() []string {
-	env := os.Environ()
+// toolServiceName is the service section toolEnv writes secrets to.
+const toolServiceName = "gostack_tool"
+
+// toolEnv is the environment for pg_dump/pg_restore, which receive the DSN
+// from render(false): the password (if any) travels in PGPASSWORD, the other
+// secret parameters in a temporary 0600 service file (libpq takes a service's
+// settings for parameters the connection string leaves unset). cleanup
+// removes that file; call it after the tool has exited.
+func (d pgDSN) toolEnv() (env []string, cleanup func(), err error) {
+	cleanup = func() {}
+	drop := map[string]bool{}
+	var add []string
 	if p := d.password(); p != "" {
-		out := env[:0:0]
-		for _, e := range env {
-			if !strings.HasPrefix(e, "PGPASSWORD=") {
-				out = append(out, e)
-			}
-		}
-		env = append(out, "PGPASSWORD="+p)
+		drop["PGPASSWORD"] = true
+		add = append(add, "PGPASSWORD="+p)
 	}
-	return env
+	var lines []string
+	for _, k := range secretParams[1:] {
+		v := d.param(k)
+		if v == "" {
+			continue
+		}
+		// Service files hold one key=value per line with trailing whitespace
+		// trimmed; such values cannot be represented.
+		if strings.ContainsAny(v, "\r\n") || strings.TrimRight(v, " \t\f\v") != v {
+			return nil, cleanup, fmt.Errorf("PostgreSQL DSN: %s contains a line break or trailing whitespace and cannot be passed to the client tools", k)
+		}
+		lines = append(lines, k+"="+v)
+	}
+	if len(lines) > 0 {
+		if d.param("service") != "" || os.Getenv("PGSERVICE") != "" {
+			return nil, cleanup, errors.New("PostgreSQL DSN: sslpassword/oauth_client_secret cannot be combined with a libpq service; put the secret in the service file instead")
+		}
+		f, err := os.CreateTemp("", "gostack-pgservice-*.conf") // mode 0600
+		if err != nil {
+			return nil, cleanup, err
+		}
+		_, werr := f.WriteString("[" + toolServiceName + "]\n" + strings.Join(lines, "\n") + "\n")
+		if cerr := f.Close(); werr == nil {
+			werr = cerr
+		}
+		if werr != nil {
+			_ = os.Remove(f.Name())
+			return nil, cleanup, werr
+		}
+		cleanup = func() { _ = os.Remove(f.Name()) }
+		drop["PGSERVICEFILE"], drop["PGSERVICE"] = true, true
+		add = append(add, "PGSERVICEFILE="+f.Name(), "PGSERVICE="+toolServiceName)
+	}
+	for _, e := range os.Environ() {
+		if k, _, _ := strings.Cut(e, "="); !drop[k] {
+			env = append(env, e)
+		}
+	}
+	return append(env, add...), cleanup, nil
 }
 
 func resolvePGDSN(ref string) (pgDSN, error) {
@@ -278,8 +346,13 @@ func runTool(ctx context.Context, d pgDSN, name string, args ...string) error {
 	if err != nil {
 		return errToolMissing{fmt.Errorf("%s not found in PATH (install the PostgreSQL client tools, same or newer major version as the server)", name)}
 	}
+	env, cleanup, err := d.toolEnv()
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 	cmd := osexec.CommandContext(ctx, bin, args...)
-	cmd.Env = d.toolEnv()
+	cmd.Env = env
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	cmd.Stdout = io.Discard

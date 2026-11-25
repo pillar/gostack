@@ -83,7 +83,14 @@ Statuses: `queued`, `running`, `waiting`, `succeeded`, `failed`, `cancelled`,
   tool step interrupted this way gets audit outcome `unknown`.
 - **Timeouts**: the run deadline (`timeout_seconds`, default
   `agent.default_timeout`, max `agent.max_timeout`) bounds every step context;
-  hitting it marks the run `timed_out`. `agent.step_timeout` fails the step.
+  hitting it marks the run `timed_out`. `agent.step_timeout` fails the step,
+  except for a non-idempotent tool: a call that fails after its step context
+  ended (step timeout, or the worker shutting down) may have taken effect, so
+  the step becomes `needs_reconciliation`, the run `waiting`
+  (`wait_reason: reconciliation`) and the audit outcome `unknown` — the same
+  path as a lost lease. Without this, a retry-on-failure workflow would send
+  the call again under a new step key. Idempotent tools and `llm` steps
+  still fail normally.
   Maintenance times out queued/waiting runs past their deadline and running
   runs abandoned for two leases after their deadline.
 - **Budgets**: `max_steps` (checked before each new step) and `max_cost_units`
@@ -149,7 +156,9 @@ references them).
 Crash mid-step (lease expiry, re-claim) resumes from checkpoints without
 re-executing completed steps, and the stale worker is fenced; non-idempotent
 tool with unknown outcome → `needs_reconciliation`, resolution resumes without
-re-sending; idempotent tool re-sent with the same key; cancel (queued and
+re-sending; non-idempotent tool hitting `step_timeout` → `needs_reconciliation`
+and a retrying workflow sends it once (`review_fixes_test.go`); idempotent
+tool re-sent with the same key; cancel (queued and
 during a step); run deadline (queued, during a step), step timeout,
 maintenance timeout; `max_steps` and `max_cost_units`; per-tenant and
 per-workflow concurrency; yielding before lease expiry; sleep + object-storage

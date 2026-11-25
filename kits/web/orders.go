@@ -222,7 +222,9 @@ func code(err error) string {
 // Pay charges the order amount: billing reserve, then settle (both keyed by
 // the order, so retries never charge twice), then created -> paid. If the
 // order was cancelled meanwhile, the charge is refunded. Paying a paid or
-// fulfilled order is a no-op.
+// fulfilled order is a no-op. If a previous attempt stalled past the
+// reservation TTL, the expired reservation is retired and the payment is
+// reserved again under the next payment generation's keys.
 func (k *Kit) Pay(ctx context.Context, tenant, id string) (Order, error) {
 	o, err := k.order(ctx, k.DB.Read, tenant, id)
 	if err != nil {
@@ -235,22 +237,52 @@ func (k *Kit) Pay(ctx context.Context, tenant, id string) (Order, error) {
 	default:
 		return Order{}, httpx.Conflict("invalid_transition", "order is "+o.Status+"; cannot become paid")
 	}
-	res, err := k.Billing.Reserve(ctx, tenant, billingKey(id, "reserve"), o.AccountID, o.Amount, 0, "web order "+id)
-	if err != nil {
-		return Order{}, err
-	}
-	rsv := res.Reservation.ID
-	if err := k.DB.WriteTx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `UPDATE web_orders SET reservation_id=? WHERE tenant_id=? AND id=? AND reservation_id=''`, rsv, tenant, id)
-		return err
-	}); err != nil {
-		return Order{}, err
-	}
-	if _, err := k.Billing.Settle(ctx, tenant, billingKey(id, "settle"), rsv, o.Amount, "web order "+id); err != nil {
-		if code(err) == "invalid_state" { // released by a concurrent cancel
-			return Order{}, httpx.Conflict("invalid_transition", "order was cancelled during payment")
+	for attempt := 1; ; attempt++ {
+		var gen int64
+		if err := k.DB.Read.QueryRowContext(ctx, `SELECT pay_generation FROM web_orders WHERE tenant_id=? AND id=?`, tenant, id).Scan(&gen); err != nil {
+			return Order{}, err
 		}
-		return Order{}, err
+		res, err := k.Billing.Reserve(ctx, tenant, payKey(id, "reserve", gen), o.AccountID, o.Amount, 0, "web order "+id)
+		if err != nil {
+			return Order{}, err
+		}
+		rsv := res.Reservation.ID
+		if err := k.DB.WriteTx(ctx, func(tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, `UPDATE web_orders SET reservation_id=? WHERE tenant_id=? AND id=? AND reservation_id='' AND pay_generation=?`,
+				rsv, tenant, id, gen)
+			return err
+		}); err != nil {
+			return Order{}, err
+		}
+		_, err = k.Billing.Settle(ctx, tenant, payKey(id, "settle", gen), rsv, o.Amount, "web order "+id)
+		if err == nil {
+			break
+		}
+		if c := code(err); c != "invalid_state" && c != "reservation_expired" {
+			return Order{}, err
+		}
+		// The reservation is no longer settleable: released by a concurrent
+		// cancel, or expired because this payment stalled past its TTL (a
+		// retry with the same keys would replay the dead reservation forever).
+		cur, gerr := k.order(ctx, k.DB.Read, tenant, id)
+		if gerr != nil {
+			return Order{}, gerr
+		}
+		switch cur.Status {
+		case OrderCancelled:
+			return Order{}, httpx.Conflict("invalid_transition", "order was cancelled during payment")
+		case OrderPaid, OrderFulfilled:
+			return cur, nil // a concurrent Pay completed it
+		case OrderCreated:
+		default:
+			return Order{}, httpx.Conflict("invalid_transition", "order is "+cur.Status+"; cannot become paid")
+		}
+		if attempt >= 3 {
+			return Order{}, err
+		}
+		if err := k.renewPayment(ctx, tenant, cur, rsv, gen); err != nil {
+			return Order{}, err
+		}
 	}
 	paid, _, err := k.transitionTx(ctx, tenant, id, []string{OrderCreated}, OrderPaid, "order.paid")
 	if code(err) == "invalid_transition" {
@@ -265,6 +297,50 @@ func (k *Kit) Pay(ctx context.Context, tenant, id string) (Order, error) {
 		}
 	}
 	return paid, err
+}
+
+// payKey is the billing idempotency key of a payment step. Generation 0 keeps
+// the original keys; later generations (after an expired reservation) get a
+// suffix so they reserve and settle anew instead of replaying.
+func payKey(id, step string, gen int64) string {
+	if gen == 0 {
+		return billingKey(id, step)
+	}
+	return billingKey(id, step+":"+strconv.FormatInt(gen, 10))
+}
+
+// renewPayment retires the unsettleable reservation rsv of payment generation
+// gen of a still-created order: a reservation that expired but was not yet
+// swept is released (its funds come back now), then the order moves to the
+// next generation with no reservation. A concurrent renewal is harmless (the
+// generation only moves once from gen).
+func (k *Kit) renewPayment(ctx context.Context, tenant string, o Order, rsv string, gen int64) error {
+	r, err := k.Billing.GetReservation(ctx, tenant, rsv)
+	if err != nil {
+		return err
+	}
+	if r.Status == billing.StatusReserved {
+		_, err := k.Billing.Release(ctx, tenant, payKey(o.ID, "release-expired", gen), rsv, "web order "+o.ID+": reservation expired before settlement")
+		if err != nil && code(err) != "invalid_state" {
+			return err
+		}
+		if r, err = k.Billing.GetReservation(ctx, tenant, rsv); err != nil {
+			return err
+		}
+	}
+	switch r.Status {
+	case billing.StatusSettled:
+		return nil // settled concurrently with this generation's key: the retry replays it
+	case billing.StatusReleased, billing.StatusExpired:
+	default:
+		return httpx.Conflict("invalid_state", "order reservation is "+r.Status)
+	}
+	return k.DB.WriteTx(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `UPDATE web_orders SET pay_generation=pay_generation+1, reservation_id='', updated_at=?
+			WHERE tenant_id=? AND id=? AND status=? AND pay_generation=? AND reservation_id IN ('', ?)`,
+			k.now().UnixMilli(), tenant, o.ID, OrderCreated, gen, rsv)
+		return err
+	})
 }
 
 // compensate returns money taken for an order that ends without delivery:

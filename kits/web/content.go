@@ -451,6 +451,9 @@ func (k *Kit) Publish(ctx context.Context, tenant, id string, rev int64, at time
 		if err != nil {
 			return err
 		}
+		// fn may re-run (SQLITE_BUSY / serialization failure): resolve
+		// "current draft" into a local on every attempt, never into rev.
+		rev := rev
 		if rev == 0 {
 			rev = cur.DraftRevision
 		}

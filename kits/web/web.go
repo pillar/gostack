@@ -18,6 +18,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pillar/gostack/adapters/store"
@@ -54,8 +55,12 @@ type Kit struct {
 	Production bool
 	Now        func() time.Time
 	Log        *slog.Logger
-	// Client delivers webhooks (default: SSRF-guarded client, no redirects).
+	// Client delivers webhooks (default: SSRF-guarded client, no redirects,
+	// built once per Kit and reused).
 	Client *http.Client
+
+	clientOnce sync.Once
+	defClient  *http.Client
 }
 
 func (k *Kit) now() time.Time {

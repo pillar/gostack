@@ -499,6 +499,22 @@ func (r *Run) do(ctx context.Context, spec stepSpec, fn func(ctx context.Context
 		return nil, r.stepStop(ctx, seq, attempt, spec, key, reqHash, StatusCancelled, CodeCancelled, "cancelled by request")
 	case CodeTimedOut:
 		return nil, r.stepStop(ctx, seq, attempt, spec, key, reqHash, StatusTimedOut, CodeTimedOut, "run deadline exceeded during step")
+	case causeInterrupted:
+		// The step context ended (step_timeout, or the worker is shutting
+		// down) while the call was in flight: the request may have reached
+		// the external system. A non-idempotent call must not be reported as
+		// a definite failure (a retrying workflow would send it again under a
+		// new key); it goes to reconciliation like a lost-lease step.
+		if spec.kind == KindTool && !spec.tool.Idempotent {
+			msg := "step context ended during a non-idempotent tool call; outcome unknown"
+			return nil, r.park(ctx, StatusWaiting, "reconciliation", time.Time{}, func(tx *sql.Tx, now int64) error {
+				if _, err := tx.ExecContext(ctx, `UPDATE agent_steps SET status=?, error=? WHERE tenant_id=? AND run_id=? AND seq=?`,
+					StepNeedsReconciliation, msg, r.tenant, r.id, seq); err != nil {
+					return err
+				}
+				return audit(ctx, tx, r.tenant, r.id, seq, attempt, spec.tool.Tool, key, reqHash, "unknown", "", r.redact(ferr.Error()), now)
+			})
+		}
 	}
 	ref := ""
 	data := out.Data
@@ -577,7 +593,8 @@ func (r *Run) stepStop(ctx context.Context, seq, attempt int64, spec stepSpec, k
 }
 
 // execute runs fn under the step timeout, the run deadline and a cancel watcher.
-// cause is CodeCancelled / CodeTimedOut when the run (not the step) was stopped.
+// cause is CodeCancelled / CodeTimedOut when the run (not the step) was
+// stopped, causeInterrupted when fn failed after the step context ended.
 func (r *Run) execute(ctx context.Context, fn func(ctx context.Context, key string) (Output, error), key string) (out Output, err error, cause string) {
 	var deadline int64
 	if err := r.k.DB.Read.QueryRowContext(ctx, `SELECT deadline_at FROM agent_runs WHERE tenant_id=? AND id=?`, r.tenant, r.id).Scan(&deadline); err != nil {
@@ -634,9 +651,15 @@ func (r *Run) execute(ctx context.Context, fn func(ctx context.Context, key stri
 		return out, err, CodeCancelled
 	case runBound && err != nil && errors.Is(sctx.Err(), context.DeadlineExceeded):
 		return out, err, CodeTimedOut
+	case err != nil && sctx.Err() != nil:
+		return out, err, causeInterrupted
 	}
 	return out, err, ""
 }
+
+// causeInterrupted: fn failed after its context ended (step timeout or the
+// caller's context), so a call it made may or may not have taken effect.
+const causeInterrupted = "interrupted"
 
 // checkpoint loads a completed step's output.
 func (r *Run) checkpoint(ctx context.Context, seq int64, ref string) ([]byte, error) {

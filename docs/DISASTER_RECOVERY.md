@@ -135,7 +135,7 @@ APP --config CFG [--json] backup restore --from /backups/app-<ts>.dump --to-dsn-
 ```
 
 - **一致性**：snapshot 在一个 `REPEATABLE READ READ ONLY` 事务中执行 `pg_export_snapshot()`，在同一快照内统计每张表行数、各 schema 最高迁移版本、`game_ledger` 按资产求和、`billing_ledger_entries` 的 `delta_available/delta_reserved` 求和，再以 `pg_dump --snapshot=<id>` 导出。清单与归档描述的是**同一份数据**，因此恢复后必须逐项相等。独立 analytics 库是另一个快照（P2 数据，不与主库严格一致）。
-- **口令**：DSN 只经 `database.dsn_ref`（env:/file:）解析；传给 pg_dump/pg_restore 的 `--dbname` 去掉口令，口令经子进程环境变量 `PGPASSWORD` 传递，不出现在 argv/`ps` 中；错误信息不回显 DSN。单测 `TestPGDSNKeepsPasswordOutOfArgs` 覆盖 URL（userinfo 与 `?password=`）与 key=value（含引号转义）两种形式。
+- **口令与其他秘密参数**：DSN 只经 `database.dsn_ref`（env:/file:）解析；传给 pg_dump/pg_restore 的 `--dbname` 去掉全部秘密参数（`password`、`sslpassword`、`oauth_client_secret`），不出现在 argv/`ps` 中；错误信息不回显 DSN。`password` 经子进程环境变量 `PGPASSWORD` 传递；libpq 没有 `sslpassword` 等参数对应的环境变量（PG 17 libpq 的环境变量表中无 `PGSSLPASSWORD`），因此写入临时 0600 服务文件（`PGSERVICEFILE` + `PGSERVICE=gostack_tool`，libpq 对连接串未给出的参数取服务文件中的值），工具退出后删除。DSN 自带 `service=` 或环境已设 `PGSERVICE` 时，若同时含 `sslpassword` 则拒绝（请把它写进自己的服务文件）；含换行或尾随空白的值无法写入服务文件，同样拒绝。`sslkey`、`passfile` 是路径而非秘密，保留在 DSN 中。单测 `TestPGDSNKeepsPasswordOutOfArgs`、`TestPGDSNKeepsAllSecretsOutOfArgs` 覆盖 URL（userinfo、`?password=`、`?sslpassword=`）与 key=value（含引号转义）两种形式；`TestPGToolsWithSSLPasswordViaServiceFile` 在真实 PostgreSQL 上用含 `sslpassword` 的 DSN 运行 pg_dump。
 - **verify**：校验归档 sha256/大小与清单一致 → 在 `--dsn-ref`（默认 `database.dsn_ref`）所在服务器 `CREATE DATABASE gs_verify_<随机> TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'`（角色需 CREATEDB）→ `pg_restore --single-transaction --exit-on-error --no-owner --no-privileges` → 主库与 analytics schema 的迁移状态对比本二进制（待处理可接受，未知/漂移失败）→ GameKit 钱包/账本对账 → 计费对账 → 与清单比较行数、账本和、schema 版本 → `DROP DATABASE … WITH (FORCE)`（失败路径同样删除）。文件以 `PGDMP` 开头时自动按 PG 处理；非 PG 配置下需 `--dsn-ref`。
 - **restore**：目标库必须已创建（C 排序）且为空（无任何用户关系；独立 analytics 目标不得已有 `gostack_analytics`），否则拒绝；先校验清单与校验和，再单事务 `pg_restore`（失败则目标保持为空），然后在目标库上原地执行与 verify 相同的检查。对象属主为连接角色（`--no-owner`）。
 - **退出码**与 SQLite 版一致：0 通过；3 检查失败（归档截断/篡改、缺清单、pg_restore 失败、对账不平、清单不符、schema 比本二进制新或漂移）；1 运行错误（目标非空、无 pg_dump/pg_restore、连接失败、角色无 CREATEDB）；2 用法错误（含 `--to-dsn-ref` 传字面 DSN）。
@@ -149,7 +149,7 @@ APP --config CFG [--json] backup restore --from /backups/app-<ts>.dump --to-dsn-
 
 文件（`deploy/postgres/`）：
 - `postgresql.pitr.conf`：`wal_level=replica`、`archive_mode=on`、`archive_command='…/wal-archive.sh %p %f ARCHIVE_DIR'`、`archive_timeout=60s`、`max_wal_senders=10`。`archive_mode` 需重启。
-- `wal-archive.sh`：复制到临时名 → fsync → rename；同名同内容视为成功（崩溃后重试），同名不同内容**拒绝**（防止两个集群写同一归档目录）；拒绝含路径的文件名。
+- `wal-archive.sh`：复制到临时名 → fsync → 用 `ln`（硬链接）发布到最终名；`ln` 在目标已存在时原子失败（`mv` 会覆盖），因此检查之后才出现的同名文件也不会被替换：同名同内容视为成功（崩溃后重试），同名不同内容**拒绝**（防止两个集群写同一归档目录）；拒绝含路径的文件名。归档目录所在文件系统必须支持硬链接（不支持时脚本报错退出，不会静默覆盖）。`deploy/postgres_test.go` 用 PATH 中的 `cp` 垫片在检查后注入同名文件，覆盖“不同内容被拒且不被覆盖”和“相同内容成功”两种竞争。
 - `wal-restore.sh`：`restore_command` 助手，文件不存在时非零退出（归档结束）。
 - `base-backup.sh`：`pg_basebackup -Fp -X stream -c fast --manifest-checksums=SHA256` 到新目录，然后 `pg_verifybackup`；口令经 `PGPASSWORD`/`.pgpass`；失败时删除目标；输出 JSON（起始 LSN/时间）。角色需 REPLICATION。
 - `pitr-restore.sh`：把基础备份复制到**新的**数据目录，写 `recovery.signal`，在 `postgresql.auto.conf` 追加 `restore_command`、`recovery_target_action='promote'`、可选 `recovery_target_time`（`recovery_target_inclusive=on`），并设 `archive_mode=off`（避免恢复出的新时间线写回正在使用的归档）。不启动服务器。

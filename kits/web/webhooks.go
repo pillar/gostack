@@ -13,6 +13,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"slices"
 	"strconv"
@@ -88,6 +89,11 @@ func (k *Kit) CreateWebhook(ctx context.Context, tenant, rawURL string, events [
 	}
 	if k.Production && u.Scheme != "https" {
 		return Webhook{}, httpx.BadRequest("production: webhook url must use https")
+	}
+	// Literal IPs are checked now; host names are checked on every resolved
+	// address at dial time.
+	if ip, err := netip.ParseAddr(u.Hostname()); err == nil && !k.Cfg.WebhookAllowPrivateNetworks && !PublicIP(ip) {
+		return Webhook{}, httpx.BadRequest("webhook url must not point to a private or special-purpose address")
 	}
 	for _, e := range events {
 		if !slices.Contains(EventTypes, e) {
@@ -318,17 +324,100 @@ func (k *Kit) send(ctx context.Context, target, secret, eventID string, body []b
 	return res.StatusCode, nil
 }
 
+// client returns k.Client or the Kit's default guarded client, built once and
+// reused so that deliveries share one connection pool.
 func (k *Kit) client() *http.Client {
 	if k.Client != nil {
 		return k.Client
 	}
-	return NewWebhookClient(k.Cfg.WebhookAllowPrivateNetworks)
+	k.clientOnce.Do(func() { k.defClient = NewWebhookClient(k.Cfg.WebhookAllowPrivateNetworks) })
+	return k.defClient
+}
+
+func mustPrefixes(ss ...string) []netip.Prefix {
+	out := make([]netip.Prefix, len(ss))
+	for i, s := range ss {
+		out[i] = netip.MustParsePrefix(s)
+	}
+	return out
+}
+
+// Special-purpose ranges (IANA IPv4/IPv6 special-purpose address registries)
+// that a webhook may never reach.
+var (
+	deniedV4 = mustPrefixes(
+		"0.0.0.0/8",       // "this network"
+		"10.0.0.0/8",      // private
+		"100.64.0.0/10",   // CGNAT; cloud metadata (Alibaba Cloud 100.100.100.200)
+		"127.0.0.0/8",     // loopback
+		"169.254.0.0/16",  // link-local; cloud metadata (169.254.169.254)
+		"172.16.0.0/12",   // private
+		"192.0.0.0/24",    // IETF protocol assignments
+		"192.0.2.0/24",    // TEST-NET-1
+		"192.168.0.0/16",  // private
+		"198.18.0.0/15",   // benchmarking
+		"198.51.100.0/24", // TEST-NET-2
+		"203.0.113.0/24",  // TEST-NET-3
+		"224.0.0.0/4",     // multicast
+		"240.0.0.0/4",     // reserved, includes broadcast 255.255.255.255
+	)
+	deniedV6 = mustPrefixes(
+		"::/96",          // unspecified, loopback, IPv4-compatible (deprecated)
+		"64:ff9b:1::/48", // NAT64 local-use: the embedded IPv4 position varies, deny
+		"100::/64",       // discard-only
+		"2001::/23",      // IETF protocol assignments (Teredo, ORCHID, ...)
+		"2001:db8::/32",  // documentation
+		"fc00::/7",       // unique local
+		"fe80::/10",      // link-local
+		"fec0::/10",      // site-local (deprecated)
+		"ff00::/8",       // multicast
+	)
+	nat64WKP      = netip.MustParsePrefix("64:ff9b::/96") // NAT64 well-known prefix: IPv4 in the last 32 bits
+	sixToFour     = netip.MustParsePrefix("2002::/16")    // 6to4: IPv4 in bits 16-47
+	globalUnicast = netip.MustParsePrefix("2000::/3")
+)
+
+// PublicIP reports whether a webhook may connect to ip: it must not be in a
+// special-purpose range. IPv4-mapped, NAT64 (64:ff9b::/96) and 6to4 addresses
+// are judged by the IPv4 address they embed; any other IPv6 address must be
+// global unicast (2000::/3) outside the denied IPv6 ranges.
+func PublicIP(ip netip.Addr) bool {
+	ip = ip.WithZone("")
+	if ip.Is4In6() {
+		ip = ip.Unmap()
+	}
+	if ip.Is4() {
+		for _, p := range deniedV4 {
+			if p.Contains(ip) {
+				return false
+			}
+		}
+		return true
+	}
+	if !ip.Is6() {
+		return false
+	}
+	b := ip.As16()
+	switch {
+	case nat64WKP.Contains(ip):
+		return PublicIP(netip.AddrFrom4([4]byte(b[12:16])))
+	case sixToFour.Contains(ip):
+		return PublicIP(netip.AddrFrom4([4]byte(b[2:6])))
+	case !globalUnicast.Contains(ip):
+		return false
+	}
+	for _, p := range deniedV6 {
+		if p.Contains(ip) {
+			return false
+		}
+	}
+	return true
 }
 
 // NewWebhookClient returns a client that does not follow redirects and, unless
-// allowPrivate, refuses to connect to loopback, private, link-local,
-// multicast or unspecified addresses (checked on the resolved IP at dial time,
-// so DNS rebinding cannot bypass it).
+// allowPrivate, refuses to connect to any address that is not PublicIP
+// (checked on the resolved IP at dial time, so DNS rebinding cannot bypass
+// it). Build it once and reuse it: every client owns a connection pool.
 func NewWebhookClient(allowPrivate bool) *http.Client {
 	d := &net.Dialer{Timeout: 5 * time.Second}
 	if !allowPrivate {
@@ -337,15 +426,13 @@ func NewWebhookClient(allowPrivate bool) *http.Client {
 			if err != nil {
 				return err
 			}
-			ip := net.ParseIP(host)
-			if ip == nil || ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-				ip.IsMulticast() || ip.IsUnspecified() || ip.IsInterfaceLocalMulticast() {
+			if ip, err := netip.ParseAddr(host); err != nil || !PublicIP(ip) {
 				return fmt.Errorf("webhook target %s is not a public address", host)
 			}
 			return nil
 		}
 	}
-	tr := &http.Transport{DialContext: d.DialContext, Proxy: nil, MaxIdleConns: 16, IdleConnTimeout: 30 * time.Second,
+	tr := &http.Transport{DialContext: d.DialContext, Proxy: nil, MaxIdleConns: 16, MaxIdleConnsPerHost: 4, IdleConnTimeout: 30 * time.Second,
 		TLSHandshakeTimeout: 5 * time.Second, ResponseHeaderTimeout: 10 * time.Second}
 	return &http.Client{Transport: tr, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }

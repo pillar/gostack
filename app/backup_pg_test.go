@@ -51,7 +51,12 @@ func TestPGDSNKeepsPasswordOutOfArgs(t *testing.T) {
 		if w := d.withDB("gs_verify_x"); w.dbName() != "gs_verify_x" || w.password() != d.password() {
 			t.Fatalf("withDB: %q", w.render(false))
 		}
-		env := strings.Join(d.toolEnv(), "\n")
+		envs, cleanup, err := d.toolEnv()
+		if err != nil {
+			t.Fatal(err)
+		}
+		cleanup()
+		env := strings.Join(envs, "\n")
 		if !strings.Contains(env, "PGPASSWORD="+d.password()) {
 			t.Fatal("PGPASSWORD not set for tools")
 		}

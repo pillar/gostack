@@ -84,9 +84,15 @@ paid | fulfilled ──refund──▶ refunded
   `409 invalid_transition`. Every transition appends an event
   (`web_events`, append-only, ordered by order version) in the same
   transaction: `order.created|paid|fulfilled|cancelled|refunded`.
-- Known limitation: a `pay` interrupted between reserve and settle for longer
-  than the billing reservation TTL (15 min) cannot be completed; cancel and
-  create a new order.
+- A `pay` interrupted between reserve and settle for longer than the billing
+  reservation TTL (15 min) finds its reservation expired on retry: the expired
+  reservation is released (if the sweeper has not expired it yet), the order
+  moves to the next payment generation (`web_orders.pay_generation`) and the
+  retry reserves and settles again with generation-suffixed keys
+  (`web-order:<id>:reserve:<n>`, `...:settle:<n>`). Only a reservation of the
+  current generation can be settled, so the order is still charged at most
+  once. `pay` answers `409 invalid_transition` "order was cancelled during
+  payment" only when the order really was cancelled.
 
 ## Webhooks (outbox)
 
@@ -114,8 +120,22 @@ the delivery `failed`. A delivered event is not re-sent by a repeated job;
 a crash between the POST and recording it can re-send it (at-least-once).
 The delivery client follows no redirects and, unless
 `web.webhook_allow_private_networks` (rejected in production), refuses to
-connect to loopback, private, link-local, multicast or unspecified addresses
-(checked on the resolved IP at dial time). Production requires https URLs.
+connect to any special-purpose address (`web.PublicIP`), checked on the
+resolved IP at dial time (DNS rebinding cannot bypass it) and, for literal IP
+URLs, already at creation (`400`):
+
+- IPv4: `0.0.0.0/8`, `10/8`, `100.64/10` (CGNAT; Alibaba Cloud metadata
+  `100.100.100.200`), `127/8`, `169.254/16`, `172.16/12`, `192.0.0.0/24`,
+  `192.0.2.0/24`, `192.168/16`, `198.18/15`, `198.51.100/24`, `203.0.113/24`,
+  `224/4`, `240/4` (includes `255.255.255.255`).
+- IPv6: anything outside `2000::/3`, plus `2001::/23`, `2001:db8::/32`,
+  `64:ff9b:1::/48` (NAT64 local use), `100::/64`, `fc00::/7`, `fe80::/10`,
+  `fec0::/10`, `ff00::/8`, `::/96`. IPv4-mapped (`::ffff:0:0/96`), NAT64
+  well-known (`64:ff9b::/96`) and 6to4 (`2002::/16`) addresses are judged by
+  the IPv4 address they embed.
+
+The default delivery client is built once per Kit and reused (one connection
+pool). Production requires https URLs.
 
 ## Configuration
 
@@ -132,8 +152,13 @@ billing:
 
 Env override: `GOSTACK_WEB_PUBLIC_MAX_AGE`.
 
-## Tests (`kits/web/web_test.go`, SQLite and PostgreSQL)
+## Tests (`kits/web/web_test.go`, `kits/web/review_fixes_test.go`, SQLite and PostgreSQL)
 
+Special-purpose address classes refused at dial time and at creation; the
+default client is reused (goroutines stay flat over 40 deliveries); `pay`
+after the reservation expired (swept and not yet swept) completes with one
+charge; `publish` re-resolves the current draft when PostgreSQL re-runs its
+transaction after a concurrent edit (PostgreSQL only).
 Content lifecycle with revisions, optimistic versions, slug uniqueness,
 invalid transitions, ETag/304; scheduled publish via jobs including stale jobs
 after unschedule/reschedule; sitemap (noindex excluded, canonical URLs) and

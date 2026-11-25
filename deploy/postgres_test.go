@@ -61,6 +61,43 @@ func TestPostgresPITRScripts(t *testing.T) {
 	if ents, _ := os.ReadDir(arch); len(ents) != 1 {
 		t.Fatalf("archive has leftovers: %v", ents)
 	}
+	// Race: another archiver stores a different segment under the same name
+	// after the existence check (simulated by a cp shim on PATH). The archived
+	// file must never be replaced; an identical concurrent copy is success.
+	shim := filepath.Join(dir, "shim")
+	os.Mkdir(shim, 0o700)
+	cpPath, err := exec.LookPath("cp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(shim, "cp"), []byte("#!/usr/bin/env bash\nprintf '%s' \"$RACE_CONTENT\" > \"$RACE_DST\"\nexec "+cpPath+" \"$@\"\n"), 0o700)
+	race := func(name, content string) (int, string) {
+		t.Helper()
+		c := exec.Command("bash", filepath.Join(pgdir, "wal-archive.sh"), seg, name, arch)
+		c.Env = append(os.Environ(), "PATH="+shim+string(os.PathListSeparator)+os.Getenv("PATH"),
+			"RACE_DST="+filepath.Join(arch, name), "RACE_CONTENT="+content)
+		out, err := c.CombinedOutput()
+		if ee, ok := err.(*exec.ExitError); ok {
+			return ee.ExitCode(), string(out)
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		return 0, string(out)
+	}
+	if code, out := race("000000010000000000000005", "other-cluster"); code == 0 || !strings.Contains(out, "refusing to overwrite") {
+		t.Fatalf("raced different segment: %d %s", code, out)
+	}
+	if b, _ := os.ReadFile(filepath.Join(arch, "000000010000000000000005")); string(b) != "other-cluster" {
+		t.Fatalf("concurrently archived segment was overwritten: %q", b)
+	}
+	if code, out := race("000000010000000000000006", "wal-two"); code != 0 {
+		t.Fatalf("raced identical segment: %d %s", code, out)
+	}
+	if ents, _ := os.ReadDir(arch); len(ents) != 3 {
+		t.Fatalf("archive has leftovers after races: %v", ents)
+	}
+	os.Remove(filepath.Join(arch, "000000010000000000000005"))
+	os.Remove(filepath.Join(arch, "000000010000000000000006"))
 	// Restore helper.
 	got := filepath.Join(dir, "RECOVERYXLOG")
 	if code, _ := run("wal-restore.sh", "000000010000000000000003", got, arch); code != 0 {
