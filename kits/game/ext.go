@@ -132,3 +132,30 @@ func (k *Kit) SetRates(authPerMinute, scorePerMinute int) {
 	k.scoreLimit.SetPerMinute(scorePerMinute)
 	k.eventLimit.SetPerMinute(authPerMinute * 4)
 }
+
+// Grant posts player-claimed grants (mail, check-in, tasks, redeem codes,
+// invites) through ApplyLedger and enforces the game's items catalog like reward
+// claims do: when a catalog exists every granted asset must be in it (409
+// unknown_asset), and items may not exceed max_stack (409 stack_limit). It reads
+// the configuration inside tx. Server-authoritative grants for purchases, ad
+// callbacks and match results use ApplyLedger directly and are not capped,
+// because failing them would strand a paid or externally confirmed event.
+func (k *Kit) Grant(ctx context.Context, tx *sql.Tx, gameID, playerID, kind, sourceKey string, deltas map[string]int64, now int64) error {
+	c, err := k.currentConfig(ctx, tx, gameID)
+	if err != nil {
+		return err
+	}
+	if len(c.Doc.Items) > 0 {
+		for asset := range deltas {
+			if _, ok := c.Doc.Items[asset]; !ok {
+				e := httpx.Conflict("unknown_asset", "granted asset is not in the items catalog")
+				e.Details = map[string]any{"asset": asset}
+				return e
+			}
+		}
+	}
+	if err := ApplyLedger(ctx, tx, gameID, playerID, kind, sourceKey, deltas, now); err != nil {
+		return err
+	}
+	return checkStacks(ctx, tx, c.Doc, gameID, playerID, deltas)
+}

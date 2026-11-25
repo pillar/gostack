@@ -314,7 +314,7 @@ func (m *Module) claimTask(w http.ResponseWriter, r *http.Request) error {
 			now.UnixMilli(), s.GameID, s.PlayerID, id, key); err != nil {
 			return idempotency.Result{}, err
 		}
-		if err := game.ApplyLedger(ctx, tx, s.GameID, s.PlayerID, "reward", "task:"+id+":"+key+":"+s.PlayerID, t.Grants, now.UnixMilli()); err != nil {
+		if err := m.Kit.Grant(ctx, tx, s.GameID, s.PlayerID, "reward", "task:"+id+":"+key+":"+s.PlayerID, t.Grants, now.UnixMilli()); err != nil {
 			return idempotency.Result{}, err
 		}
 		return idempotency.Result{Body: map[string]any{"task_id": id, "period_key": key, "grants": t.Grants}}, nil

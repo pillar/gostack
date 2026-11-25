@@ -258,3 +258,12 @@
 ### GET /v1/admin/games/{game}/boards/{board}/seasons/{season}/settlement?limit=100
 
 结算记录加发放明细 `"payouts": [{"rank": 1, "player_id": "...", "score": 900, "grants": {"coin": 500}}]`（按名次，`limit` 1–1000）；无记录 404。
+
+### Items catalog scope
+
+The `items` catalog and `max_stack` apply to reward claims, offer purchases and
+all player-claimed grants of the optional modules (mail, check-in, tasks,
+redeem codes, invites → `409 unknown_asset` / `409 stack_limit`). Season
+settlement clamps item grants to `max_stack` instead of failing. Purchases
+(IAP), ad rewards and match settlements are server-authoritative and are not
+capped, so a confirmed external event is never stranded.

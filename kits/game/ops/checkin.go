@@ -163,7 +163,7 @@ func (m *Module) postCheckin(w http.ResponseWriter, r *http.Request) error {
 			s.GameID, s.PlayerID, streak, today); err != nil {
 			return idempotency.Result{}, err
 		}
-		if err := game.ApplyLedger(ctx, tx, s.GameID, s.PlayerID, "reward", "checkin:"+today+":"+s.PlayerID, c.Cycle[idx], now.UnixMilli()); err != nil {
+		if err := m.Kit.Grant(ctx, tx, s.GameID, s.PlayerID, "reward", "checkin:"+today+":"+s.PlayerID, c.Cycle[idx], now.UnixMilli()); err != nil {
 			return idempotency.Result{}, err
 		}
 		return idempotency.Result{Body: map[string]any{"day": today, "streak": streak, "index": idx, "grants": c.Cycle[idx]}}, nil

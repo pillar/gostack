@@ -4421,6 +4421,7 @@ components:
         - schema_outdated
         - merge_base_unavailable
         - stack_limit
+        - unknown_asset
         - purchase_limit
         - rule_version_mismatch
         - run_token_invalid

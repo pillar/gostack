@@ -241,7 +241,7 @@ func (m *Module) claimMail(w http.ResponseWriter, r *http.Request) error {
 			WHERE game_id=? AND mail_id=? AND player_id=?`, now, now, s.GameID, id, s.PlayerID); err != nil {
 			return idempotency.Result{}, err
 		}
-		if err := game.ApplyLedger(ctx, tx, s.GameID, s.PlayerID, "reward", "mail:"+id+":"+s.PlayerID, mail.Grants, now); err != nil {
+		if err := m.Kit.Grant(ctx, tx, s.GameID, s.PlayerID, "reward", "mail:"+id+":"+s.PlayerID, mail.Grants, now); err != nil {
 			return idempotency.Result{}, err
 		}
 		return idempotency.Result{Body: map[string]any{"mail_id": id, "grants": mail.Grants}}, nil

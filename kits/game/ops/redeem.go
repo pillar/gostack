@@ -257,7 +257,7 @@ func (m *Module) redeem(w http.ResponseWriter, r *http.Request) error {
 			return idempotency.Result{}, err
 		}
 		g := parseGrants(grants)
-		if err := game.ApplyLedger(ctx, tx, s.GameID, s.PlayerID, "reward", "redeem:"+hash+":"+s.PlayerID, g, now); err != nil {
+		if err := m.Kit.Grant(ctx, tx, s.GameID, s.PlayerID, "reward", "redeem:"+hash+":"+s.PlayerID, g, now); err != nil {
 			return idempotency.Result{}, err
 		}
 		return idempotency.Result{Body: map[string]any{"batch_id": batch, "grants": g}}, nil

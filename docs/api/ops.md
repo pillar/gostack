@@ -2,6 +2,15 @@
 
 Package `kits/game/ops`, migration `0006_game_ops.sql`. Client routes live under `/v1/games/{game}`, admin routes under `/v1/admin/games/{game}` (API key with `admin` scope owning the game). Errors use the standard envelope `{"error":{"code","message"},"request_id"}`. Times in requests are epoch milliseconds or RFC3339 strings (the offset carries the zone); responses use epoch milliseconds. Grants are `{asset: positive integer}` (max 20 assets) and are always paid through the append-only ledger (`kind=reward`) with a unique source key, so no claim can pay twice. Retryable player mutations (claim, check-in, redeem) honour `Idempotency-Key` (replay returns the stored response with `Idempotent-Replayed: true`); without a key a retry gets the "already" error below.
 
+## Grants and the items catalog
+
+Mail attachments, check-in rewards, task rewards and redeem-code grants are
+posted through `Kit.Grant`: when the game's configuration has an `items`
+catalog, every granted asset must be in it (`409 unknown_asset`) and items may
+not exceed `max_stack` (`409 stack_limit`, `details.asset`/`details.max_stack`).
+A failing claim is rolled back entirely and can be retried after the player
+spends items. Social invite grants follow the same rule.
+
 ## Announcements
 | Route | Notes |
 |---|---|

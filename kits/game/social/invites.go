@@ -121,12 +121,12 @@ func (m *Module) acceptInvite(w http.ResponseWriter, r *http.Request) error {
 			return idempotency.Result{}, err
 		}
 		if len(m.InviterGrant) > 0 {
-			if err := game.ApplyLedger(c.ctx, c.tx, c.gid, inviter, "invite", "invite:"+c.pid+":inviter", m.InviterGrant, c.now); err != nil {
+			if err := m.Kit.Grant(c.ctx, c.tx, c.gid, inviter, "invite", "invite:"+c.pid+":inviter", m.InviterGrant, c.now); err != nil {
 				return idempotency.Result{}, err
 			}
 		}
 		if len(m.InviteeGrant) > 0 {
-			if err := game.ApplyLedger(c.ctx, c.tx, c.gid, c.pid, "invite", "invite:"+c.pid+":invitee", m.InviteeGrant, c.now); err != nil {
+			if err := m.Kit.Grant(c.ctx, c.tx, c.gid, c.pid, "invite", "invite:"+c.pid+":invitee", m.InviteeGrant, c.now); err != nil {
 				return idempotency.Result{}, err
 			}
 		}
