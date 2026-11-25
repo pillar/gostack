@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -64,7 +63,6 @@ type GoogleVerifier struct {
 	API  *GooglePlayAPI
 	RTDN *GoogleRTDN // nil: the callback route answers provider_not_configured
 	Now  func() time.Time
-	Log  *slog.Logger
 }
 
 type googleProof struct {
@@ -146,15 +144,22 @@ func (v *GoogleVerifier) txn(a GoogleApp, productID, token string, pp *googlePro
 			return nil, errTestPurchase
 		}
 		env = "Test"
-	} else if pp.OrderID == "" {
-		return nil, invalidPurchase("purchase has no orderId")
 	}
 	switch pp.PurchaseState {
 	case 0, 1:
 	case 2:
-		return nil, errPurchasePending
+		return nil, errPurchasePending // orderId is not set while pending
 	default:
 		return nil, invalidPurchase("unknown purchaseState")
+	}
+	// The purchase token (verified by purchases.products.get) is the
+	// transaction identity; orderId is informational. A standard billing-flow
+	// purchase (purchaseType absent) is expected to carry one. purchaseType is
+	// "only set if this purchase was not made using the standard in-app billing
+	// flow" (test 0, promo 1, rewarded 2); such purchases are accepted without
+	// orderId.
+	if pp.PurchaseType == nil && pp.OrderID == "" {
+		return nil, invalidPurchase("purchase has no orderId")
 	}
 	q := pp.Quantity
 	if q == 0 {
@@ -382,43 +387,58 @@ type googleFinishJob struct {
 	Consume   bool   `json:"consume"`
 }
 
-func (v *GoogleVerifier) finishJob(gameID, orderID string, txn *Transaction) (string, []byte, bool) {
+// googleFinishMaxAttempts is the finish job's retry budget. Google refunds
+// purchases that are not acknowledged within three days. The queue backs off
+// exponentially with full jitter, capped at 1 h (modules/jobs Nack), so 200
+// attempts span about 4 days on average (attempts 12+ wait 0-1 h, mean 30 min)
+// and, with overwhelming probability, more than 3 days. Module.Maintain
+// re-enqueues the job of an unfinished order if it still dies.
+const googleFinishMaxAttempts = 200
+
+// googleFinishWindow is how long after delivery reconciliation keeps
+// re-enqueueing an unfinished purchase's job (Google's acknowledgement deadline).
+const googleFinishWindow = 3 * 24 * time.Hour
+
+func (v *GoogleVerifier) finishJobType() string { return JobGoogleFinish }
+
+func (v *GoogleVerifier) finishJob(gameID, orderID string, txn *Transaction) (jobs.Job, bool) {
 	a, ok := v.Apps[gameID]
 	if !ok || txn.Finished || txn.PurchaseToken == "" {
-		return "", nil, false
+		return jobs.Job{}, false
 	}
 	b, _ := json.Marshal(googleFinishJob{GameID: gameID, OrderID: orderID, Package: a.PackageName,
 		ProductID: txn.ProviderProductID, Token: txn.PurchaseToken, Consume: !a.Acknowledge})
-	return JobGoogleFinish, b, true
+	return jobs.Job{Type: JobGoogleFinish, Payload: b, MaxAttempts: googleFinishMaxAttempts}, true
 }
 
-func (v *GoogleVerifier) jobHandlers() map[string]jobs.Handler {
-	return map[string]jobs.Handler{JobGoogleFinish: v.runFinish}
-}
-
-// runFinish acknowledges or consumes a delivered purchase. Google refunds
-// purchases that are not acknowledged within three days, so transient errors
-// are retried by the queue; a 4xx other than 401/408/429 is final.
-func (v *GoogleVerifier) runFinish(ctx context.Context, job *jobs.Claimed) error {
+// finish acknowledges or consumes a delivered purchase. Network errors, 5xx,
+// 401, 408 and 429 are transient. Any other 4xx (403: the service account
+// lacks permission, 404, 400, ...) is first checked with purchases.products.get:
+// a purchase that is already consumed/acknowledged counts as done; otherwise
+// the rejection needs attention and the job keeps retrying, so the purchase is
+// finished once the cause is fixed.
+func (v *GoogleVerifier) finish(ctx context.Context, payload []byte) finishResult {
 	var p googleFinishJob
-	if err := json.Unmarshal(job.Payload, &p); err != nil || p.Token == "" {
-		v.log().Error("commerce: bad google finish job payload", "job", job.ID)
-		return nil
+	if err := json.Unmarshal(payload, &p); err != nil || p.Token == "" {
+		return finishResult{Attention: "bad finish job payload", Err: errors.New("commerce: bad google finish job payload")}
 	}
+	r := finishResult{GameID: p.GameID, OrderID: p.OrderID}
 	err := v.API.Finish(ctx, p.Package, p.ProductID, p.Token, p.Consume)
 	var ae *googleAPIError
-	if errors.As(err, &ae) && ae.Status >= 400 && ae.Status < 500 && ae.Status != 401 && ae.Status != 408 && ae.Status != 429 {
-		v.log().Warn("commerce: google purchase finish rejected", "game", p.GameID, "order", p.OrderID, "status", ae.Status)
-		return nil
+	switch {
+	case err == nil:
+		r.Done = true
+	case errors.As(err, &ae) && ae.Status >= 400 && ae.Status < 500 && ae.Status != 401 && ae.Status != 408 && ae.Status != 429:
+		if pp, gerr := v.API.GetProduct(ctx, p.Package, p.ProductID, p.Token); gerr == nil &&
+			(pp.ConsumptionState == 1 || (!p.Consume && pp.AcknowledgementState == 1)) {
+			r.Done = true
+			break
+		}
+		r.Attention, r.Status, r.Err = err.Error(), ae.Status, err
+	default:
+		r.Err = err
 	}
-	return err
-}
-
-func (v *GoogleVerifier) log() *slog.Logger {
-	if v.Log != nil {
-		return v.Log
-	}
-	return slog.Default()
+	return r
 }
 
 // --- Google Play Developer API client ----------------------------------------
@@ -519,9 +539,10 @@ type GoogleServiceAccount struct {
 	Client   *http.Client // default 10s timeout
 	Now      func() time.Time
 
-	mu    sync.Mutex
-	token string
-	exp   time.Time
+	mu     sync.Mutex
+	token  string
+	exp    time.Time
+	flight *fetchFlight
 }
 
 // NewGoogleServiceAccount parses a service account JSON key. tokenURL overrides
@@ -581,14 +602,69 @@ func (s *GoogleServiceAccount) invalidate() {
 	s.mu.Unlock()
 }
 
+// fetchFlight is one in-flight fetch shared by every caller that needs it.
+type fetchFlight struct {
+	done chan struct{} // closed when the fetch finished
+	err  error         // set before done is closed
+}
+
+// flightTimeout bounds a shared fetch, which runs detached from the context
+// of the caller that started it (that caller may give up; others still wait).
+const flightTimeout = 30 * time.Second
+
+// wait blocks until fl finishes or ctx ends.
+func (fl *fetchFlight) wait(ctx context.Context) error {
+	select {
+	case <-fl.done:
+		return fl.err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // AccessToken returns a cached token, refreshing it a minute before expiry.
+// At most one refresh is in flight (no lock is held during network IO);
+// concurrent callers wait for it as long as their own ctx allows.
 func (s *GoogleServiceAccount) AccessToken(ctx context.Context) (string, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := s.now()
-	if s.token != "" && now.Before(s.exp.Add(-time.Minute)) {
-		return s.token, nil
+	if s.token != "" && s.now().Before(s.exp.Add(-time.Minute)) {
+		tok := s.token
+		s.mu.Unlock()
+		return tok, nil
 	}
+	fl := s.flight
+	if fl == nil {
+		fl = &fetchFlight{done: make(chan struct{})}
+		s.flight = fl
+		go func() {
+			fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), flightTimeout)
+			defer cancel()
+			tok, exp, err := s.fetchToken(fctx)
+			s.mu.Lock()
+			if err == nil {
+				s.token, s.exp = tok, exp
+			}
+			fl.err = err
+			s.flight = nil
+			s.mu.Unlock()
+			close(fl.done)
+		}()
+	}
+	s.mu.Unlock()
+	if err := fl.wait(ctx); err != nil {
+		return "", err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.token == "" { // invalidated meanwhile
+		return "", errStoreUnavailable
+	}
+	return s.token, nil
+}
+
+// fetchToken performs the JWT bearer grant (network IO; no lock held).
+func (s *GoogleServiceAccount) fetchToken(ctx context.Context) (string, time.Time, error) {
+	now := s.now()
 	hdr := map[string]string{"alg": "RS256", "typ": "JWT"}
 	if s.KeyID != "" {
 		hdr["kid"] = s.KeyID
@@ -600,13 +676,13 @@ func (s *GoogleServiceAccount) AccessToken(ctx context.Context) (string, error) 
 	sum := sha256.Sum256([]byte(in))
 	sig, err := rsa.SignPKCS1v15(nil, s.Key, crypto.SHA256, sum[:])
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 	form := url.Values{"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
 		"assertion": {in + "." + base64.RawURLEncoding.EncodeToString(sig)}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.TokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	c := s.Client
@@ -615,7 +691,7 @@ func (s *GoogleServiceAccount) AccessToken(ctx context.Context) (string, error) 
 	}
 	resp, err := c.Do(req)
 	if err != nil {
-		return "", errStoreUnavailable
+		return "", time.Time{}, errStoreUnavailable
 	}
 	defer resp.Body.Close()
 	var out struct {
@@ -623,13 +699,12 @@ func (s *GoogleServiceAccount) AccessToken(ctx context.Context) (string, error) 
 		ExpiresIn   int64  `json:"expires_in"`
 	}
 	if resp.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&out) != nil || out.AccessToken == "" {
-		return "", errStoreUnavailable
+		return "", time.Time{}, errStoreUnavailable
 	}
 	if out.ExpiresIn <= 0 {
 		out.ExpiresIn = 3600
 	}
-	s.token, s.exp = out.AccessToken, now.Add(time.Duration(out.ExpiresIn)*time.Second)
-	return s.token, nil
+	return out.AccessToken, now.Add(time.Duration(out.ExpiresIn) * time.Second), nil
 }
 
 // --- Google OIDC signing keys ---------------------------------------------------
@@ -653,11 +728,16 @@ type JWKSFetcher struct {
 	keys        map[string]*rsa.PublicKey
 	fetchedAt   time.Time
 	lastAttempt time.Time
+	flight      *fetchFlight
 }
 
+// RSAKey returns the key for kid. No lock is held during network IO and at
+// most one fetch is in flight: a known but expired key is returned at once
+// while a refresh runs in the background; a caller that needs the fetch (cold
+// cache, unknown kid) waits for it as long as its own ctx allows.
 func (f *JWKSFetcher) RSAKey(ctx context.Context, kid string) (*rsa.PublicKey, error) {
+	errUnavailable := httpx.NewError(http.StatusServiceUnavailable, "key_fetch_failed", "token verification keys unavailable")
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	ttl, minRefresh := f.TTL, f.MinRefresh
 	if ttl == 0 {
 		ttl = time.Hour
@@ -667,17 +747,41 @@ func (f *JWKSFetcher) RSAKey(ctx context.Context, kid string) (*rsa.PublicKey, e
 	}
 	k, ok := f.keys[kid]
 	if ok && time.Since(f.fetchedAt) < ttl {
+		f.mu.Unlock()
 		return k, nil
 	}
-	if f.lastAttempt.IsZero() || time.Since(f.lastAttempt) >= minRefresh {
+	if f.flight == nil && (f.lastAttempt.IsZero() || time.Since(f.lastAttempt) >= minRefresh) {
 		f.lastAttempt = time.Now()
-		if keys, err := f.fetch(ctx); err == nil {
-			f.keys, f.fetchedAt = keys, time.Now()
-		} else if !ok {
-			return nil, httpx.NewError(http.StatusServiceUnavailable, "key_fetch_failed", "token verification keys unavailable")
+		fl := &fetchFlight{done: make(chan struct{})}
+		f.flight = fl
+		go func() {
+			fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), flightTimeout)
+			defer cancel()
+			keys, err := f.fetch(fctx)
+			f.mu.Lock()
+			if err == nil {
+				f.keys, f.fetchedAt = keys, time.Now()
+			}
+			fl.err = err
+			f.flight = nil
+			f.mu.Unlock()
+			close(fl.done)
+		}()
+	}
+	fl := f.flight
+	f.mu.Unlock()
+	if ok { // stale: serve the cached key; a failed refresh keeps it
+		return k, nil
+	}
+	if fl != nil {
+		if err := fl.wait(ctx); err != nil {
+			return nil, errUnavailable
 		}
 	}
-	if k, ok := f.keys[kid]; ok {
+	f.mu.Lock()
+	k, ok = f.keys[kid]
+	f.mu.Unlock()
+	if ok {
 		return k, nil
 	}
 	return nil, badPushToken("unknown signing key")

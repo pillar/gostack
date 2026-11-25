@@ -1,16 +1,36 @@
 # Per-game resource quotas (GameKit, G-A09)
 
-Code: `kits/game/quota.go` (hooks in `kit.go` `withGame`, `identity.go` `createPlayer`, `saves.go`, `analytics.go`), migration `0014_game_quotas`. Tests: `kits/game/quota_test.go`.
+Code: `kits/game/quota.go` (hooks in `kit.go` `withGame`, `identity.go` `createPlayer`, `saves.go`, `analytics.go`), migration `0014_game_quotas`. Tests: `kits/game/quota_test.go`; callback exemption `kits/game/commerce/callback_quota_test.go`.
 
 Purpose: in a deployment that serves several games, one noisy game must not exhaust shared resources (players table, save storage, request budget, analytics pipeline, write queue). Every game has five quotas; `0` means unlimited.
 
 | Quota | Enforced where | Exceeded | Scope |
 |---|---|---|---|
 | `max_players` | new player creation (guest registration, first platform login), same write transaction as the `players` insert | `403 quota_exceeded` | exact, all instances (database counter) |
-| `requests_per_minute` | every `/v1/games/{game}/...` route except CORS preflight (token bucket, burst = rate) | `429 rate_limited` + `Retry-After` | global with `rate_limit.driver: valkey`, otherwise per instance |
+| `requests_per_minute` | every `/v1/games/{game}/...` route except CORS preflight and provider callbacks (see below) (token bucket, burst = rate) | `429 rate_limited` + `Retry-After` | global with `rate_limit.driver: valkey`, otherwise per instance |
 | `save_bytes_total` | save `PUT`, `restore`, `DELETE`, same write transaction | `403 quota_exceeded` (only when a write grows the total) | exact, all instances (database counter) |
 | `analytics_events_per_day` | `POST /events/batch` | excess events dropped, still `202` | per instance, UTC day (see below) |
 | `write_concurrency` | mutating requests (`POST`/`PUT`/`DELETE`/`PATCH`) of the game in flight | `503 overloaded` | per instance |
+
+**Provider callbacks are exempt.** Routes registered with `Kit.HandleCallback`
+(commerce: `POST /callbacks/{provider}`, `GET|POST /callbacks/ads/{provider}`)
+skip `requests_per_minute` and `write_concurrency`. They are server-to-server
+calls authenticated by the provider's signature, and the requests bucket is
+shared by all of the game's traffic including unauthenticated requests: junk
+sent to any route of the game could otherwise make signed Google RTDN, WeChat
+Pay (no client-side fallback) or ad SSV callbacks fail with 429/503. Feature
+packages use `Kit.HandleCallback` only for such signed callbacks; the handler
+must verify the signature before any database work.
+
+**Decision: unauthenticated requests still count.** For all other routes the
+quota is applied before session authentication, so requests that later fail
+with 401 consume the game's bucket. Moving the check after authentication for
+`Player` routes was considered and not done: public routes (guest login,
+config, leaderboards) would still share the bucket, so it would not stop a
+flood from starving the game, and every rejected token would cost a session
+lookup before being limited. `requests_per_minute` protects other games from a
+noisy game; it is not an abuse shield for one game. Per-IP limits (GameKit's
+auth limiter, a reverse proxy/WAF) are the defence against floods.
 
 Error details: `403 quota_exceeded` carries `details: {"quota","limit","used","requested"}` (`requested` = the bytes or players the write would add); `429` and `503` carry `details: {"quota","limit"}`.
 
@@ -69,7 +89,7 @@ Excess events are dropped before the buffer: the response stays `202 {"accepted"
 
 ## write_concurrency
 
-A per-process in-flight counter per game wraps mutating requests of the game (all of `withGame`, which every `/v1/games/{game}` route uses, including feature packages registered with `Kit.Handle`). It bounds how many entries of the shared write queue (`database.write_queue`) one game can occupy on this instance, so a burst from one game gets `503` instead of making every game's writes fail with a full queue. It counts requests, not transactions: a mutating request that does network IO before its transaction (platform login) holds its slot for that time. Reads (`GET`/`HEAD`/`OPTIONS`) are not counted. Not covered: the realtime WebSocket gateway, admin routes and jobs.
+A per-process in-flight counter per game wraps mutating requests of the game (all of `withGame`, which every `/v1/games/{game}` route uses, including feature packages registered with `Kit.Handle`). It bounds how many entries of the shared write queue (`database.write_queue`) one game can occupy on this instance, so a burst from one game gets `503` instead of making every game's writes fail with a full queue. It counts requests, not transactions: a mutating request that does network IO before its transaction (platform login) holds its slot for that time. Reads (`GET`/`HEAD`/`OPTIONS`) are not counted. Not covered: the realtime WebSocket gateway, admin routes, jobs and provider callbacks (`Kit.HandleCallback`).
 
 ## Metrics
 

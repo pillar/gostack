@@ -26,7 +26,7 @@ func newGoogleVerifier(a *App, c *config.GoogleIAPConfig) (*commerce.GoogleVerif
 	for g, app := range c.Apps {
 		apps[g] = commerce.GoogleApp{PackageName: app.PackageName, AllowTest: app.AllowTestPurchases, Acknowledge: app.Finish == "acknowledge"}
 	}
-	v := &commerce.GoogleVerifier{Apps: apps, API: &commerce.GooglePlayAPI{BaseURL: c.APIBaseURL, Tokens: sa}, Log: a.Log}
+	v := &commerce.GoogleVerifier{Apps: apps, API: &commerce.GooglePlayAPI{BaseURL: c.APIBaseURL, Tokens: sa}}
 	if r := c.RTDN; r != nil {
 		v.RTDN = &commerce.GoogleRTDN{Audience: r.Audience, ServiceAccountEmail: r.ServiceAccountEmail, Keys: &commerce.JWKSFetcher{URL: r.JWKSURL}}
 	}
@@ -67,7 +67,7 @@ func newWeChatPayVerifier(a *App, c *config.WeChatPayIAPConfig) (*commerce.WeCha
 	merchant := &commerce.WeChatPayMerchant{MchID: c.MchID, SerialNo: c.MerchantSerialNo, Key: key}
 	return &commerce.WeChatPayVerifier{MchID: c.MchID, APIv3Key: []byte(v3), Signatures: sigs, Merchant: merchant,
 		Client: &commerce.WeChatPayHTTPClient{BaseURL: c.APIBaseURL, Merchant: merchant, Verify: sigs},
-		Apps:   apps, NotifyBaseURL: c.NotifyBaseURL, Log: a.Log}, nil
+		Apps:   apps, NotifyBaseURL: c.NotifyBaseURL, QueryAfter: c.QueryAfter, Log: a.Log}, nil
 }
 
 // moduleJobHandlers returns job handlers of enabled modules (Google Play

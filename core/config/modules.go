@@ -98,10 +98,13 @@ type WeChatPayIAPConfig struct {
 	// serial) to a PEM public key or certificate file.
 	PlatformKeys map[string]string `yaml:"platform_keys" json:"platform_keys"`
 	// NotifyBaseURL is this server's public https origin used in notify_url.
-	NotifyBaseURL string                      `yaml:"notify_base_url" json:"notify_base_url"`
-	MaxSkew       time.Duration               `yaml:"max_skew" json:"max_skew"`
-	Apps          map[string]WeChatPayAppConf `yaml:"apps" json:"apps"`                 // by game_id
-	APIBaseURL    string                      `yaml:"api_base_url" json:"api_base_url"` // tests only
+	NotifyBaseURL string        `yaml:"notify_base_url" json:"notify_base_url"`
+	MaxSkew       time.Duration `yaml:"max_skew" json:"max_skew"`
+	// QueryAfter: an order with a prepay_id still unpaid this long after it
+	// was created is queried by out_trade_no during maintenance (0 = 10m).
+	QueryAfter time.Duration               `yaml:"query_after" json:"query_after"`
+	Apps       map[string]WeChatPayAppConf `yaml:"apps" json:"apps"`                 // by game_id
+	APIBaseURL string                      `yaml:"api_base_url" json:"api_base_url"` // tests only
 }
 
 type WeChatPayAppConf struct {
@@ -309,6 +312,9 @@ func (c Config) validateModules() []error {
 		}
 		if wp.MaxSkew < 0 {
 			add("game.commerce.wechatpay.max_skew must be non-negative")
+		}
+		if wp.QueryAfter < 0 || wp.QueryAfter >= 2*time.Hour {
+			add("game.commerce.wechatpay.query_after must be in [0, 2h) (0 = 10m)")
 		}
 		for g, app := range wp.Apps {
 			if app.AppID == "" || len(app.Prices) == 0 {

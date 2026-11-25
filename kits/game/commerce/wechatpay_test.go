@@ -49,6 +49,10 @@ type wxFake struct {
 	prepays    []map[string]any
 	fail       int // next N calls answer 500
 	tradeNoErr bool
+	// orders answers GET /v3/pay/transactions/out-trade-no/{no} (absent: 404 ORDER_NOT_EXIST).
+	orders      map[string]map[string]any
+	queried     []string
+	badQuerySig bool
 }
 
 func newWxFake(t *testing.T) *wxFake {
@@ -59,6 +63,40 @@ func newWxFake(t *testing.T) *wxFake {
 	w.srv = httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		m := authRe.FindStringSubmatch(r.Header.Get("Authorization"))
+		if otn, ok := strings.CutPrefix(r.URL.Path, "/v3/pay/transactions/out-trade-no/"); ok && r.Method == "GET" {
+			sig := []byte{}
+			if m != nil {
+				sig, _ = base64.StdEncoding.DecodeString(m[3])
+			}
+			var sum [32]byte
+			if m != nil {
+				sum = sha256.Sum256([]byte("GET\n" + r.URL.RequestURI() + "\n" + m[4] + "\n" + m[2] + "\n\n"))
+			}
+			if m == nil || m[1] != wxMch || r.URL.Query().Get("mchid") != wxMch || rsa.VerifyPKCS1v15(&w.merchant.PublicKey, crypto.SHA256, sum[:], sig) != nil {
+				rw.WriteHeader(401)
+				rw.Write([]byte(`{"code":"SIGN_ERROR"}`))
+				return
+			}
+			w.mu.Lock()
+			defer w.mu.Unlock()
+			w.queried = append(w.queried, otn)
+			o, ok := w.orders[otn]
+			if !ok {
+				rw.WriteHeader(404)
+				rw.Write([]byte(`{"code":"ORDER_NOT_EXIST","message":"订单不存在"}`))
+				return
+			}
+			resp, _ := json.Marshal(o)
+			hdr := w.sign(resp, time.Now())
+			if w.badQuerySig {
+				hdr = w.sign([]byte("other"), time.Now())
+			}
+			for k, v := range hdr {
+				rw.Header().Set(k, v)
+			}
+			rw.Write(resp)
+			return
+		}
 		if r.URL.Path != "/v3/pay/transactions/jsapi" || r.Method != "POST" || m == nil || m[1] != wxMch || m[5] != "MERCHANTSERIAL" {
 			rw.WriteHeader(401)
 			rw.Write([]byte(`{"code":"SIGN_ERROR"}`))

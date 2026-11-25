@@ -48,6 +48,7 @@ type googleFake struct {
 	gets      int
 	finished  []string // "consume:<token>" / "acknowledge:<token>"
 	failGet   bool
+	finishErr int // non-zero: consume/acknowledge answer this HTTP status
 }
 
 func signRS256(t *testing.T, key *rsa.PrivateKey, kid string, claims any) string {
@@ -127,6 +128,10 @@ func (g *googleFake) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.Method == http.MethodPost {
+			if g.finishErr != 0 {
+				w.WriteHeader(g.finishErr)
+				return
+			}
 			g.finished = append(g.finished, action+":"+token)
 			if action == "consume" {
 				p["consumptionState"] = 1
