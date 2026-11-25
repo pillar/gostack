@@ -25,9 +25,10 @@ func allModulesConfig(t *testing.T) config.Config {
 	c.Billing.Enabled = true
 	c.Kits = append(c.Kits, "agent", "web")
 	if pgtest.Enabled() {
-		// Profile scale rejects the in-process realtime hub and local object storage;
-		// assets gets an S3 store (no IO until used).
-		c.Game.Modules = []string{"ops", "experiments", "social", "match", "commerce", "assets"}
+		// Profile scale: realtime runs on the PostgreSQL bus; local object storage
+		// is rejected, so assets gets an S3 store (no IO until used).
+		c.Game.Modules = []string{"ops", "experiments", "social", "match", "commerce", "realtime", "assets"}
+		c.Game.Realtime.Bus = "postgres"
 		c.Storage.Driver = "s3"
 		c.Storage.S3 = config.S3Storage{Endpoint: "http://127.0.0.1:1", Region: "us-east-1", Bucket: "unused",
 			AccessKeyIDRef: "env:GOSTACK_TEST_S3_ID", SecretAccessKeyRef: "env:GOSTACK_TEST_S3_ID"}
@@ -103,7 +104,7 @@ func TestModulesWiredByConfig(t *testing.T) {
 		}
 	}
 	if pgtest.Enabled() {
-		if a.Mod.Ops == nil || a.Mod.Match == nil || a.Mod.Billing == nil || a.Mod.Realtime != nil {
+		if a.Mod.Ops == nil || a.Mod.Match == nil || a.Mod.Billing == nil || a.Mod.Realtime == nil || a.Mod.Realtime.Bus == nil {
 			t.Fatal("modules not constructed as configured for profile scale")
 		}
 	} else if a.Mod.Ops == nil || a.Mod.Realtime == nil || a.Mod.Billing == nil || a.Mod.Storage == nil || a.Mod.Assets == nil {
@@ -144,7 +145,6 @@ func TestModuleConfigValidation(t *testing.T) {
 
 // Serve closes realtime connections (1001) on shutdown and runs module loops.
 func TestServeWithModulesShutsDownRealtime(t *testing.T) {
-	pgtest.SkipIfPostgres(t, "the realtime module is rejected under profile scale (in-process hub)")
 	c := allModulesConfig(t)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

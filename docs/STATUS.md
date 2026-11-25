@@ -31,12 +31,12 @@
 
 ## F12 Scale：PostgreSQL（2026-11-25，ADR-0003）
 验证环境：本机 macOS arm64，PostgreSQL 17.11（临时集群，max_connections=100），Go 1.27.4。
-- 命令与结果：`./scripts/ci.sh`（未设 `GOSTACK_TEST_POSTGRES_DSN`，SQLite）通过；`GOSTACK_TEST_POSTGRES_DSN=postgres://postgres@127.0.0.1:55432/postgres?sslmode=disable ./scripts/ci.sh`（SQLite + PostgreSQL 各跑一遍 `go test -race -count=1 ./...`）通过。PG 运行：178 个顶层测试中 175 通过、3 个跳过（SQLite 备份演练、`migrate status` 未知版本检测——两者操作 SQLite 文件；realtime 模块在 scale 下被配置拒绝），0 失败。kits/game/*、modules/{jobs,billing,webauth}、app 的存储测试在该模式下各自使用新建的 PG 数据库；adapters/sqlite、tests/fault、deploy 仍跑 SQLite。
+- 命令与结果：`./scripts/ci.sh`（未设 `GOSTACK_TEST_POSTGRES_DSN`，SQLite）通过；`GOSTACK_TEST_POSTGRES_DSN=postgres://postgres@127.0.0.1:55432/postgres?sslmode=disable ./scripts/ci.sh`（SQLite + PostgreSQL 各跑一遍 `go test -race -count=1 ./...`）通过。PG 运行：178 个顶层测试中 175 通过、3 个跳过（SQLite 备份演练、`migrate status` 未知版本检测——两者操作 SQLite 文件），0 失败。kits/game/*、modules/{jobs,billing,webauth}、app 的存储测试在该模式下各自使用新建的 PG 数据库；adapters/sqlite、tests/fault、deploy 仍跑 SQLite。
 - 已实现且有测试：`adapters/store` 方言无关句柄；`adapters/postgres`（pgx stdlib、SERIALIZABLE + 40001/40P01 有界重试、fn 吞错仍重试、读池只读、`?`→`$n` 改写单测、C 排序校验、analytics 独立 schema）；`migrations/postgres{,_analytics}` 与 SQLite 逐版本对应，`TestSchemaEquivalence` 比较 60 张表的列/主键/唯一约束/索引/外键/触发器；账本 UPDATE/DELETE/TRUNCATE 被拒；迁移 advisory lock 并发启动；配置校验（scale/lite/distributed、realtime、local storage、litestream、`rate_limit.accept_per_instance`）；`migrate status|up`、`doctor`、`game reconcile` 在 PG 上运行；`backup snapshot/verify/restore` 在 PG 上用 pg_dump/pg_restore（`app/backup_pg_test.go`：快照一致性清单、临时库验证并删除、篡改/截断/缺清单退出 3、恢复拒绝非空目标、失败恢复目标保持为空、恢复后应用可启动写入、独立 analytics 库）。
 - PG 备份/PITR（2026-11-25）：`GOSTACK_TEST_POSTGRES_DSN=… go test -race -count=1 ./...`（PATH 含 PostgreSQL 17.11 客户端工具）全部通过；`deploy/postgres_test.go` 在无服务器下执行归档/恢复脚本。PITR 演练 `scripts/drill/pg_pitr.sh` 两组各 2 次（8 并发无间隔 / 4 并发 20 ms 间隔，60 s，`archive_timeout=10s`）全部通过：负载中基础备份与逻辑快照+verify、kill -9 主库进程组、恢复到 T 后 0 个 T 前确认写入缺失且 0 个 T 后发送写入出现、latest 恢复重放全部已归档 WAL、RTO 0.9–3.7 s、RPO 0.8–6.9 s（本机 macOS、本地归档目录，见 `docs/DISASTER_RECOVERY.md`）。
 - 多实例（`tests/scale`）：两个 App 实例共享一个 PG 库，并发领奖/购买/幂等重放、赛季结算、撮合、任务 Claim 均只生效一次。
 - SQLite→PG 迁移（`migrate to-postgres`）：经 HTTP 在 SQLite 上写入玩家/会话/存档/分数/隔离记录/账本/邮件/好友/撮合票/计费/网页用户/任务/埋点 → 服务运行时迁移被拒（实例锁）→ 停服后迁移，逐表行数与摘要一致、对账 0 差异 → 再次迁移因目标非空被拒 → 在 PG 上启动应用，11 个读接口响应与迁移前逐字节一致，幂等重放一致，identity 序列续号正常。
-- 未验证 / 未实现：Scale 性能预算（PRD §13/§23）未压测；PG 远程 WAL 归档（pgBackRest/WAL-G）与 1C1G 上的备份恢复时间；PG HA；pgmq（不使用）；实时模块多实例；在线双写迁移。热点行在 SERIALIZABLE 下产生大量序列化失败重试（测试中可见数百次），吞吐影响未测量。
+- 未验证 / 未实现：Scale 性能预算（PRD §13/§23）未压测；PG 远程 WAL 归档（pgBackRest/WAL-G）与 1C1G 上的备份恢复时间；PG HA；pgmq（不使用）；在线双写迁移。热点行在 SERIALIZABLE 下产生大量序列化失败重试（测试中可见数百次），吞吐影响未测量。
 
 ## F12 Scale：Valkey 全局限流与缓存（2026-11-25，ADR-0004）
 验证环境：本机 macOS arm64，Valkey 9.2.0（临时实例，无持久化）、PostgreSQL 17.11（临时集群），Go 1.27.4。CI 配置为 `valkey/valkey:8` 服务容器（本次未在 CI 上运行）。
@@ -60,7 +60,7 @@
 | G11 商业化 | 已实现（未接真实平台） | Apple JWS（x5c 链到配置根证书）、通知 V2、退款与不足额补偿、AdMob SSV / HMAC 广告回调、inbox 去重、outbox；Google Play（服务账号 JWT→OAuth2、purchases.products.get、obfuscatedExternalAccountId 绑定、consume/acknowledge 任务、RTDN Pub/Sub OIDC 校验、作废退款）；微信支付 API v3 JSAPI（商户签名下单、回调验签+时间窗、AES-256-GCM 解密、金额/商户号/AppID 校验、退款冲正）；**全部只用本地生成的密钥和 httptest 假服务验证，未对接真实 Apple/Google/微信**；微信小游戏虚拟支付（米大师）、订阅、部分退款自动处理未实现 |
 | G12 实验 | 已实现 | 稳定分桶、层互斥、曝光去重、停止开关、结果统计 |
 | G13 社交 | 已实现 | 资料与隐私、好友/请求/拉黑、好友码、邀请（游客奖励延迟到绑定后）、分享归因、好友榜 |
-| G14 实时通信 | 已实现（仅单实例） | WebSocket 网关：token 不进 URL、Origin、连接/消息/速率预算、心跳、序号 + ack + 续传、慢消费者断开、停机 1001；本机 1000 空闲连接约 28 KiB/连接（非验收）；scale 下被配置拒绝 |
+| G14 实时通信 | 已实现（lite 单实例；scale 经 PostgreSQL 总线多实例，ADR-0005） | WebSocket 网关：token 不进 URL、Origin、连接/消息/速率预算、心跳、序号 + ack + 续传、慢消费者断开、停机 1001；本机 1000 空闲连接约 28 KiB/连接（非验收）。scale 需 `game.realtime.bus: postgres`（迁移 0015）：PG 分配每玩家 seq、表存重放窗口、LISTEN/NOTIFY 扇出；双实例测试覆盖跨实例 Send 有序连续、广播两实例且每玩家一条、跨实例续传（重放或 resume_failed）、LISTEN 断开/恢复后补齐、总线不可用时本地降级（4012 + 新 epoch + 指标）与恢复、4008/发布队列上限；本机跨实例延迟 p50≈0.43ms p99≈0.8ms（非验收）。吞吐/对其他写入的影响未压测；`bus: valkey` 未实现 |
 | G15 匹配与房间 | 已实现 | 票据（单次消费）、按 rating 窗口撮合、房间租约 + 随机 token + 绑定认领 key、结算幂等 |
 | 多游戏配额（G-A09） | 已实现 | `kits/game/quota.go`，迁移 0014：`max_players`/`save_bytes_total` 与业务写同事务条件更新计数（SQLite、PG 并发存档/恢复/删除后计数 = 实际字节且不超限）；`requests_per_minute` 每游戏限流器（Valkey 下两实例合计放行 = 配额，已测）；`analytics_events_per_day` 按实例按 UTC 日计数、启动后从埋点库补计（N 实例最多约 N×配额）；`write_concurrency` 按实例限制每游戏在途写请求（503）；管理 API GET/PUT `/v1/admin/games/{game}/quotas`、5 s 缓存、CLI `game quotas [--recount]`；每游戏指标（标签基数 = 游戏数）。测试：`kits/game/quota_test.go`（alpha 触发每项配额时 beta 不受影响）。未测：PG 单游戏计数行串行化的吞吐影响 |
 | 资源发布（PRD §22，G-A07） | 已实现（MinIO 实测；R2/CDN 未实测） | `modules/assets` + `gostack assets publish/list/rollback/verify/prune` + 模块 `assets`（manifest/entry 公共接口、管理端列表/回滚）：内容哈希不可变键 + `Cache-Control: immutable`、版本化 manifest、发布顺序资源→manifest→入口→事务切换指针、失败保留旧版本、按游戏租约串行化、去重、回滚前存在性检查、verify 全量哈希、prune 永不删除保留/当前版本引用的对象；见 `docs/api/assets.md`、`docs/ASSET_RELEASE.md` |
@@ -91,4 +91,4 @@
 2. Cloudflare R2：S3 适配器实测、资源发布（`assets`）与 CDN 实测、Litestream→R2 复制与恢复（RPO/RTO、费用）。
 3. 真实平台：微信 code2session、Apple 沙盒交易与通知、Google Play 购买与 RTDN、微信支付下单与回调、AdMob 回调。
 4. 真机：Safari iPhone 与微信小游戏验证 SDK（G-A08）。
-5. 未实现：F13 HA/Distributed、Valkey HA/TLS、realtime 多实例；AgentKit/WebKit 仅 P1 范围（见上节“不提供”项）。
+5. 未实现：F13 HA/Distributed、Valkey HA/TLS、realtime 的 Valkey 总线；AgentKit/WebKit 仅 P1 范围（见上节“不提供”项）。

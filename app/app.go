@@ -282,6 +282,14 @@ func (a *App) registerMetrics() {
 // Close releases storage.
 func (a *App) Close() error {
 	var errs []error
+	if a.Mod.Realtime != nil {
+		// Stops the realtime bus (LISTEN session, publisher) before the pools close.
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := a.Mod.Realtime.Close(ctx); err != nil && !errors.Is(err, context.DeadlineExceeded) {
+			errs = append(errs, err)
+		}
+		cancel()
+	}
 	if a.Analytics != nil {
 		errs = append(errs, a.Analytics.Close())
 	}

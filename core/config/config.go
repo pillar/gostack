@@ -392,6 +392,7 @@ func fields(c *Config) map[string]func(string) error {
 		"AUTH_WEB_ACCOUNT_RATE_PER_MINUTE": integer(&c.Auth.Web.AccountRatePerMinute),
 		"AUTH_WEB_MAX_CONCURRENT_HASHES":   integer(&c.Auth.Web.MaxConcurrentHashes),
 		"GAME_SETTLEMENT_INTERVAL":         dur(&c.Game.Settlement.Interval),
+		"GAME_REALTIME_BUS":                str(&c.Game.Realtime.Bus),
 		"BILLING_ENABLED":                  boolean(&c.Billing.Enabled),
 		"STORAGE_DRIVER":                   str(&c.Storage.Driver),
 		"STORAGE_LOCAL_ROOT":               str(&c.Storage.Local.Root),

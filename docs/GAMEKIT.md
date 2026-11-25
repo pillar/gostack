@@ -97,5 +97,5 @@ GameKit（`kits/game`）是 GoStack 面向 H5 / 微信小游戏 / 轻量联网�
 ## 7. 限制
 
 - 纯客户端游戏无法彻底防作弊：分数范围、隔离阈值、对局令牌与最短时长、规则版本、限流只能提高作弊成本；高价值奖励应依赖权威服务端结果（match 模块的战斗服结算）或人工审核。
-- 实时模块仅单实例语义；scale profile 下被拒绝。
+- 实时模块：lite 为进程内单实例 Hub；scale 下须 `game.realtime.bus: postgres`（多实例共享序号与重放窗口，见 `docs/api/realtime.md`、ADR-0005）。
 - 未在真实微信 / Apple / AdMob 环境验证；性能预算（PRD §23）未在目标环境压测。

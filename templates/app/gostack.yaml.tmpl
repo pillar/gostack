@@ -85,6 +85,8 @@ game:
   #     admob: { kind: admob }
   # realtime:
   #   max_connections: 4000
+  #   bus: none                  # none (lite, in-process hub) | postgres (required under profile scale)
+  #   bus_queue: 4096            # bus only: Send/Broadcast calls waiting for the publisher
   # assets:                        # static build releases (`gostack assets publish`); needs storage.driver
   #   public_base_url: https://cdn.example.com/   # CDN in front of the bucket; manifest gets absolute URLs
   #   manifest_max_age: 60s         # Cache-Control max-age of /assets/manifest and /assets/entry

@@ -3051,12 +3051,14 @@ paths:
       description: |
         WebSocket (RFC 6455, version 13) upgrade. The message protocol (welcome,
         resume/resumed/resume_failed, ack, ping/pong, application messages,
-        error frames, close codes 4001/4003/4008/4009/4029) is specified in
+        error frames, close codes 4001/4003/4008/4009/4012/4029) is specified in
         `docs/api/realtime.md`; OpenAPI cannot express it.
 
-        Single-instance semantics: connections, sequence numbers and replay
-        buffers live in process memory (profile `lite` only; configuration
-        rejects the module under `scale`).
+        Profile `lite`: connections, sequence numbers and replay buffers live
+        in process memory (single instance). Profile `scale` requires
+        `game.realtime.bus: postgres`: PostgreSQL assigns per-player sequence
+        numbers and keeps the replay window, so Send/Broadcast and resume work
+        across instances (ADR-0005).
 
         Authentication, one of:
         1. Non-browser clients: `Authorization: Bearer <access_token>` on the

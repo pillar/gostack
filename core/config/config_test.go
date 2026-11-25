@@ -213,3 +213,44 @@ func TestValkeyDrivers(t *testing.T) {
 		t.Fatalf("env valkey config: %+v %v", got.Valkey, err)
 	}
 }
+
+// game.realtime.bus: scale needs the PostgreSQL bus for the realtime module;
+// lite keeps the in-process hub; unimplemented buses are rejected.
+func TestRealtimeBus(t *testing.T) {
+	c := scale()
+	c.Kits, c.Game.Modules = []string{"game"}, []string{"realtime"}
+	c.Game.Realtime.Bus, c.Game.Realtime.BusQueue = "postgres", 1024
+	if err := c.Validate(); err != nil {
+		t.Fatalf("scale realtime on the postgres bus rejected: %v", err)
+	}
+	l := config.Defaults()
+	l.Kits, l.Game.Modules = []string{"game"}, []string{"realtime"}
+	for _, bus := range []string{"", "none"} {
+		l.Game.Realtime.Bus = bus
+		if err := l.Validate(); err != nil {
+			t.Fatalf("lite realtime with bus %q rejected: %v", bus, err)
+		}
+	}
+	for name, mut := range map[string]func(*config.Config){
+		"scale without bus": func(c *config.Config) { c.Game.Realtime.Bus = "" },
+		"scale bus none":    func(c *config.Config) { c.Game.Realtime.Bus = "none" },
+		"valkey bus":        func(c *config.Config) { c.Game.Realtime.Bus = "valkey" },
+		"unknown bus":       func(c *config.Config) { c.Game.Realtime.Bus = "nats" },
+		"negative queue":    func(c *config.Config) { c.Game.Realtime.BusQueue = -1 },
+		"postgres bus lite": func(c *config.Config) { *c = config.Defaults(); c.Game.Realtime.Bus = "postgres" },
+	} {
+		c := scale()
+		c.Kits, c.Game.Modules = []string{"game"}, []string{"realtime"}
+		c.Game.Realtime.Bus = "postgres"
+		mut(&c)
+		if err := c.Validate(); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	got, err := config.Load("", env(map[string]string{"GOSTACK_PROFILE": "scale", "GOSTACK_DATABASE_DRIVER": "postgres",
+		"GOSTACK_DATABASE_DSN_REF": "env:D", "GOSTACK_QUEUE_DRIVER": "postgres", "GOSTACK_RATE_LIMIT_ACCEPT_PER_INSTANCE": "true",
+		"GOSTACK_GAME_REALTIME_BUS": "postgres"}), nil)
+	if err != nil || got.Game.Realtime.Bus != "postgres" {
+		t.Fatalf("env realtime bus: %q %v", got.Game.Realtime.Bus, err)
+	}
+}
