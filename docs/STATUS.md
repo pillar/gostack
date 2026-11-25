@@ -1,30 +1,33 @@
-# 实现状态（2026-11-24）
+# 实现状态（2026-11-25）
 
-只记录已执行验证的结果。"已实现"指代码存在且有下列测试覆盖；"未验证"指代码存在但缺少要求的环境或证据。
+只记录已执行验证的结果。"已实现"指代码存在且有下列测试覆盖；"未验证"指代码存在但缺少要求的环境或证据。开发分支 `dev/full-scope`。
 
-## 验证命令与结果（本机 macOS arm64, Go 1.27.4 toolchain, Node 24.21）
-- `./scripts/ci.sh`：gofmt 干净、`go vet` 通过、`go test -race -count=1 ./...` 全部通过、linux amd64/arm64 `CGO_ENABLED=0` 交叉编译成功、SDK typecheck + 35 个测试通过、SDK 核心 gzip 4486 B（预算 30720 B）。
-- 生成项目验收：`gostack init demo --kit game --gostack-path <repo>` → `go build` → `doctor` / `migrate up` / `game create` / `game config publish` → `serve` → `sdk/typescript/examples/e2e.mjs` 全部步骤 ok → SIGTERM 优雅退出 → `game reconcile` 0 差异。空载 RSS 约 22 MiB（macOS，仅供参考，非 A10 证据）。
-- 独立代码审查（只读子代理，聚焦认证/经济/幂等）：未发现隔离绕过、重复发奖或负余额路径；提出的 7 项中低级问题已修复（sum 榜按单次成绩隔离、存档原样返回字节以匹配 checksum、幂等键按玩家+操作隔离、平台登录响应去掉游客字段、埋点批次不因停机中断、限流表满时随机淘汰而非全部拒绝且 IPv6 按 /64 聚合、停机超时强制关闭连接），前 4 项有回归测试，修复后 `./scripts/ci.sh` 与 SDK 实机 e2e 复跑通过。
-- govulncheck：在 GitHub Actions 运行；Go 1.27.1 标准库有已修复漏洞（net/http、crypto/x509、crypto/tls 等，最高修复版本 1.27.4），已在 go.mod 与项目模板中固定 `toolchain go1.27.4`。
-- 未运行：linux 二进制实机运行。
+## 验证命令与结果（本机 macOS arm64，Go 1.27.4 toolchain，Node 24，PostgreSQL 17.11，Valkey 9.2.0）
+- `GOSTACK_TEST_POSTGRES_DSN=… GOSTACK_TEST_VALKEY_ADDR=… GOSTACK_TEST_VALKEY_SERVER=… ./scripts/ci.sh`：gofmt、`go vet`、`go test -race -count=1 ./...` 分别在 SQLite、PostgreSQL+Valkey、PostgreSQL（本地限流）三轮全部通过；linux amd64/arm64 `CGO_ENABLED=0` 交叉编译；SDK typecheck + 64 个测试；SDK 核心 gzip 6830 B（预算 30720 B），realtime 独立入口 2149 B。
+- OpenAPI：`docs/openapi/gostack.yaml`（OpenAPI 3.1，109 路径/129 操作）；`app/openapi_test.go` 双向核对文档与源码路由、错误码枚举与源码一致、每个文档化操作在开启全部模块的 app 上存在。
+- 独立审查（第二轮，只读子代理，覆盖认证/资金/存储层/生命周期）：10 项问题全部修复且均有回归测试——PG 下埋点毒批次（入口拒绝控制字符/非法 UTF-8 + flush 逐行 SAVEPOINT 隔离）、`CF-Connecting-IP` 仅在 `http.trust_cf_connecting_ip` 显式开启时信任、本地存储预签名路由脱离通用 body/超时限制、存档响应字节与 checksum 一致、签到/任务改时区不再重复领取、游客邀请奖励延迟到绑定平台身份后领取、对战房间 token 改随机并绑定认领 key、空租户 billing key 被拒、隔离指标不在可重跑事务内计数、榜单规则在写事务内读取。另一项由 OpenAPI 核对发现：运营/社交发放绕过道具目录与 `max_stack`，已改走 `Kit.Grant`。
+- 第一轮审查（P0 主干）7 项问题已修复（见 git 历史）。
+- govulncheck：GitHub Actions 中运行；`toolchain go1.27.4`（1.27.1 标准库漏洞的修复版本）。CI 新增的 PostgreSQL / Valkey service job 尚未在 GitHub 上运行过。
+- 未运行：linux 二进制实机运行、部署脚本在真实 Linux/systemd 上运行。
 
 ## 通用核心（PRD §5）
 | ID | 状态 | 说明 |
 |---|---|---|
-| F01 CLI | 已实现 | init（不覆盖文件）、doctor、config validate、version、migrate status/up、game/apikey/jobs 管理；退出码 0/1/2/3，`--json` |
-| F02 HTTP | 已实现 | 请求 ID、统一错误信封、body/超时/并发上限、本地限流、panic 恢复、可信代理 IP 解析 |
-| F03 数据库 | 已实现（Lite） | 单写连接 + 只读池、每连接 PRAGMA、BEGIN IMMEDIATE、BUSY 有界重试、写入准入队列满 → 503、实例锁、迁移与漂移检测 |
-| F04 配置 | 部分 | 默认值<文件<环境变量<CLI、严格未知键、能力矩阵校验、密钥引用 env:/file:；**热更新未实现**（全部重启生效） |
-| F05 认证 | 部分 | API Key（SHA-256 摘要、scope、过期、撤销即时生效）、游戏会话；**密码登录 / Cookie 会话 / CSRF 未实现** |
-| F06 队列 | 已实现 | SQLite 持久化任务：租约 token、重试退避、死信、重放、dedupe、同事务入队；Worker 运行器 |
-| F07 可观测性 | 部分 | /healthz、/readyz、内网 /metrics（Prometheus 文本）与 pprof、JSON 日志与敏感字段脱敏；**告警规则与故障手册未编写** |
-| F08 部署 | 模板 | systemd 单元模板（生成项目内）；**安装/升级/回滚脚本未实现，未在 Linux 实测** |
-| F09 容灾 | 模板 | Litestream 配置模板；**R2 复制与恢复演练未执行（A08 未通过）** |
-| F10、F11、F13 | 未实现 | 通用计费、对象存储、HA（本行未随 F12 重新核实） |
-| F12 Scale | 部分（见下节） | PostgreSQL 存储、多实例、PG 任务队列、SQLite→PG 迁移工具、Valkey 全局限流与 Valkey 缓存（单主节点）；Valkey HA/TLS、PG HA、PG 备份未实现 |
-| 缓存（PRD §4.2） | 已实现（无内置使用方） | `modules/cache`：memory（LRU、`max_bytes` 字节计量、TTL）与 valkey（前缀、超时、单值上限）；`App.Cache`；读错误降级为未命中；资金/账本路径不使用 |
-| 6.2 组提交写入调度器 | 未实现 | 首期用串行短事务 + 有界准入（见 ADR-0002），组提交需基准证明收益 |
+| F01 CLI | 已实现 | init（不覆盖文件）、doctor、config validate/diff、version、migrate status/up/to-postgres、backup snapshot/verify/restore、game/apikey/jobs 管理；退出码 0/1/2/3，`--json` |
+| F02 HTTP | 已实现 | 请求 ID、统一错误信封、body/超时/并发上限、限流（本地或 Valkey 全局）、panic 恢复、可信代理 IP 解析（CF 头需显式开启） |
+| F03 数据库 | 已实现 | Lite：SQLite 单写连接 + 只读池、每连接 PRAGMA、BEGIN IMMEDIATE、写入准入满 → 503、实例锁；Scale：PostgreSQL SERIALIZABLE + 有界重试；两种方言的迁移与漂移检测 |
+| F04 配置 | 已实现 | 默认值<文件<环境变量<CLI、严格未知键、能力矩阵校验、密钥引用；SIGHUP 热更新 6 个热键（日志级别、并发上限、各限流配额），重启项只报告不生效（`app/reload_test.go` 含真实 SIGHUP） |
+| F05 认证 | 已实现 | API Key（摘要、scope、过期、撤销即时生效）、游戏会话；Web 认证（Argon2id、Cookie 会话、`__Host-`、CSRF 令牌 + Origin/Sec-Fetch-Site、限流、改密吊销） |
+| F06 队列 | 已实现 | 持久化任务（SQLite / PG `FOR UPDATE SKIP LOCKED`）：租约 token、重试退避、死信、重放、dedupe、同事务入队；Worker |
+| F07 可观测性 | 已实现 | /healthz、/readyz、内网 /metrics 与 pprof、JSON 日志脱敏；`deploy/prometheus/alerts.yml` 17 条规则（测试核对每个指标名与 label 真实暴露、runbook 锚点存在）；`docs/RUNBOOK.md`。阈值为起点值，未经实测 |
+| F08 部署 | 已实现（未在 Linux 实跑） | install/upgrade/rollback.sh、release.sh（sha256、`go version -m` SBOM，非 SPDX）；`deploy/deploy_test.go` 用桩命令在临时目录真实执行（校验和、原子切换、健康检查失败自动回滚、schema 更新时拒绝回滚） |
+| F09 容灾 | 本地演练通过 | `backup snapshot/verify/restore`；Litestream v0.5.18 演练：本地文件副本 6 次 + MinIO（S3）2 次，kill -9 → 空目录恢复 → verify → API 回读全部通过，丢失窗口约一个 sync-interval（见 `docs/DISASTER_RECOVERY.md`）；**R2 与 1C1G 未演练** |
+| F10 计费 | 已实现 | `modules/billing`：账户/不可变账本/预留状态机（reserved→settled/released/expired/reconciling）、幂等、对账、HTTP（`billing` scope，空租户 key 拒绝） |
+| F11 对象存储 | 已实现 | local（原子写、HMAC 预签名）与 S3 兼容（自写 SigV4，AWS 文档向量通过）；**对真实 MinIO 实测 9 项通过**；AWS S3 / R2 未实测 |
+| F12 Scale | 已实现（见下两节） | PostgreSQL、多实例、SQLite→PG 迁移工具、Valkey 全局限流与缓存；PG/Valkey HA、PG 备份未实现 |
+| F13 HA / Distributed | 未实现 | 配置校验拒绝 `distributed` profile |
+| 缓存（PRD §4.2） | 已实现（无内置使用方） | memory（LRU、字节计量、TTL）与 valkey；读错误降级为未命中；资金路径不使用 |
+| 6.2 组提交写入调度器 | 未实现 | 串行短事务 + 有界准入（ADR-0002）；组提交需基准证明收益 |
 
 ## F12 Scale：PostgreSQL（2026-11-25，ADR-0003）
 验证环境：本机 macOS arm64，PostgreSQL 17.11（临时集群，max_connections=100），Go 1.27.4。
@@ -41,32 +44,41 @@
 - 未实现 / 未验证：Valkey Sentinel/Cluster/HA、TLS、主从切换下的语义；Valkey 往返对延迟/吞吐的影响未压测；内置功能尚未使用缓存。
 
 ## GameKit（PRD §20）
-| ID | 状态 | 测试 |
+| ID | 状态 | 说明与测试 |
 |---|---|---|
 | G01 游戏注册 | 已实现 | 未知/停用游戏拒绝、CORS 白名单、管理 API 租户隔离 |
-| G02 玩家身份 | 已实现 | 游客注册/复登/轮换/登出撤销；微信 code2session（用假服务测试，**未对真实微信验证**）；绑定冲突不覆盖 |
-| G03 云存档 | 已实现 | 条件更新、并发仅一方成功（G-A03）、幂等重放、大小与槽位上限、历史保留；**合并函数、恢复历史版本 API 未实现** |
-| G04 排行榜 | 已实现 | best/sum、desc/asc、none/daily/weekly 赛季、稳定 tie-break、游标、本人名次；**赛季结算发奖未实现** |
-| G05 经济 | 部分 | 整数余额、不可变账本、来源键唯一、领奖资格/时间窗/次数、并发领奖仅一笔（G-A02）、对账 CLI；**道具独立模型、消费 HTTP 接口未实现** |
-| G06 配置 | 部分 | 版本化、ETag/304、回滚、管理 API；**灰度/按客户端版本下发未实现** |
-| G07 埋点 | 已实现 | 独立 analytics.db、有界缓冲丢弃计数、event_id 去重、保留期清理；过载不影响经济事务（G-A06） |
-| G08 反作弊 | 部分 | 分数范围、隔离阈值、提交限流、会话与幂等；**规则版本、防重放签名、人工审核 API 未实现** |
-| G09 SDK | 已实现（未真机） | 见 `sdk/typescript/README.md`；**Safari/微信真机（G-A08）未验证** |
-| G10–G15 | 未实现 | |
+| G02 玩家身份 | 已实现 | 游客注册/复登/轮换/登出撤销；微信 code2session（**只对假服务测试**）；绑定冲突不覆盖 |
+| G03 云存档 | 已实现 | 条件更新、并发仅一方成功（G-A03）、幂等、历史列表/恢复/删除、合并钩子 `Kit.SaveMerge`、`min_schema_version` |
+| G04 排行榜 | 已实现 | best/sum、赛季、稳定排序、游标、本人名次；赛季结算（唯一结算键、可恢复、并发结算只发一次、定时调度任务） |
+| G05 经济 | 已实现 | 整数余额、不可变账本、道具目录与 `max_stack`、礼包购买、管理调整（审计）、对账；并发购买/领奖只成交一笔 |
+| G06 配置 | 已实现 | 版本化、ETag/304、回滚、灰度 rollouts（稳定分桶、平台/客户端版本、停止开关） |
+| G07 埋点 | 已实现 | 独立 analytics 存储、有界缓冲、去重、保留期；入口文本校验与 flush 坏行隔离（G-A06） |
+| G08 反作弊 | 已实现 | 分数范围、隔离阈值、`rule_version`、一次性对局令牌（防重放/最短时长）、人工审核 API |
+| G09 SDK | 已实现（未真机） | 全部客户端接口 + 独立 realtime 入口；fake transport/socket 单测；**Safari/微信真机（G-A08）未验证** |
+| G10 运营 | 已实现 | 公告、邮件（广播懒创建）、签到、任务（服务端进度）、活动、兑换码（哈希存储、并发单次） |
+| G11 商业化 | 已实现（未接真实平台） | Apple JWS（x5c 链到配置根证书）、通知 V2、退款与不足额补偿、AdMob SSV / HMAC 广告回调、inbox 去重、outbox；**只用测试生成的证书/密钥验证**；Google Play、微信支付未实现（配置拒绝） |
+| G12 实验 | 已实现 | 稳定分桶、层互斥、曝光去重、停止开关、结果统计 |
+| G13 社交 | 已实现 | 资料与隐私、好友/请求/拉黑、好友码、邀请（游客奖励延迟到绑定后）、分享归因、好友榜 |
+| G14 实时通信 | 已实现（仅单实例） | WebSocket 网关：token 不进 URL、Origin、连接/消息/速率预算、心跳、序号 + ack + 续传、慢消费者断开、停机 1001；本机 1000 空闲连接约 28 KiB/连接（非验收）；scale 下被配置拒绝 |
+| G15 匹配与房间 | 已实现 | 票据（单次消费）、按 rating 窗口撮合、房间租约 + 随机 token + 绑定认领 key、结算幂等 |
 
 ## 验收项对照
 - A01 构建：linux amd64/arm64 交叉编译通过，迁移与模板内嵌；未在 Linux 实机运行。
-- A02 数据库：每连接 PRAGMA、读库拒写、迁移重复执行与漂移检测——通过。
-- A03 并发：race 通过；余额非负由 CHECK 与 ApplyLedger 保证；幂等不重复扣费——通过。
-- A04 崩溃：`tests/fault` SIGKILL 后已确认写入全部保留、integrity_check 与对账通过——通过（进程崩溃模型；**断电模型需目标机验证**）。
-- A05 过载：写入准入满返回 503、埋点满丢弃计数——通过。
-- A06 任务：租约回收、旧 token 无法 Ack——通过。
-- A07 安全：跨游戏/跨玩家拒绝、未知字段拒绝、参数化 SQL；**系统性安全测试与依赖扫描未执行**。
-- A08 容灾、A09 运维、A10 性能、A11 扩展：**未执行**。
-- 游戏专项：G-A01/02/03/06 通过；G-A04（外部回调）不适用（IAP/广告回调未实现）；G-A05 部分（隔离阈值）；G-A07/08/09/10 未执行。
+- A02 数据库：每连接 PRAGMA、读库拒写、迁移重复执行与漂移检测、两方言 schema 等价——通过。
+- A03 并发：race 通过（三种后端）；余额非负；幂等不重复扣费；多实例并发只生效一次——通过。
+- A04 崩溃：`tests/fault` SIGKILL 后已确认写入全部保留——通过（进程崩溃模型；**断电模型需目标机验证**）。
+- A05 过载：写入准入满 503、埋点满丢弃计数、realtime 慢消费者断开——通过。
+- A06 任务：租约回收、旧 token 无法 Ack、跨进程 Claim 不重复——通过。
+- A07 安全：跨游戏/跨玩家/跨租户拒绝、未知字段拒绝、参数化 SQL、CSRF、两轮独立审查问题已修复、govulncheck；**无第三方渗透测试**。
+- A08 容灾：本地文件与 MinIO 副本恢复演练通过；**R2 未演练**。
+- A09 运维：脚本在桩环境通过；**真实 systemd 未演练**。
+- A10 性能：**目标环境未执行**（本机基准见 `docs/BENCHMARK_REPORT.md`，仅供参考）。
+- A11 扩展：PG 跑同一套业务契约测试 + 多实例测试——通过。
+- 游戏专项：G-A01/02/03/04/06 通过；G-A05 通过（规则版本、对局令牌、隔离不发奖）；G-A07（CDN 资源发布）未实现；G-A08 真机未执行；G-A09 多游戏隔离通过、资源配额未实现；G-A10 本地恢复后对账通过，R2 未执行。
 
-## 下一步（建议顺序）
-1. M0 剩余：在 1C1G Linux 上跑驱动基准（modernc vs CGO）与 §13/§23 压测，按结果确认 ADR-0001。
-2. 部署脚本（install/upgrade/rollback）与 Litestream→R2 恢复演练（A08/A09）。
-3. GameKit P0 缺口：赛季结算（用 jobs + dedupe 键）、存档历史恢复、配置灰度、道具模型。
+## 仍需外部环境才能完成
+1. 1C1G Linux 目标机：§13/§23 压测、驱动选型确认（ADR-0001）、部署脚本与 systemd 实跑、断电模型。
+2. Cloudflare R2：S3 适配器实测、Litestream→R2 复制与恢复（RPO/RTO、费用）。
+3. 真实平台：微信 code2session、Apple 沙盒交易与通知、AdMob 回调。
 4. 真机：Safari iPhone 与微信小游戏验证 SDK（G-A08）。
+5. 未实现：F13 HA/Distributed、PG 备份/PITR、Valkey HA/TLS、realtime 多实例、Google Play/微信支付、CDN 资源发布（G-A07）、WebKit/AgentKit（PRD §24）。
