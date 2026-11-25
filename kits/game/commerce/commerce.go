@@ -1,5 +1,5 @@
-// Package commerce is GameKit G11: IAP server-side verification (App Store),
-// rewarded-ad server-to-server callbacks (AdMob SSV, generic HMAC), refunds with
+// Package commerce is GameKit G11: IAP server-side verification (App Store,
+// Google Play, WeChat Pay API v3 JSAPI), rewarded-ad server-to-server callbacks (AdMob SSV, generic HMAC), refunds with
 // shortfall tracking, and an outbox hook for delivery side effects.
 //
 // Provider proofs are verified before any database transaction; a short WriteTx
@@ -29,12 +29,12 @@ import (
 
 // Implemented providers; configuration must reject anything else.
 var (
-	IAPProviders = []string{"apple"}
+	IAPProviders = []string{"apple", "google", "wechatpay"}
 	AdKinds      = []string{"admob", "hmac"}
 )
 
 // ValidateProviders rejects IAP providers and ad verifier kinds that are not
-// implemented (Google Play, WeChat Pay, ... are not).
+// implemented (WeChat mini-game virtual payment, Huawei, ... are not).
 func ValidateProviders(iap, adKinds []string) error {
 	for _, p := range iap {
 		if !slices.Contains(IAPProviders, p) {
@@ -82,6 +82,8 @@ func (m *Module) now() time.Time {
 func (m *Module) Routes(mux *http.ServeMux) {
 	k := m.Kit
 	k.Handle(mux, "POST /iap/orders", game.Player, m.createOrder)
+	k.Handle(mux, "GET /iap/orders/{order}", game.Player, m.getOrder)
+	k.Handle(mux, "POST /iap/wechatpay/prepay", game.Player, m.wechatPrepay)
 	k.Handle(mux, "POST /iap/{provider}/verify", game.Player, m.verifyPurchase)
 	k.Handle(mux, "POST /callbacks/{provider}", game.Public, m.iapCallback)
 	k.Handle(mux, "POST /ads/{placement}/intent", game.Player, m.adIntent)
@@ -94,6 +96,21 @@ func (m *Module) Routes(mux *http.ServeMux) {
 	k.HandleAdmin(mux, "GET /ad-placements", m.adminGetPlacements)
 	k.HandleAdmin(mux, "GET /orders", m.adminListOrders)
 	k.HandleAdmin(mux, "POST /orders/{order}/resolve", m.adminResolveOrder)
+}
+
+// JobHandlers returns the handlers for jobs the module enqueues itself (store
+// acknowledgements such as Google Play acknowledge/consume). The application's
+// jobs.Worker must run them; OutboxJobType is handled by the application.
+func (m *Module) JobHandlers() map[string]jobs.Handler {
+	out := map[string]jobs.Handler{}
+	for _, v := range m.IAP {
+		if f, ok := v.(finisher); ok {
+			for t, h := range f.jobHandlers() {
+				out[t] = h
+			}
+		}
+	}
+	return out
 }
 
 // Maintain purges expired ad intents and inbox records older than 90 days

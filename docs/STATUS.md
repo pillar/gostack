@@ -56,7 +56,7 @@
 | G08 反作弊 | 已实现 | 分数范围、隔离阈值、`rule_version`、一次性对局令牌（防重放/最短时长）、人工审核 API |
 | G09 SDK | 已实现（未真机） | 全部客户端接口 + 独立 realtime 入口；fake transport/socket 单测；**Safari/微信真机（G-A08）未验证** |
 | G10 运营 | 已实现 | 公告、邮件（广播懒创建）、签到、任务（服务端进度）、活动、兑换码（哈希存储、并发单次） |
-| G11 商业化 | 已实现（未接真实平台） | Apple JWS（x5c 链到配置根证书）、通知 V2、退款与不足额补偿、AdMob SSV / HMAC 广告回调、inbox 去重、outbox；**只用测试生成的证书/密钥验证**；Google Play、微信支付未实现（配置拒绝） |
+| G11 商业化 | 已实现（未接真实平台） | Apple JWS（x5c 链到配置根证书）、通知 V2、退款与不足额补偿、AdMob SSV / HMAC 广告回调、inbox 去重、outbox；Google Play（服务账号 JWT→OAuth2、purchases.products.get、obfuscatedExternalAccountId 绑定、consume/acknowledge 任务、RTDN Pub/Sub OIDC 校验、作废退款）；微信支付 API v3 JSAPI（商户签名下单、回调验签+时间窗、AES-256-GCM 解密、金额/商户号/AppID 校验、退款冲正）；**全部只用本地生成的密钥和 httptest 假服务验证，未对接真实 Apple/Google/微信**；微信小游戏虚拟支付（米大师）、订阅、部分退款自动处理未实现 |
 | G12 实验 | 已实现 | 稳定分桶、层互斥、曝光去重、停止开关、结果统计 |
 | G13 社交 | 已实现 | 资料与隐私、好友/请求/拉黑、好友码、邀请（游客奖励延迟到绑定后）、分享归因、好友榜 |
 | G14 实时通信 | 已实现（仅单实例） | WebSocket 网关：token 不进 URL、Origin、连接/消息/速率预算、心跳、序号 + ack + 续传、慢消费者断开、停机 1001；本机 1000 空闲连接约 28 KiB/连接（非验收）；scale 下被配置拒绝 |

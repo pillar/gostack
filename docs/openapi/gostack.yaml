@@ -2030,6 +2030,85 @@ paths:
         '413': {$ref: '#/components/responses/PayloadTooLarge'}
         '503': {$ref: '#/components/responses/Overloaded'}
 
+  /v1/games/{game}/iap/orders/{order}:
+    get:
+      operationId: commerceGetOrder
+      tags: [commerce]
+      x-gostack-module: commerce
+      summary: Read one of the session player's orders
+      description: |
+        Returns the order if it belongs to the session player (404 otherwise).
+        Clients poll it after paying with WeChat Pay, where delivery is driven by
+        the payment notification.
+      security:
+        - gameSession: []
+      parameters:
+        - $ref: '#/components/parameters/Game'
+        - name: order
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: The order.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CommerceOrderResult'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /v1/games/{game}/iap/wechatpay/prepay:
+    post:
+      operationId: commerceWeChatPrepay
+      tags: [commerce]
+      x-gostack-module: commerce
+      summary: Create the WeChat Pay JSAPI order for a created order
+      description: |
+        WeChat Pay API v3 JSAPI / mini-program payment (not the WeChat mini-game
+        virtual payment API, which is not implemented). Fixes provider, store
+        product (`provider_product_ids.wechatpay`) and price (config `prices`,
+        fen) on the order in a write transaction, then calls
+        `POST /v3/pay/transactions/jsapi` outside any transaction (merchant
+        `WECHATPAY2-SHA256-RSA2048` signature, `out_trade_no` = token without
+        dashes, `payer.openid` = the player's `wechat` login identity,
+        `time_expire` = order creation + 2h), then stores `prepay_id`. A repeat
+        returns the stored `prepay_id` with fresh payment parameters.
+
+        Errors: `400 invalid_request`, `404 not_found` (order not the player's),
+        `404 provider_not_configured`, `409 invalid_state` (order not `created`),
+        `409 order_expired`, `409 wechat_identity_required`,
+        `409 prepay_conflict` (WeChat Pay `OUT_TRADE_NO_USED`),
+        `422 product_not_mapped` (no wechatpay mapping or price),
+        `503 store_unavailable` (WeChat Pay error or unreachable).
+      security:
+        - gameSession: []
+      parameters:
+        - $ref: '#/components/parameters/Game'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CommerceWeChatPrepayRequest'}
+      responses:
+        '200':
+          description: Payment parameters for wx.requestPayment.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CommerceWeChatPrepay'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '422':
+          description: Product has no wechatpay mapping or price (`product_not_mapped`).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+        '503': {$ref: '#/components/responses/Overloaded'}
+
   /v1/games/{game}/iap/{provider}/verify:
     post:
       operationId: commerceVerifyPurchase
@@ -2044,7 +2123,14 @@ paths:
         write transaction (ledger source `iap:<provider>:<transactionId>`).
         Idempotent by transaction: a repeat by the same player returns the same
         order with `replayed: true` and grants nothing more. `Idempotency-Key` is
-        not used. Body limit 128 KiB. Only provider `apple` is implemented.
+        not used. Body limit 128 KiB.
+
+        `google`: body `{product_id, purchase_token}`; the server calls the Google
+        Play Developer API purchases.products.get (service-account OAuth2) before
+        any database transaction, binds `obfuscatedExternalAccountId` to the
+        order's `app_account_token`, and enqueues a consume/acknowledge job with
+        the delivery. `wechatpay` has no client proof (400; delivery comes from
+        the payment notification). See docs/api/commerce.md.
 
         Errors: `400 invalid_signature`, `400 bundle_mismatch`,
         `400 environment_mismatch`, `400 invalid_request` (missing
@@ -2054,7 +2140,9 @@ paths:
         (provider unknown or not configured for this game),
         `409 transaction_refunded`, `409 transaction_already_used` (transaction
         belongs to another game), `409 product_mismatch`, `409 stack_limit`,
-        `422 product_not_mapped`.
+        `422 product_not_mapped`; Google: `400 invalid_purchase`,
+        `400 test_purchase_rejected`, `409 purchase_pending`,
+        `503 store_unavailable`.
       security:
         - gameSession: []
       parameters:
@@ -2062,10 +2150,10 @@ paths:
         - name: provider
           in: path
           required: true
-          description: IAP provider name; only `apple` is implemented.
+          description: IAP provider name.
           schema:
             type: string
-            enum: [apple]
+            enum: [apple, google, wechatpay]
       requestBody:
         required: true
         content:
@@ -2095,7 +2183,7 @@ paths:
       operationId: commerceIapCallback
       tags: [commerce]
       x-gostack-module: commerce
-      summary: Store server notification (App Store Server Notifications V2)
+      summary: Store server notification (App Store Server Notifications V2, Google Play RTDN, WeChat Pay)
       description: |
         Public endpoint called by the store. Trust comes only from the signature:
         the outer `signedPayload` JWS and the embedded `signedTransactionInfo` are
@@ -2118,16 +2206,38 @@ paths:
         `400 invalid_signature`, `400 bundle_mismatch`, `400 environment_mismatch`,
         `404 provider_not_configured`, `409 product_mismatch`, `409 stack_limit`,
         `422 product_not_mapped`.
+
+        `google`: Cloud Pub/Sub push of a Real-time developer notification;
+        `Authorization: Bearer <OIDC JWT>` must be RS256-signed by a key of
+        Google's JWKS with `iss` accounts.google.com, the configured `aud`, the
+        configured push service account `email` and `email_verified`
+        (`401 invalid_signature` otherwise). Event id = `message.messageId`.
+        Voided one-time purchases (full refunds) reverse grants;
+        `ONE_TIME_PRODUCT_PURCHASED` is re-checked with purchases.products.get;
+        other types are ignored. Extra errors: `400 package_mismatch`,
+        `503 store_unavailable`, `503 key_fetch_failed`.
+
+        `wechatpay`: WeChat Pay API v3 notification. `Wechatpay-Signature` is
+        RSA-SHA256 over "timestamp\nnonce\nbody\n" with the platform key named
+        by `Wechatpay-Serial`; the timestamp must be within `max_skew` (default
+        5 min); `resource` is decrypted with AEAD_AES_256_GCM and the APIv3 key.
+        `TRANSACTION.SUCCESS` delivers to the order named by `out_trade_no` after
+        checking mchid, appid and amount; a full `REFUND.SUCCESS` reverses.
+        Success answer: `204` without body. Failure: 4xx/5xx with
+        `{"code":"FAIL","message":<error code>}` so WeChat Pay retries. Errors:
+        `401 invalid_signature`, `400 invalid_signature` (resource does not
+        decrypt), `400 merchant_mismatch`, `400 app_mismatch`,
+        `409 amount_mismatch`.
       security: []
       parameters:
         - $ref: '#/components/parameters/Game'
         - name: provider
           in: path
           required: true
-          description: IAP provider name; only `apple` is implemented.
+          description: IAP provider name.
           schema:
             type: string
-            enum: [apple]
+            enum: [apple, google, wechatpay]
       requestBody:
         required: true
         content:
@@ -2139,6 +2249,8 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/CommerceCallbackResult'}
+        '204':
+          description: WeChat Pay notification accepted (processed, ignored or duplicate).
         '400': {$ref: '#/components/responses/BadRequest'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -4543,6 +4655,17 @@ components:
         - key_fetch_failed
         - too_many_intents
         - ad_cap_reached
+        - amount_mismatch
+        - store_unavailable
+        - purchase_pending
+        - test_purchase_rejected
+        - invalid_purchase
+        - package_mismatch
+        - merchant_mismatch
+        - app_mismatch
+        - prepay_conflict
+        - order_expired
+        - wechat_identity_required
         # realtime (pre-upgrade HTTP errors)
         - token_in_url
         - origin_not_allowed
@@ -5512,13 +5635,21 @@ components:
     CommerceVerifyRequest:
       type: object
       additionalProperties: false
-      required: [signed_transaction]
+      description: '`apple`: `signed_transaction`. `google`: `product_id` and `purchase_token`.'
       properties:
         signed_transaction:
           type: string
           minLength: 1
           maxLength: 65536
           description: StoreKit 2 / App Store Server API `signedTransactionInfo` (ES256 compact JWS, ≤ 64 KiB).
+        product_id:
+          type: string
+          maxLength: 128
+          description: Google Play product id (the store's id, not the catalog id).
+        purchase_token:
+          type: string
+          maxLength: 4096
+          description: Google Play purchase token from the client purchase.
     CommerceOrderState:
       type: string
       enum: [created, paid, delivered, refunded, refund_shortfall, refund_compensated]
@@ -5554,6 +5685,42 @@ components:
         updated_at: {type: integer, format: int64}
         delivered_at: {type: integer, format: int64}
         refunded_at: {type: integer, format: int64}
+        amount:
+          type: integer
+          format: int64
+          description: Price fixed before payment in minor units (WeChat Pay, fen); absent when 0.
+    CommerceOrderResult:
+      type: object
+      required: [order]
+      properties:
+        order: {$ref: '#/components/schemas/CommerceOrder'}
+    CommerceWeChatPrepayRequest:
+      type: object
+      additionalProperties: false
+      required: [order_id]
+      properties:
+        order_id: {type: string, maxLength: 64}
+    CommerceWeChatPrepay:
+      type: object
+      required: [order_id, out_trade_no, amount, currency, payment]
+      properties:
+        order_id: {type: string}
+        out_trade_no:
+          type: string
+          description: The order's app_account_token without dashes (32 hex characters).
+        amount: {type: integer, format: int64, description: Price in fen.}
+        currency: {type: string, enum: [CNY]}
+        payment:
+          type: object
+          description: 'Parameters for wx.requestPayment. paySign is base64 RSA-SHA256 (merchant key) over "appId\ntimeStamp\nnonceStr\npackage\n".'
+          required: [appId, timeStamp, nonceStr, package, signType, paySign]
+          properties:
+            appId: {type: string}
+            timeStamp: {type: string}
+            nonceStr: {type: string}
+            package: {type: string, description: '`prepay_id=<prepay_id>`'}
+            signType: {type: string, enum: [RSA]}
+            paySign: {type: string}
     CommerceVerifyResult:
       type: object
       required: [order, replayed]

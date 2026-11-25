@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,13 +12,15 @@ import (
 	"github.com/pillar/gostack/core/httpx"
 	"github.com/pillar/gostack/kits/game"
 	"github.com/pillar/gostack/modules/idempotency"
+	"github.com/pillar/gostack/modules/jobs"
 )
 
 // order is a commerce_orders row.
 type order struct {
 	ID, GameID, PlayerID, Provider, ProductID, ProviderProductID string
-	Token, TxnID, State                                          string
+	Token, TxnID, State, PrepayID                                string
 	Quantity, RefundAttempts                                     int
+	Amount                                                       int64
 	Grants, Outstanding                                          grants
 	CreatedAt, UpdatedAt                                         int64
 	DeliveredAt, RefundedAt                                      sql.NullInt64
@@ -25,7 +28,7 @@ type order struct {
 
 const orderCols = `order_id, game_id, coalesce(player_id,''), provider, coalesce(product_id,''), coalesce(provider_product_id,''),
 	coalesce(app_account_token,''), coalesce(provider_txn_id,''), state, quantity, refund_attempts, grants, outstanding,
-	created_at, updated_at, delivered_at, refunded_at`
+	created_at, updated_at, delivered_at, refunded_at, amount, prepay_id`
 
 type rowScanner interface{ Scan(...any) error }
 
@@ -33,7 +36,7 @@ func scanOrder(r rowScanner) (*order, error) {
 	var o order
 	var g, out string
 	err := r.Scan(&o.ID, &o.GameID, &o.PlayerID, &o.Provider, &o.ProductID, &o.ProviderProductID, &o.Token, &o.TxnID,
-		&o.State, &o.Quantity, &o.RefundAttempts, &g, &out, &o.CreatedAt, &o.UpdatedAt, &o.DeliveredAt, &o.RefundedAt)
+		&o.State, &o.Quantity, &o.RefundAttempts, &g, &out, &o.CreatedAt, &o.UpdatedAt, &o.DeliveredAt, &o.RefundedAt, &o.Amount, &o.PrepayID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -55,6 +58,9 @@ func (o *order) view() map[string]any {
 	}
 	if o.RefundedAt.Valid {
 		v["refunded_at"] = o.RefundedAt.Int64
+	}
+	if o.Amount > 0 {
+		v["amount"] = o.Amount
 	}
 	return v
 }
@@ -100,6 +106,7 @@ var (
 	errUsed           = httpx.Conflict("transaction_already_used", "transaction was already used")
 	errNotMapped      = httpx.NewError(http.StatusUnprocessableEntity, "product_not_mapped", "store product is not mapped to a product of this game")
 	errProductChanged = httpx.Conflict("product_mismatch", "transaction product differs from the order product")
+	errAmountChanged  = httpx.Conflict("amount_mismatch", "paid amount differs from the order amount")
 )
 
 func newUUID() string {
@@ -182,15 +189,26 @@ func (m *Module) verifyPurchase(w http.ResponseWriter, r *http.Request) error {
 	}
 	var in struct {
 		SignedTransaction string `json:"signed_transaction"`
+		// Google Play: the Play product id and the purchase token from the client.
+		ProductID     string `json:"product_id"`
+		PurchaseToken string `json:"purchase_token"`
 	}
 	if err := game.DecodeStrict(body, &in); err != nil {
 		return err
 	}
-	if in.SignedTransaction == "" {
-		return httpx.BadRequest("signed_transaction is required")
+	proof := in.SignedTransaction
+	if in.PurchaseToken != "" || in.ProductID != "" {
+		if proof != "" {
+			return httpx.BadRequest("send either signed_transaction or product_id and purchase_token")
+		}
+		b, _ := json.Marshal(googleProof{ProductID: in.ProductID, PurchaseToken: in.PurchaseToken})
+		proof = string(b)
+	}
+	if proof == "" {
+		return httpx.BadRequest("signed_transaction (or product_id and purchase_token) is required")
 	}
 	// Verification (crypto, possibly network) happens before the transaction.
-	txn, err := v.VerifyTransaction(ctx, g.ID, in.SignedTransaction)
+	txn, err := v.VerifyTransaction(ctx, g.ID, proof)
 	if err != nil {
 		return err
 	}
@@ -251,6 +269,9 @@ func (m *Module) clientDeliver(ctx context.Context, tx *sql.Tx, g game.Game, pla
 	if tok != nil && tok.ProductID != pid {
 		return nil, false, errProductChanged
 	}
+	if err := amountMatches(tok, provider, txn); err != nil {
+		return nil, false, err
+	}
 	o, err = m.deliver(ctx, tx, g, playerID, provider, txn, pid, unit, o, tok)
 	return o, false, err
 }
@@ -289,7 +310,25 @@ func (m *Module) deliver(ctx context.Context, tx *sql.Tx, g game.Game, playerID,
 	if err := m.enqueue(ctx, tx, g.TenantID, "delivered:"+id, OutboxEvent{Event: "delivered", GameID: g.ID, PlayerID: playerID, OrderID: id, ProductID: productID, Grants: gr, At: now}); err != nil {
 		return nil, err
 	}
+	// Store-side completion (Google Play acknowledge/consume) runs as a job
+	// committed with the delivery: no network IO inside this transaction.
+	if f, ok := m.IAP[provider].(finisher); ok && m.Outbox != nil {
+		if typ, payload, ok := f.finishJob(g.ID, id, txn); ok {
+			if _, err := m.Outbox.Enqueue(ctx, tx, jobs.Job{TenantID: g.TenantID, Type: typ, Payload: payload, DedupeKey: "finish:" + id}); err != nil {
+				return nil, err
+			}
+		}
+	}
 	return orderByID(ctx, tx, g.ID, id)
+}
+
+// amountMatches checks the paid amount against an order whose price was fixed
+// by this provider before payment (WeChat Pay prepay).
+func amountMatches(tok *order, provider string, txn *Transaction) error {
+	if tok != nil && tok.Provider == provider && tok.Amount > 0 && txn.Amount != tok.Amount {
+		return errAmountChanged
+	}
+	return nil
 }
 
 func nullIf(s string) any {
@@ -308,28 +347,62 @@ func (m *Module) iapCallback(w http.ResponseWriter, r *http.Request) error {
 		return errNotConfigured
 	}
 	g := game.CurrentGame(ctx)
+	res, err := m.handleCallback(r, g, provider, v)
+	if cw, ok := v.(callbackWriter); ok {
+		cw.writeCallback(w, res, err)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	httpx.WriteJSON(w, http.StatusOK, res)
+	return nil
+}
+
+func (m *Module) handleCallback(r *http.Request, g game.Game, provider string, v Verifier) (map[string]any, error) {
+	ctx := r.Context()
 	body, err := game.ReadBody(r, 256<<10)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	n, err := v.VerifyNotification(ctx, g.ID, body)
+	var n *Notification
+	if rv, ok := v.(RequestVerifier); ok {
+		n, err = rv.VerifyNotificationRequest(ctx, g.ID, r.Header, body)
+	} else {
+		n, err = v.VerifyNotification(ctx, g.ID, body)
+	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 	kind := n.Kind
-	res, err := m.processEvent(ctx, g.ID, provider, n.EventID, kind, hashOf(body), func(tx *sql.Tx) (inboxState, error) {
+	return m.processEvent(ctx, g.ID, provider, n.EventID, kind, hashOf(body), func(tx *sql.Tx) (inboxState, error) {
 		switch n.Kind {
 		case NotifyPurchase:
 			return m.notifyPurchase(ctx, tx, g, provider, n.Txn)
 		case NotifyRefund:
 			return m.refund(ctx, tx, g, provider, n.Txn)
 		}
-		return inboxState{Status: "ignored", Error: "notification type " + n.Type + " is not handled"}, nil
+		reason := "notification type " + n.Type + " is not handled"
+		if n.Reason != "" {
+			reason = n.Reason
+		}
+		return inboxState{Status: "ignored", Error: reason}, nil
 	})
+}
+
+// getOrder returns one of the session player's orders (e.g. to poll a WeChat
+// Pay order until the payment notification delivered it).
+func (m *Module) getOrder(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	s := game.CurrentSession(ctx)
+	o, err := orderByID(ctx, m.DB.Read, s.GameID, r.PathValue("order"))
 	if err != nil {
 		return err
 	}
-	httpx.WriteJSON(w, http.StatusOK, res)
+	if o == nil || o.PlayerID != s.PlayerID {
+		return httpx.NotFound("order not found")
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"order": o.view()})
 	return nil
 }
 
@@ -414,6 +487,9 @@ func (m *Module) notifyPurchase(ctx context.Context, tx *sql.Tx, g game.Game, pr
 		}
 		if tok.ProductID != pid {
 			return inboxState{}, errProductChanged
+		}
+		if err := amountMatches(tok, provider, txn); err != nil {
+			return inboxState{}, err
 		}
 		d, err := m.deliver(ctx, tx, g, tok.PlayerID, provider, txn, pid, unit, nil, tok)
 		if err != nil {

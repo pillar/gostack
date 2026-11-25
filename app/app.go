@@ -521,6 +521,9 @@ func (a *App) Serve(ctx context.Context, h Hooks) error {
 			handlers[k] = v
 		}
 	}
+	for k, v := range a.moduleJobHandlers() {
+		handlers[k] = v
+	}
 	for k, v := range h.Jobs {
 		handlers[k] = v
 	}

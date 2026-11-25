@@ -10,11 +10,13 @@ import (
 	"encoding/json"
 	"errors"
 	"math/big"
+	"net/http"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/pillar/gostack/core/httpx"
+	"github.com/pillar/gostack/modules/jobs"
 )
 
 // Transaction is a store transaction whose signature and app binding were verified.
@@ -26,6 +28,14 @@ type Transaction struct {
 	Environment           string
 	Quantity              int
 	Revoked               bool // the store reports the transaction as refunded/revoked
+	// Amount is the paid total in minor units when the provider reports one
+	// (WeChat Pay amount.total, fen); checked against the order's amount.
+	Amount int64
+	// PurchaseToken is the store's opaque purchase handle (Google Play), used
+	// by the post-delivery acknowledge/consume job.
+	PurchaseToken string
+	// Finished: the store already shows the purchase as acknowledged/consumed.
+	Finished bool
 }
 
 // Notification kinds.
@@ -40,6 +50,7 @@ type Notification struct {
 	EventID string // unique per provider (Apple notificationUUID)
 	Type    string // provider type, e.g. REFUND
 	Kind    string // NotifyPurchase | NotifyRefund | NotifyIgnored
+	Reason  string // optional inbox reason for NotifyIgnored
 	Txn     *Transaction
 }
 
@@ -49,6 +60,26 @@ type Notification struct {
 type Verifier interface {
 	VerifyTransaction(ctx context.Context, gameID string, proof string) (*Transaction, error)
 	VerifyNotification(ctx context.Context, gameID string, body []byte) (*Notification, error)
+}
+
+// RequestVerifier is implemented by verifiers whose notifications are
+// authenticated by request headers (Google Pub/Sub OIDC bearer token, WeChat
+// Pay Wechatpay-Signature). iapCallback prefers it over VerifyNotification.
+type RequestVerifier interface {
+	VerifyNotificationRequest(ctx context.Context, gameID string, h http.Header, body []byte) (*Notification, error)
+}
+
+// finisher is implemented by verifiers that must complete a purchase at the
+// store after delivery; the job is enqueued in the delivery transaction.
+type finisher interface {
+	finishJob(gameID, orderID string, txn *Transaction) (jobType string, payload []byte, ok bool)
+	jobHandlers() map[string]jobs.Handler
+}
+
+// callbackWriter is implemented by verifiers whose provider requires a
+// specific callback response format (WeChat Pay).
+type callbackWriter interface {
+	writeCallback(w http.ResponseWriter, res map[string]any, err error)
 }
 
 // AppleApp binds a game to an App Store app.

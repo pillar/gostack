@@ -40,7 +40,9 @@ type MatchConfig struct {
 }
 
 type CommerceConfig struct {
-	Apple *AppleIAPConfig `yaml:"apple" json:"apple"`
+	Apple     *AppleIAPConfig     `yaml:"apple" json:"apple"`
+	Google    *GoogleIAPConfig    `yaml:"google" json:"google"`
+	WeChatPay *WeChatPayIAPConfig `yaml:"wechatpay" json:"wechatpay"`
 	// Ads maps the ad network name used in callback URLs to its verifier.
 	Ads                      map[string]AdNetworkConfig `yaml:"ads" json:"ads"`
 	AllowUnboundTransactions bool                       `yaml:"allow_unbound_transactions" json:"allow_unbound_transactions"`
@@ -56,6 +58,57 @@ type AppleIAPConfig struct {
 type AppleAppConf struct {
 	BundleID     string   `yaml:"bundle_id" json:"bundle_id"`
 	Environments []string `yaml:"environments" json:"environments"`
+}
+
+// GoogleIAPConfig configures Google Play one-time product verification.
+type GoogleIAPConfig struct {
+	// ServiceAccountRef is a secret reference (env:NAME or file:/path) to the
+	// service account JSON key with access to the Play Developer API.
+	ServiceAccountRef string                   `yaml:"service_account_ref" json:"service_account_ref"`
+	Apps              map[string]GoogleAppConf `yaml:"apps" json:"apps"` // by game_id
+	RTDN              *GoogleRTDNConf          `yaml:"rtdn" json:"rtdn"`
+	// Endpoint overrides (tests only).
+	TokenURL   string `yaml:"token_url" json:"token_url"`
+	APIBaseURL string `yaml:"api_base_url" json:"api_base_url"`
+}
+
+type GoogleAppConf struct {
+	PackageName string `yaml:"package_name" json:"package_name"`
+	// AllowTestPurchases accepts license-tester purchases (rejected in production).
+	AllowTestPurchases bool `yaml:"allow_test_purchases" json:"allow_test_purchases"`
+	// Finish is consume (default, consumables) or acknowledge (non-consumables).
+	Finish string `yaml:"finish" json:"finish"`
+}
+
+// GoogleRTDNConf authenticates Real-time developer notifications delivered by a
+// Pub/Sub push subscription with OIDC authentication.
+type GoogleRTDNConf struct {
+	Audience            string `yaml:"audience" json:"audience"`
+	ServiceAccountEmail string `yaml:"service_account_email" json:"service_account_email"`
+	JWKSURL             string `yaml:"jwks_url" json:"jwks_url"` // tests only
+}
+
+// WeChatPayIAPConfig configures WeChat Pay API v3 (JSAPI / mini-program payment).
+type WeChatPayIAPConfig struct {
+	MchID                 string `yaml:"mch_id" json:"mch_id"`
+	MerchantSerialNo      string `yaml:"merchant_serial_no" json:"merchant_serial_no"`
+	MerchantPrivateKeyRef string `yaml:"merchant_private_key_ref" json:"merchant_private_key_ref"` // PEM, secret ref
+	APIv3KeyRef           string `yaml:"apiv3_key_ref" json:"apiv3_key_ref"`                       // 32 bytes, secret ref
+	// PlatformKeys maps Wechatpay-Serial (PUB_KEY_ID_... or platform certificate
+	// serial) to a PEM public key or certificate file.
+	PlatformKeys map[string]string `yaml:"platform_keys" json:"platform_keys"`
+	// NotifyBaseURL is this server's public https origin used in notify_url.
+	NotifyBaseURL string                      `yaml:"notify_base_url" json:"notify_base_url"`
+	MaxSkew       time.Duration               `yaml:"max_skew" json:"max_skew"`
+	Apps          map[string]WeChatPayAppConf `yaml:"apps" json:"apps"`                 // by game_id
+	APIBaseURL    string                      `yaml:"api_base_url" json:"api_base_url"` // tests only
+}
+
+type WeChatPayAppConf struct {
+	AppID string `yaml:"app_id" json:"app_id"`
+	// Prices maps wechatpay provider product ids to prices in fen (CNY).
+	Prices      map[string]int64 `yaml:"prices" json:"prices"`
+	Description string           `yaml:"description" json:"description"`
 }
 
 type AdNetworkConfig struct {
@@ -190,6 +243,50 @@ func (c Config) validateModules() []error {
 			for _, e := range app.Environments {
 				if e != "Production" && e != "Sandbox" && e != "Xcode" && e != "LocalTesting" {
 					add("game.commerce.apple.apps.%s: unknown environment %q", g, e)
+				}
+			}
+		}
+	}
+	if gp := cm.Google; gp != nil {
+		if !IsSecretRef(gp.ServiceAccountRef) || len(gp.Apps) == 0 {
+			add("game.commerce.google: service_account_ref (env:NAME or file:/path) and at least one app are required")
+		}
+		for g, app := range gp.Apps {
+			if app.PackageName == "" {
+				add("game.commerce.google.apps.%s: package_name is required", g)
+			}
+			if app.Finish != "" && app.Finish != "consume" && app.Finish != "acknowledge" {
+				add("game.commerce.google.apps.%s: finish must be consume or acknowledge", g)
+			}
+			if app.AllowTestPurchases && c.Environment == "production" {
+				add("production: game.commerce.google.apps.%s.allow_test_purchases is not allowed", g)
+			}
+		}
+		if r := gp.RTDN; r != nil && (r.Audience == "" || r.ServiceAccountEmail == "") {
+			add("game.commerce.google.rtdn: audience and service_account_email are required")
+		}
+	}
+	if wp := cm.WeChatPay; wp != nil {
+		if wp.MchID == "" || wp.MerchantSerialNo == "" || !IsSecretRef(wp.MerchantPrivateKeyRef) || !IsSecretRef(wp.APIv3KeyRef) {
+			add("game.commerce.wechatpay: mch_id, merchant_serial_no, merchant_private_key_ref and apiv3_key_ref (env:NAME or file:/path) are required")
+		}
+		if len(wp.PlatformKeys) == 0 || len(wp.Apps) == 0 {
+			add("game.commerce.wechatpay: platform_keys and at least one app are required")
+		}
+		u, err := url.Parse(wp.NotifyBaseURL)
+		if err != nil || u.Host == "" || !(u.Scheme == "https" || (u.Scheme == "http" && c.Environment != "production")) {
+			add("game.commerce.wechatpay: notify_base_url must be an absolute https URL")
+		}
+		if wp.MaxSkew < 0 {
+			add("game.commerce.wechatpay.max_skew must be non-negative")
+		}
+		for g, app := range wp.Apps {
+			if app.AppID == "" || len(app.Prices) == 0 {
+				add("game.commerce.wechatpay.apps.%s: app_id and prices are required", g)
+			}
+			for id, p := range app.Prices {
+				if p <= 0 {
+					add("game.commerce.wechatpay.apps.%s.prices.%s must be a positive amount in fen", g, id)
 				}
 			}
 		}
