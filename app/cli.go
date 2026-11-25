@@ -58,6 +58,7 @@ const appUsage = `Application commands:
   game config publish <game_id> <file.json>
   game config rollback <game_id> <revision>
   game reconcile [game_id]               compare wallet balances with the ledger
+  game quotas <game_id> [--recount]      show quotas and usage (--recount rebuilds usage counters)
   apikey create --name N [--scope admin] [--tenant T] [--ttl 720h]
   apikey revoke <key_id>
   jobs replay <job_id>                   move a dead job back to pending
@@ -363,7 +364,7 @@ func migrate(ctx context.Context, cfg config.Config, args []string, asJSON bool,
 
 func gameCmd(ctx context.Context, cfg config.Config, args []string, asJSON bool, env Env) error {
 	if len(args) == 0 {
-		return UsageError{"usage: game create|config|reconcile"}
+		return UsageError{"usage: game create|config|quotas|reconcile"}
 	}
 	db, err := openAdmin(ctx, cfg)
 	if err != nil {
@@ -416,6 +417,31 @@ func gameCmd(ctx context.Context, cfg config.Config, args []string, asJSON bool,
 			return UsageError{"usage: game config publish|rollback"}
 		}
 		fmt.Fprintf(env.Stdout, "game %s config revision %d published\n", args[2], rev)
+		return nil
+	case "quotas":
+		if len(args) < 2 || len(args) > 3 || (len(args) == 3 && args[2] != "--recount") {
+			return UsageError{"usage: game quotas <game_id> [--recount]"}
+		}
+		if len(args) == 3 {
+			if _, err := game.RecountUsage(ctx, db, args[1]); err != nil {
+				return err
+			}
+		}
+		st, err := game.LoadQuotaStatus(ctx, db.Read, cfg.Game.QuotaDefaults, args[1])
+		if err != nil {
+			return err
+		}
+		if asJSON {
+			PrintJSON(env.Stdout, st)
+			return nil
+		}
+		l, u := st.Limits, st.Usage
+		fmt.Fprintf(env.Stdout, "game %s quotas (0 = unlimited)\n", st.GameID)
+		fmt.Fprintf(env.Stdout, "max_players               %d (used %d)\n", l.MaxPlayers, u.Players)
+		fmt.Fprintf(env.Stdout, "save_bytes_total          %d (used %d)\n", l.SaveBytesTotal, u.SaveBytes)
+		fmt.Fprintf(env.Stdout, "requests_per_minute       %d\n", l.RequestsPerMinute)
+		fmt.Fprintf(env.Stdout, "analytics_events_per_day  %d\n", l.AnalyticsEventsPerDay)
+		fmt.Fprintf(env.Stdout, "write_concurrency         %d\n", l.WriteConcurrency)
 		return nil
 	case "reconcile":
 		id := ""

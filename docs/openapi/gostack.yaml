@@ -24,6 +24,12 @@ info:
       `503 overloaded` with `Retry-After`.
     - Unknown paths and unsupported methods get `404 not_found`
       (message `route not found`), not 405.
+    - Per-game quotas (`/v1/admin/games/{game}/quotas`, docs/api/quotas.md)
+      apply to every `/v1/games/{game}/...` route: `429 rate_limited` with
+      `Retry-After` and `details.quota=requests_per_minute`; `503 overloaded`
+      with `details.quota=write_concurrency` for mutating methods; `403
+      quota_exceeded` on player creation (`max_players`) and save
+      put/restore (`save_bytes_total`).
 
     Module availability is given per operation by `x-gostack-module` and the tag:
     `core` (always mounted with `kits: [game]`), `ops`, `experiments`, `social`,
@@ -1124,6 +1130,60 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /v1/admin/games/{game}/quotas:
+    get:
+      operationId: coreAdminGetQuotas
+      tags: [core-admin]
+      x-gostack-module: core
+      summary: Effective per-game quotas, overrides, defaults and usage
+      description: |
+        `usage.players` and `usage.save_bytes` are the exact stored counters;
+        `analytics_events_today` and `writes_in_flight` are this instance's
+        counters. See docs/api/quotas.md.
+      security:
+        - adminKey: []
+      parameters:
+        - {$ref: '#/components/parameters/Game'}
+      responses:
+        '200':
+          description: Quota status.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CoreQuotaStatus'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    put:
+      operationId: coreAdminPutQuotas
+      tags: [core-admin]
+      x-gostack-module: core
+      summary: Replace the game's quota overrides
+      description: |
+        Replaces all overrides: a field that is omitted or `null` inherits
+        `game.quota_defaults`; `0` means unlimited. Values are within
+        [0, 2^50]; `requests_per_minute` <= 1e9. Applies on this instance
+        immediately and on other instances within 5 s. Body limit 4 KiB.
+      security:
+        - adminKey: []
+      parameters:
+        - {$ref: '#/components/parameters/Game'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CoreQuotaOverrides'}
+      responses:
+        '200':
+          description: Updated quota status.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CoreQuotaStatus'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '503': {$ref: '#/components/responses/Overloaded'}
 
   /v1/games/{game}/announcements:
     get:
@@ -4489,6 +4549,7 @@ components:
         - settlement_not_configured
         - season_not_ended
         - conflict
+        - quota_exceeded
         # ops
         - already_checked_in
         - already_redeemed
@@ -4846,6 +4907,42 @@ components:
         player_id: {type: string}
         score: {type: integer, format: int64}
         grants: {$ref: '#/components/schemas/Grants'}
+    CoreQuotas:
+      type: object
+      description: Effective limits; 0 = unlimited.
+      required: [max_players, requests_per_minute, save_bytes_total, analytics_events_per_day, write_concurrency]
+      properties:
+        max_players: {type: integer, format: int64}
+        requests_per_minute: {type: integer, format: int64}
+        save_bytes_total: {type: integer, format: int64}
+        analytics_events_per_day: {type: integer, format: int64}
+        write_concurrency: {type: integer, format: int64}
+    CoreQuotaOverrides:
+      type: object
+      description: Per-game overrides; omitted or null inherits the configured default.
+      additionalProperties: false
+      properties:
+        max_players: {type: [integer, 'null'], format: int64, minimum: 0}
+        requests_per_minute: {type: [integer, 'null'], format: int64, minimum: 0, maximum: 1000000000}
+        save_bytes_total: {type: [integer, 'null'], format: int64, minimum: 0}
+        analytics_events_per_day: {type: [integer, 'null'], format: int64, minimum: 0}
+        write_concurrency: {type: [integer, 'null'], format: int64, minimum: 0}
+    CoreQuotaStatus:
+      type: object
+      required: [game_id, limits, overrides, defaults, usage]
+      properties:
+        game_id: {type: string}
+        limits: {$ref: '#/components/schemas/CoreQuotas'}
+        overrides: {$ref: '#/components/schemas/CoreQuotaOverrides'}
+        defaults: {$ref: '#/components/schemas/CoreQuotas'}
+        usage:
+          type: object
+          required: [players, save_bytes]
+          properties:
+            players: {type: integer, format: int64}
+            save_bytes: {type: integer, format: int64, description: Sum of current save payload bytes (retained revisions excluded).}
+            analytics_events_today: {type: integer, format: int64, description: This instance's admitted events for the current UTC day.}
+            writes_in_flight: {type: integer, format: int64, description: This instance's mutating requests in flight.}
     CoreConfigDocument:
       type: object
       additionalProperties: false

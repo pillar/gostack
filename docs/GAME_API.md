@@ -30,6 +30,7 @@
 | 409 | already_claimed | 奖励已达领取上限 |
 | 409 | identity_conflict | 平台身份已绑定其他玩家 |
 | 409 | slot_limit | 已达每玩家存档槽上限 |
+| 403 | quota_exceeded | 游戏配额已满（`max_players` 新建玩家、`save_bytes_total` 存档增长），`details.quota/limit/used/requested`，见 `docs/api/quotas.md` |
 | 409 | insufficient_funds | 扣减会导致余额为负（购买、管理调整） |
 | 409 | schema_outdated | 存档 `schema_version` 低于配置 `saves.min_schema_version`，`details.min_schema_version` |
 | 409 | merge_base_unavailable | 合并所需的基准版本已不在历史中，需重新拉取 |
@@ -260,6 +261,10 @@
 ### GET /v1/admin/games/{game}/boards/{board}/seasons/{season}/settlement?limit=100
 
 结算记录加发放明细 `"payouts": [{"rank": 1, "player_id": "...", "score": 900, "grants": {"coin": 500}}]`（按名次，`limit` 1–1000）；无记录 404。
+
+### GET | PUT /v1/admin/games/{game}/quotas
+
+每游戏资源配额（覆盖值整体替换，`null`/缺省继承 `game.quota_defaults`，0 = 不限）与用量，详见 `docs/api/quotas.md`。
 
 ### Items catalog scope
 

@@ -264,8 +264,10 @@ func (k *Kit) eventsBatch(w http.ResponseWriter, r *http.Request) error {
 		rows = append(rows, analyticsRow{GameID: g.ID, PlayerID: pid, EventID: e.EventID, SessionID: e.SessionID, Name: e.EventName,
 			Platform: e.Platform, ClientVersion: e.ClientVersion, SchemaVersion: e.SchemaVersion, ClientTime: e.ClientTime, ServerTime: now, Properties: props})
 	}
-	accepted, dropped := 0, 0
-	for _, row := range rows {
+	// Events beyond the game's daily quota are dropped like buffer overflow (quota.go).
+	admitted := k.admitEvents(r.Context(), g.ID, len(rows))
+	accepted, dropped := 0, len(rows)-admitted
+	for _, row := range rows[:admitted] {
 		if k.Analytics.offer(row) {
 			accepted++
 		} else {

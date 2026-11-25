@@ -193,6 +193,18 @@ type GameConfig struct {
 	Commerce   CommerceConfig   `yaml:"commerce" json:"commerce"`
 	Realtime   RealtimeConfig   `yaml:"realtime" json:"realtime"`
 	Settlement SettlementConfig `yaml:"settlement" json:"settlement"`
+	// QuotaDefaults apply to every game without an admin override (0 = unlimited).
+	QuotaDefaults GameQuotaDefaults `yaml:"quota_defaults" json:"quota_defaults"`
+}
+
+// GameQuotaDefaults are the per-game resource quotas used when a game has no
+// override in game_quotas (docs/api/quotas.md). 0 means unlimited.
+type GameQuotaDefaults struct {
+	MaxPlayers            int64 `yaml:"max_players" json:"max_players"`
+	RequestsPerMinute     int64 `yaml:"requests_per_minute" json:"requests_per_minute"`
+	SaveBytesTotal        int64 `yaml:"save_bytes_total" json:"save_bytes_total"`
+	AnalyticsEventsPerDay int64 `yaml:"analytics_events_per_day" json:"analytics_events_per_day"`
+	WriteConcurrency      int64 `yaml:"write_concurrency" json:"write_concurrency"`
 }
 
 type PlatformConfig struct {
@@ -375,6 +387,13 @@ func fields(c *Config) map[string]func(string) error {
 		"STORAGE_LOCAL_ROOT":               str(&c.Storage.Local.Root),
 		"STORAGE_S3_ENDPOINT":              str(&c.Storage.S3.Endpoint),
 		"STORAGE_S3_BUCKET":                str(&c.Storage.S3.Bucket),
+
+		// Per-game quota defaults (docs/api/quotas.md).
+		"GAME_QUOTA_DEFAULTS_MAX_PLAYERS":              i64(&c.Game.QuotaDefaults.MaxPlayers),
+		"GAME_QUOTA_DEFAULTS_REQUESTS_PER_MINUTE":      i64(&c.Game.QuotaDefaults.RequestsPerMinute),
+		"GAME_QUOTA_DEFAULTS_SAVE_BYTES_TOTAL":         i64(&c.Game.QuotaDefaults.SaveBytesTotal),
+		"GAME_QUOTA_DEFAULTS_ANALYTICS_EVENTS_PER_DAY": i64(&c.Game.QuotaDefaults.AnalyticsEventsPerDay),
+		"GAME_QUOTA_DEFAULTS_WRITE_CONCURRENCY":        i64(&c.Game.QuotaDefaults.WriteConcurrency),
 	}
 }
 
@@ -473,6 +492,10 @@ func (c Config) Validate() error {
 	if g.SessionTTL < time.Minute || g.SaveMaxBytes < 1024 || g.SaveSlotsPerUser < 1 || g.SaveHistory < 0 ||
 		g.AnalyticsBuffer < 1 || g.AnalyticsRetainDays < 1 || g.AuthRatePerMinute < 1 || g.ScoreRatePerMinute < 1 {
 		add("game settings out of range")
+	}
+	if q := g.QuotaDefaults; q.MaxPlayers < 0 || q.RequestsPerMinute < 0 || q.SaveBytesTotal < 0 ||
+		q.AnalyticsEventsPerDay < 0 || q.WriteConcurrency < 0 {
+		add("game.quota_defaults values must be >= 0 (0 = unlimited)")
 	}
 	for name, p := range g.Platforms {
 		if !implementedPlatform[name] {

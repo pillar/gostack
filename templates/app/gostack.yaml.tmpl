@@ -55,6 +55,14 @@ game:
   save_slots_per_player: 5
   settlement:
     interval: 5m                 # enqueue season settlement jobs; 0 disables
+  # Per-game resource quotas for multi-game deployments (0 = unlimited); admins
+  # override them per game with PUT /v1/admin/games/{game}/quotas.
+  # quota_defaults:
+  #   max_players: 0
+  #   requests_per_minute: 0         # all routes of one game, global under rate_limit.driver valkey
+  #   save_bytes_total: 0            # sum of current save payload bytes
+  #   analytics_events_per_day: 0    # per instance (UTC day); excess events are dropped
+  #   write_concurrency: 0           # concurrent mutating requests per game per instance
   # Optional GameKit feature packages (see GoStack docs/api/*.md):
   # modules: [ops, experiments, social, match, commerce, realtime]
   # commerce:

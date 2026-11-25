@@ -127,6 +127,11 @@ func (k *Kit) commitRevision(ctx context.Context, tx *sql.Tx, s *session, d save
 			return httpx.Conflict("slot_limit", "save slot limit reached")
 		}
 	}
+	var oldSize int64
+	err := tx.QueryRowContext(ctx, `SELECT length(payload) FROM save_slots WHERE game_id=? AND player_id=? AND slot=?`, s.GameID, s.PlayerID, d.Slot).Scan(&oldSize)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO save_slots(game_id,player_id,slot,revision,schema_version,checksum,payload,updated_at)
 		VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(game_id,player_id,slot) DO UPDATE SET
 		revision=excluded.revision, schema_version=excluded.schema_version, checksum=excluded.checksum, payload=excluded.payload, updated_at=excluded.updated_at`,
@@ -143,7 +148,12 @@ func (k *Kit) commitRevision(ctx context.Context, tx *sql.Tx, s *session, d save
 			return err
 		}
 	}
-	return nil
+	// Last statement: the per-game counter row is locked as briefly as possible.
+	limits, err := k.quotaLimits(ctx, tx, s.GameID)
+	if err != nil {
+		return err
+	}
+	return addUsage(ctx, tx, s.GameID, "save_bytes", "save_bytes_total", int64(len(d.Payload))-oldSize, limits.SaveBytesTotal)
 }
 
 // putSave performs a conditional write keyed on expected_revision (G03).
@@ -394,10 +404,17 @@ func (k *Kit) deleteSave(w http.ResponseWriter, r *http.Request) error {
 			if current != expected {
 				return idempotency.Result{}, revisionConflict(current)
 			}
+			var size int64
+			if err := tx.QueryRowContext(ctx, `SELECT length(payload) FROM save_slots WHERE game_id=? AND player_id=? AND slot=?`, s.GameID, s.PlayerID, slot).Scan(&size); err != nil {
+				return idempotency.Result{}, err
+			}
 			for _, q := range []string{`DELETE FROM save_slots WHERE game_id=? AND player_id=? AND slot=?`, `DELETE FROM save_revisions WHERE game_id=? AND player_id=? AND slot=?`} {
 				if _, err := tx.ExecContext(ctx, q, s.GameID, s.PlayerID, slot); err != nil {
 					return idempotency.Result{}, err
 				}
+			}
+			if err := addUsage(ctx, tx, s.GameID, "save_bytes", "save_bytes_total", -size, 0); err != nil {
+				return idempotency.Result{}, err
 			}
 			return idempotency.Result{Body: map[string]any{"slot": slot, "deleted": true, "revision": current}}, nil
 		})

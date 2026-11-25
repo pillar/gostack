@@ -44,8 +44,14 @@ func (k *Kit) newSession(ctx context.Context, tx *sql.Tx, gameID, playerID strin
 
 func (k *Kit) createPlayer(ctx context.Context, tx *sql.Tx, gameID string) (string, error) {
 	id := httpx.RandomID("plr_")
-	_, err := tx.ExecContext(ctx, `INSERT INTO players(game_id,player_id,created_at) VALUES(?,?,?)`, gameID, id, k.Now().UnixMilli())
-	return id, err
+	if _, err := tx.ExecContext(ctx, `INSERT INTO players(game_id,player_id,created_at) VALUES(?,?,?)`, gameID, id, k.Now().UnixMilli()); err != nil {
+		return "", err
+	}
+	limits, err := k.quotaLimits(ctx, tx, gameID)
+	if err != nil {
+		return "", err
+	}
+	return id, addUsage(ctx, tx, gameID, "players", "max_players", 1, limits.MaxPlayers)
 }
 
 // guestLogin registers a new guest or logs an existing guest in (G02).

@@ -54,6 +54,7 @@ type Kit struct {
 	eventLimit ratelimit.Allower
 	apiKeys    auth.APIKeys
 	configs    *configCache
+	quotas     *quotaCache
 }
 
 // Init prepares limiters and caches; call before Routes.
@@ -70,6 +71,7 @@ func (k *Kit) Init() {
 	k.eventLimit = k.NewLimiter("game_events", k.Cfg.AuthRatePerMinute*4, ratelimit.FailOpen)
 	k.apiKeys = auth.APIKeys{DB: k.DB}
 	k.configs = newConfigCache()
+	k.quotas = newQuotaCache()
 }
 
 type handler = httpx.HandlerFunc
@@ -114,6 +116,8 @@ func (k *Kit) Routes(mux *http.ServeMux) {
 	k.HandleAdmin(mux, "POST /quarantine/{id}/reject", k.adminReviewQuarantine("rejected"))
 	k.HandleAdmin(mux, "POST /boards/{board}/seasons/{season}/settle", k.adminSettle)
 	k.HandleAdmin(mux, "GET /boards/{board}/seasons/{season}/settlement", k.adminGetSettlement)
+	k.HandleAdmin(mux, "GET /quotas", k.adminGetQuotas)
+	k.HandleAdmin(mux, "PUT /quotas", k.adminPutQuotas)
 }
 
 type gameRow struct {
@@ -175,6 +179,11 @@ func (k *Kit) withGame(next handler) handler {
 		if g.Status != "active" {
 			return httpx.Forbidden("game is disabled")
 		}
+		release, err := k.enforceRequestQuotas(r, g.ID) // quota.go
+		if err != nil {
+			return err
+		}
+		defer release()
 		return next(w, r.WithContext(context.WithValue(r.Context(), gameKey, g)))
 	}
 }

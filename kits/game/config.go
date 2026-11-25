@@ -362,8 +362,11 @@ func CreateGame(ctx context.Context, db *store.DB, tenant, id, name string, orig
 	o, _ := json.Marshal(origins)
 	now := time.Now().UnixMilli()
 	err := db.WriteTx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `INSERT INTO games(game_id,tenant_id,name,status,allowed_origins,created_at,updated_at) VALUES(?,?,?,'active',?,?,?)`,
-			id, tenant, name, string(o), now, now)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO games(game_id,tenant_id,name,status,allowed_origins,created_at,updated_at) VALUES(?,?,?,'active',?,?,?)`,
+			id, tenant, name, string(o), now, now); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `INSERT INTO game_usage(game_id,players,save_bytes) VALUES(?,0,0)`, id) // quota.go
 		return err
 	})
 	if store.IsUniqueViolation(err) {
