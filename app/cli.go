@@ -49,9 +49,11 @@ const appUsage = `Application commands:
                                          copy a stopped SQLite deployment into an empty PostgreSQL database (verified)
   config validate                        validate configuration and list hot-reloadable keys
   config diff <other.yaml>               compare running sources with another file (hot vs restart)
-  backup snapshot --to FILE              consistent online copy of the main database (VACUUM INTO; SQLite only)
-  backup verify FILE                     integrity, schema compatibility and ledger reconcile
+  backup snapshot --to FILE              consistent online copy (SQLite: VACUUM INTO; PostgreSQL: pg_dump -Fc + FILE.json manifest)
+  backup verify [--dsn-ref REF] FILE     integrity, schema compatibility and ledger reconcile (PostgreSQL: restore into a temporary database)
   backup restore --from FILE --to PATH   verify, then restore to a new path (never overwrites)
+  backup restore --from FILE --to-dsn-ref env:NAME [--analytics-to-dsn-ref REF]
+                                         restore a PostgreSQL backup into an empty database, then verify it
   doctor                                check environment, storage and configuration
   version                                print version
   game create <game_id> [--name N] [--origin URL]...

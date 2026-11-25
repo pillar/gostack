@@ -13,7 +13,7 @@
 ## 通用核心（PRD §5）
 | ID | 状态 | 说明 |
 |---|---|---|
-| F01 CLI | 已实现 | init（不覆盖文件）、doctor、config validate/diff、version、migrate status/up/to-postgres、backup snapshot/verify/restore、game/apikey/jobs 管理；退出码 0/1/2/3，`--json` |
+| F01 CLI | 已实现 | init（不覆盖文件）、doctor、config validate/diff、version、migrate status/up/to-postgres、backup snapshot/verify/restore（SQLite 与 PostgreSQL）、game/apikey/jobs 管理；退出码 0/1/2/3，`--json` |
 | F02 HTTP | 已实现 | 请求 ID、统一错误信封、body/超时/并发上限、限流（本地或 Valkey 全局）、panic 恢复、可信代理 IP 解析（CF 头需显式开启） |
 | F03 数据库 | 已实现 | Lite：SQLite 单写连接 + 只读池、每连接 PRAGMA、BEGIN IMMEDIATE、写入准入满 → 503、实例锁；Scale：PostgreSQL SERIALIZABLE + 有界重试；两种方言的迁移与漂移检测 |
 | F04 配置 | 已实现 | 默认值<文件<环境变量<CLI、严格未知键、能力矩阵校验、密钥引用；SIGHUP 热更新 6 个热键（日志级别、并发上限、各限流配额），重启项只报告不生效（`app/reload_test.go` 含真实 SIGHUP） |
@@ -21,10 +21,10 @@
 | F06 队列 | 已实现 | 持久化任务（SQLite / PG `FOR UPDATE SKIP LOCKED`）：租约 token、重试退避、死信、重放、dedupe、同事务入队；Worker |
 | F07 可观测性 | 已实现 | /healthz、/readyz、内网 /metrics 与 pprof、JSON 日志脱敏；`deploy/prometheus/alerts.yml` 17 条规则（测试核对每个指标名与 label 真实暴露、runbook 锚点存在）；`docs/RUNBOOK.md`。阈值为起点值，未经实测 |
 | F08 部署 | 已实现（未在 Linux 实跑） | install/upgrade/rollback.sh、release.sh（sha256、`go version -m` SBOM，非 SPDX）；`deploy/deploy_test.go` 用桩命令在临时目录真实执行（校验和、原子切换、健康检查失败自动回滚、schema 更新时拒绝回滚） |
-| F09 容灾 | 本地演练通过 | `backup snapshot/verify/restore`；Litestream v0.5.18 演练：本地文件副本 6 次 + MinIO（S3）2 次，kill -9 → 空目录恢复 → verify → API 回读全部通过，丢失窗口约一个 sync-interval（见 `docs/DISASTER_RECOVERY.md`）；**R2 与 1C1G 未演练** |
+| F09 容灾 | 本地演练通过 | `backup snapshot/verify/restore`；Litestream v0.5.18 演练：本地文件副本 6 次 + MinIO（S3）2 次，kill -9 → 空目录恢复 → verify → API 回读全部通过，丢失窗口约一个 sync-interval（见 `docs/DISASTER_RECOVERY.md`）；**R2 与 1C1G 未演练**。PostgreSQL：`backup snapshot/verify/restore`（pg_dump/pg_restore + 清单，PG 测试覆盖）与 PITR（WAL 归档 + `pg_basebackup`，`deploy/postgres`）本机演练 4 次通过（到时间点 T 精确截断；机器丢失 RPO 0.8–6.9 s，取决于负载与 `archive_timeout`）；远程归档与 1C1G 未演练 |
 | F10 计费 | 已实现 | `modules/billing`：账户/不可变账本/预留状态机（reserved→settled/released/expired/reconciling）、幂等、对账、HTTP（`billing` scope，空租户 key 拒绝） |
 | F11 对象存储 | 已实现 | local（原子写、HMAC 预签名）与 S3 兼容（自写 SigV4，AWS 文档向量通过）；**对真实 MinIO 实测 9 项通过**；AWS S3 / R2 未实测 |
-| F12 Scale | 已实现（见下两节） | PostgreSQL、多实例、SQLite→PG 迁移工具、Valkey 全局限流与缓存；PG/Valkey HA、PG 备份未实现 |
+| F12 Scale | 已实现（见下两节） | PostgreSQL、多实例、SQLite→PG 迁移工具、Valkey 全局限流与缓存、PG 逻辑备份与 PITR（本机演练）；PG/Valkey HA 未实现 |
 | F13 HA / Distributed | 未实现 | 配置校验拒绝 `distributed` profile |
 | 缓存（PRD §4.2） | 已实现（无内置使用方） | memory（LRU、字节计量、TTL）与 valkey；读错误降级为未命中；资金路径不使用 |
 | 6.2 组提交写入调度器 | 未实现 | 串行短事务 + 有界准入（ADR-0002）；组提交需基准证明收益 |
@@ -32,10 +32,11 @@
 ## F12 Scale：PostgreSQL（2026-11-25，ADR-0003）
 验证环境：本机 macOS arm64，PostgreSQL 17.11（临时集群，max_connections=100），Go 1.27.4。
 - 命令与结果：`./scripts/ci.sh`（未设 `GOSTACK_TEST_POSTGRES_DSN`，SQLite）通过；`GOSTACK_TEST_POSTGRES_DSN=postgres://postgres@127.0.0.1:55432/postgres?sslmode=disable ./scripts/ci.sh`（SQLite + PostgreSQL 各跑一遍 `go test -race -count=1 ./...`）通过。PG 运行：178 个顶层测试中 175 通过、3 个跳过（SQLite 备份演练、`migrate status` 未知版本检测——两者操作 SQLite 文件；realtime 模块在 scale 下被配置拒绝），0 失败。kits/game/*、modules/{jobs,billing,webauth}、app 的存储测试在该模式下各自使用新建的 PG 数据库；adapters/sqlite、tests/fault、deploy 仍跑 SQLite。
-- 已实现且有测试：`adapters/store` 方言无关句柄；`adapters/postgres`（pgx stdlib、SERIALIZABLE + 40001/40P01 有界重试、fn 吞错仍重试、读池只读、`?`→`$n` 改写单测、C 排序校验、analytics 独立 schema）；`migrations/postgres{,_analytics}` 与 SQLite 逐版本对应，`TestSchemaEquivalence` 比较 60 张表的列/主键/唯一约束/索引/外键/触发器；账本 UPDATE/DELETE/TRUNCATE 被拒；迁移 advisory lock 并发启动；配置校验（scale/lite/distributed、realtime、local storage、litestream、`rate_limit.accept_per_instance`）；`migrate status|up`、`doctor`、`game reconcile` 在 PG 上运行，`backup *` 在 PG 配置下报错并指向 pg_dump/PITR。
+- 已实现且有测试：`adapters/store` 方言无关句柄；`adapters/postgres`（pgx stdlib、SERIALIZABLE + 40001/40P01 有界重试、fn 吞错仍重试、读池只读、`?`→`$n` 改写单测、C 排序校验、analytics 独立 schema）；`migrations/postgres{,_analytics}` 与 SQLite 逐版本对应，`TestSchemaEquivalence` 比较 60 张表的列/主键/唯一约束/索引/外键/触发器；账本 UPDATE/DELETE/TRUNCATE 被拒；迁移 advisory lock 并发启动；配置校验（scale/lite/distributed、realtime、local storage、litestream、`rate_limit.accept_per_instance`）；`migrate status|up`、`doctor`、`game reconcile` 在 PG 上运行；`backup snapshot/verify/restore` 在 PG 上用 pg_dump/pg_restore（`app/backup_pg_test.go`：快照一致性清单、临时库验证并删除、篡改/截断/缺清单退出 3、恢复拒绝非空目标、失败恢复目标保持为空、恢复后应用可启动写入、独立 analytics 库）。
+- PG 备份/PITR（2026-11-25）：`GOSTACK_TEST_POSTGRES_DSN=… go test -race -count=1 ./...`（PATH 含 PostgreSQL 17.11 客户端工具）全部通过；`deploy/postgres_test.go` 在无服务器下执行归档/恢复脚本。PITR 演练 `scripts/drill/pg_pitr.sh` 两组各 2 次（8 并发无间隔 / 4 并发 20 ms 间隔，60 s，`archive_timeout=10s`）全部通过：负载中基础备份与逻辑快照+verify、kill -9 主库进程组、恢复到 T 后 0 个 T 前确认写入缺失且 0 个 T 后发送写入出现、latest 恢复重放全部已归档 WAL、RTO 0.9–3.7 s、RPO 0.8–6.9 s（本机 macOS、本地归档目录，见 `docs/DISASTER_RECOVERY.md`）。
 - 多实例（`tests/scale`）：两个 App 实例共享一个 PG 库，并发领奖/购买/幂等重放、赛季结算、撮合、任务 Claim 均只生效一次。
 - SQLite→PG 迁移（`migrate to-postgres`）：经 HTTP 在 SQLite 上写入玩家/会话/存档/分数/隔离记录/账本/邮件/好友/撮合票/计费/网页用户/任务/埋点 → 服务运行时迁移被拒（实例锁）→ 停服后迁移，逐表行数与摘要一致、对账 0 差异 → 再次迁移因目标非空被拒 → 在 PG 上启动应用，11 个读接口响应与迁移前逐字节一致，幂等重放一致，identity 序列续号正常。
-- 未验证 / 未实现：Scale 性能预算（PRD §13/§23）未压测；PG 备份/PITR 与恢复演练；PG HA；pgmq（不使用）；实时模块多实例；在线双写迁移。热点行在 SERIALIZABLE 下产生大量序列化失败重试（测试中可见数百次），吞吐影响未测量。
+- 未验证 / 未实现：Scale 性能预算（PRD §13/§23）未压测；PG 远程 WAL 归档（pgBackRest/WAL-G）与 1C1G 上的备份恢复时间；PG HA；pgmq（不使用）；实时模块多实例；在线双写迁移。热点行在 SERIALIZABLE 下产生大量序列化失败重试（测试中可见数百次），吞吐影响未测量。
 
 ## F12 Scale：Valkey 全局限流与缓存（2026-11-25，ADR-0004）
 验证环境：本机 macOS arm64，Valkey 9.2.0（临时实例，无持久化）、PostgreSQL 17.11（临时集群），Go 1.27.4。CI 配置为 `valkey/valkey:8` 服务容器（本次未在 CI 上运行）。
@@ -81,6 +82,6 @@
 ## 仍需外部环境才能完成
 1. 1C1G Linux 目标机：§13/§23 压测、驱动选型确认（ADR-0001）、部署脚本与 systemd 实跑、断电模型。
 2. Cloudflare R2：S3 适配器实测、资源发布（`assets`）与 CDN 实测、Litestream→R2 复制与恢复（RPO/RTO、费用）。
-3. 真实平台：微信 code2session、Apple 沙盒交易与通知、AdMob 回调。
+3. 真实平台：微信 code2session、Apple 沙盒交易与通知、Google Play 购买与 RTDN、微信支付下单与回调、AdMob 回调。
 4. 真机：Safari iPhone 与微信小游戏验证 SDK（G-A08）。
-5. 未实现：F13 HA/Distributed、PG 备份/PITR、Valkey HA/TLS、realtime 多实例、Google Play/微信支付、WebKit/AgentKit（PRD §24）。
+5. 未实现：F13 HA/Distributed、Valkey HA/TLS、realtime 多实例、WebKit/AgentKit（PRD §24）。

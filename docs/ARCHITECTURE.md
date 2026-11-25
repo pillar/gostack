@@ -89,7 +89,7 @@ TCP → http.Server (ReadHeaderTimeout 5s, MaxHeaderBytes)
 |---|---|---|
 | 数据库 | SQLite WAL，单写连接，实例锁（同一文件只能一个进程） | PostgreSQL（`database.dsn_ref`），SERIALIZABLE + 有界重试，可多实例 |
 | 队列 | `jobs` 表（SQLite） | `jobs` 表（PostgreSQL，`FOR UPDATE SKIP LOCKED`） |
-| 备份 | Litestream 配置与 `backup snapshot/verify/restore` | 由运维用 pg_dump / PITR，**本项目未实现、未演练** |
+| 备份 | Litestream 配置与 `backup snapshot/verify/restore` | `backup snapshot/verify/restore`（pg_dump/pg_restore + 清单）；PITR 用 WAL 归档 + `pg_basebackup`（`deploy/postgres`，本机演练，见 `docs/DISASTER_RECOVERY.md`） |
 | 限流 | 进程内 | 仍是进程内，须显式 `rate_limit.accept_per_instance: true` 承认配额乘以实例数 |
 | realtime 模块 | 支持（进程内 hub） | 配置拒绝 |
 | `storage.driver: local` | 支持 | 配置拒绝（用 s3） |

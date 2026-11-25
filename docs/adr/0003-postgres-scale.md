@@ -19,12 +19,13 @@
 8. **配置校验**：`profile: scale` 要求 `database.driver: postgres`、`queue.driver: postgres`、`database.dsn_ref`（env:/file:）；拒绝 lite+postgres、scale+sqlite、`distributed`、scale 下的 `realtime` 模块（进程内 hub，多实例会把玩家分散到不同实例）、scale 下的 `storage.driver: local`、scale 下的 Litestream 备份；lite 下拒绝 PG 专用键。`rate_limit.driver: local`（每实例本地）在 scale 下必须显式设置 `rate_limit.accept_per_instance: true` 承认"有效配额 = 配置 × 实例数"，避免本地限流冒充全局限流（PRD §3）；全局限流见 ADR-0004（`rate_limit.driver: valkey`）。
 9. **SQLite→PG 迁移工具**（PRD §12）：`gostack migrate to-postgres --from app.db --to-dsn-ref env:X [--analytics-from analytics.db]`。取得 SQLite 实例锁（服务运行时拒绝）、源库 integrity_check 与迁移版本必须与二进制一致、对目标执行迁移并要求所有表为空；在**一个** PG 事务内按外键顺序复制所有表、重置 identity 序列，并在提交前比较逐表行数与确定性摘要（按主键、C 排序、全部列的类型化编码），再运行 GameKit 账本对账与计费对账；任何不一致即回滚（目标保持为空）并以非零码退出，输出 JSON 报告。不做在线双写；切流前需停写并排空队列。
 10. **备份**：`backup snapshot/verify/restore` 只适用于 SQLite 文件，配置为 PG 时报错并提示使用 `pg_dump` 或基础备份 + WAL 归档（PITR）。PG 备份由运维负责，本项目未实现也未演练。
+    - 更新（2026-11-25）：已实现 PG 版 `backup snapshot/verify/restore`（`app/backup_pg.go`，pg_dump 自定义格式 + JSON 清单）与 PITR 脚本/演练（`deploy/postgres`、`scripts/drill/pg_pitr.sh`），见 `docs/DISASTER_RECOVERY.md`。
 
 ## 未实现 / 不在本阶段
 
 - pgmq、PostgreSQL HA / 故障切换 / fencing、Distributed profile。（Valkey 缓存与全局限流已由 ADR-0004 实现。）
 - 在线双写迁移、PG→SQLite 反向迁移。
-- PG 的备份/PITR 自动化与恢复演练。
+- PG 的备份/PITR 自动化与恢复演练。（2026-11-25 已实现并在本机演练，见上文第 10 条更新。）
 - 实时（WebSocket）模块的多实例广播。
 
 ## 后果与已知限制
