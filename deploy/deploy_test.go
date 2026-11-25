@@ -54,8 +54,20 @@ func setup(t *testing.T) *harness {
 	s := sha256.Sum256(b)
 	h.sum = hex.EncodeToString(s[:])
 	h.ls = filepath.Join(h.work, "calls.log")
-	// systemctl: record calls; is-active succeeds.
-	stub(t, h.stubs, "systemctl", `echo "systemctl $*" >>"$STUB_LOG"`+"\n")
+	// systemctl: record calls; is-active succeeds. Emulates systemd's start-rate
+	// limit like a real host: restarting a crash-looping (unhealthy) release
+	// trips it, after which every restart is refused until reset-failed.
+	stub(t, h.stubs, "systemctl", `echo "systemctl $*" >>"$STUB_LOG"
+case "$1" in
+reset-failed) rm -f "$STUB_WORK/start_limited" ;;
+restart)
+  [ -e "$STUB_WORK/start_limited" ] && { echo "Job failed: Start request repeated too quickly." >&2; exit 1; }
+  bad="$(cat "$STUB_WORK/unhealthy" 2>/dev/null || true)"
+  cur="$(readlink "$DEPLOY_ROOT/opt/`+name+`/current")"
+  case " $bad " in *" ${cur#releases/} "*) touch "$STUB_WORK/start_limited" ;; esac ;;
+esac
+exit 0
+`)
 	stub(t, h.stubs, "useradd", `echo "useradd $*" >>"$STUB_LOG"`+"\n")
 	stub(t, h.stubs, "chown", `echo "chown $*" >>"$STUB_LOG"`+"\n")
 	// curl: healthy unless the current release is the one named in $STUB_WORK/unhealthy.

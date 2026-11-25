@@ -90,7 +90,7 @@ systemctl enable "$NAME"
 
 link_atomic "releases/$VERSION" "$APP_DIR/current"
 log "current -> releases/$VERSION"
-systemctl restart "$NAME"
+restart_service
 if ! health_check "$HEALTH_URL" "$TIMEOUT"; then
   die "$NAME did not become ready at $HEALTH_URL within ${TIMEOUT}s; inspect: journalctl -u $NAME -n 200"
 fi

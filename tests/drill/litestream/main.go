@@ -44,6 +44,7 @@ var think time.Duration
 type opts struct {
 	app, litestream, restoreScript, work    string
 	replica, s3Endpoint, s3Bucket, s3Region string
+	s3CreateBucket                          bool
 	runs                                    int
 	duration                                time.Duration
 	workers, payloadBytes                   int
@@ -62,6 +63,7 @@ func main() {
 	flag.StringVar(&o.s3Endpoint, "s3-endpoint", "", "S3 endpoint, e.g. http://127.0.0.1:9000")
 	flag.StringVar(&o.s3Bucket, "s3-bucket", "gostack-drill", "bucket (created if missing)")
 	flag.StringVar(&o.s3Region, "s3-region", "us-east-1", "region")
+	flag.BoolVar(&o.s3CreateBucket, "s3-create-bucket", true, "create the bucket first (false for an existing bucket and a bucket-scoped credential, e.g. R2)")
 	flag.IntVar(&o.runs, "runs", 2, "number of drills")
 	flag.DurationVar(&o.duration, "duration", 60*time.Second, "write load duration per run")
 	flag.IntVar(&o.workers, "workers", 8, "concurrent load workers")
@@ -78,7 +80,7 @@ func main() {
 	if o.replica == "s3" && (o.s3Endpoint == "" || os.Getenv("LITESTREAM_ACCESS_KEY_ID") == "" || os.Getenv("LITESTREAM_SECRET_ACCESS_KEY") == "") {
 		fatal("-replica s3 needs -s3-endpoint and LITESTREAM_ACCESS_KEY_ID/LITESTREAM_SECRET_ACCESS_KEY")
 	}
-	if o.replica == "s3" {
+	if o.replica == "s3" && o.s3CreateBucket {
 		if err := createBucket(o); err != nil {
 			fatal("create bucket: %v", err)
 		}

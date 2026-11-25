@@ -141,6 +141,18 @@ preflight() {
   as_app "$bin" --config "$CONFIG" doctor >&2 || die "doctor failed for $bin"
 }
 
+# restart_service restarts the unit and never aborts the script: the caller's
+# health_check decides. reset-failed first clears systemd's start-rate limit —
+# a crash-looping release trips "Start request repeated too quickly", after
+# which a plain restart of the previous (good) release is refused (found on a
+# real systemd host during a failed-upgrade drill).
+restart_service() {
+  systemctl reset-failed "$NAME" >/dev/null 2>&1 || true
+  if ! systemctl restart "$NAME"; then
+    log "systemctl restart $NAME failed; health check decides"
+  fi
+}
+
 # health_check URL TIMEOUT_SECONDS
 health_check() {
   local url="$1" timeout="$2" deadline

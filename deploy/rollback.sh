@@ -46,7 +46,7 @@ preflight "$TARGET_BIN"
 link_atomic "releases/$CUR" "$APP_DIR/previous"
 link_atomic "releases/$TARGET" "$APP_DIR/current"
 log "current -> releases/$TARGET (previous -> releases/$CUR)"
-systemctl restart "$NAME"
+restart_service
 if health_check "$HEALTH_URL" "$TIMEOUT"; then
   log "rolled back $NAME $CUR -> $TARGET; ready"
   exit 0
@@ -54,5 +54,5 @@ fi
 log "$TARGET failed the health check; switching back to $CUR"
 link_atomic "releases/$CUR" "$APP_DIR/current"
 link_atomic "releases/$TARGET" "$APP_DIR/previous"
-systemctl restart "$NAME"
+restart_service
 die "rollback to $TARGET failed; $CUR restored. Inspect: journalctl -u $NAME"

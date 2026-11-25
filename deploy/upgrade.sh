@@ -70,7 +70,7 @@ fi
 link_atomic "releases/$OLD" "$APP_DIR/previous"
 link_atomic "releases/$VERSION" "$APP_DIR/current"
 log "current -> releases/$VERSION (previous -> releases/$OLD)"
-systemctl restart "$NAME"
+restart_service
 if health_check "$HEALTH_URL" "$TIMEOUT"; then
   log "upgraded $NAME $OLD -> $VERSION; ready"
   exit 0
@@ -83,7 +83,7 @@ if [ -n "$OLD_PREV" ]; then
 else
   rm -f "$APP_DIR/previous"
 fi
-systemctl restart "$NAME"
+restart_service
 if health_check "$HEALTH_URL" "$TIMEOUT"; then
   die "upgrade to $VERSION failed; rolled back to $OLD (healthy). Inspect: journalctl -u $NAME"
 fi

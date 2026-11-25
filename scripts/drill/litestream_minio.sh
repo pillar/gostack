@@ -13,6 +13,10 @@
 #   SYNC_INTERVAL=10s         comma list, cycled per run (e.g. 10s,1s)
 #   WAL_AUTOCHECKPOINT=1000   comma list, cycled per run (e.g. 1000,0)
 #   KEEP_WORK=1               keep the work dir (logs, replicas, DBs)
+#   DRILL_S3_ENDPOINT=...     with DRILL_REPLICA=s3: use this existing S3 endpoint
+#                             (e.g. Cloudflare R2) instead of starting MinIO; also
+#                             DRILL_S3_BUCKET (existing), DRILL_S3_REGION (auto for
+#                             R2) and LITESTREAM_ACCESS_KEY_ID/_SECRET_ACCESS_KEY.
 #
 # Credentials: MinIO root credentials are random per invocation and passed to
 # Litestream through LITESTREAM_ACCESS_KEY_ID/LITESTREAM_SECRET_ACCESS_KEY in
@@ -41,7 +45,11 @@ args=(-app "$WORK/bin/drillapp" -litestream "$LITESTREAM_BIN" -restore "$REPO/de
   -workers "${WORKERS:-8}" -think "${THINK:-0s}" -payload "${PAYLOAD:-2048}" -seed-players "${SEED_PLAYERS:-0}"
   -sync-interval "${SYNC_INTERVAL:-10s}" -wal-autocheckpoint "${WAL_AUTOCHECKPOINT:-1000}")
 mkdir -p "$WORK/runs"
-if [ "$DRILL_REPLICA" = s3 ]; then
+if [ "$DRILL_REPLICA" = s3 ] && [ -n "${DRILL_S3_ENDPOINT:-}" ]; then
+  echo "external S3 endpoint (bucket ${DRILL_S3_BUCKET:?DRILL_S3_BUCKET required})" >&2
+  "$WORK/bin/drill" "${args[@]}" -s3-endpoint "$DRILL_S3_ENDPOINT" -s3-bucket "$DRILL_S3_BUCKET" \
+    -s3-region "${DRILL_S3_REGION:-auto}" -s3-create-bucket=false
+elif [ "$DRILL_REPLICA" = s3 ]; then
   minio_start "$WORK/minio-data" "$WORK/minio.log"
   echo "MinIO $("${MINIO_BIN:-minio}" --version 2>/dev/null | head -1) at $MINIO_ENDPOINT" >&2
   LITESTREAM_ACCESS_KEY_ID="$MINIO_KEY" LITESTREAM_SECRET_ACCESS_KEY="$MINIO_SECRET" \
