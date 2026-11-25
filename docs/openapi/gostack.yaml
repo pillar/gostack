@@ -399,12 +399,15 @@ paths:
             schema: {$ref: '#/components/schemas/CorePutSaveRequest'}
       responses:
         '200':
-          description: New save revision (replays carry `Idempotent-Replayed`).
+          description: |
+            New save revision (replays carry `Idempotent-Replayed`). `payload` is
+            returned only when the server merged (`merged: true`); otherwise the
+            stored payload is exactly the bytes sent and `checksum` covers them.
           headers:
             Idempotent-Replayed: {$ref: '#/components/headers/IdempotentReplayed'}
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/CoreSave'}
+              schema: {$ref: '#/components/schemas/CorePutSaveResponse'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -4657,6 +4660,17 @@ components:
         merged:
           type: boolean
           description: Present (true) only on PUT when the server merged a conflict via SaveMerge.
+    CorePutSaveResponse:
+      type: object
+      required: [slot, revision, schema_version, checksum, updated_at]
+      properties:
+        slot: {type: string}
+        revision: {type: integer, format: int64, minimum: 1}
+        schema_version: {type: integer, format: int64, minimum: 0}
+        checksum: {type: string, pattern: '^[0-9a-f]{64}$', description: SHA-256 hex of the stored payload bytes.}
+        updated_at: {type: integer, format: int64}
+        merged: {type: boolean, description: Present (true) only when the server merged a conflict via SaveMerge.}
+        payload: {description: The merged payload; present only when merged is true.}
     CorePutSaveRequest:
       type: object
       additionalProperties: false

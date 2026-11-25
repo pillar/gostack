@@ -230,3 +230,15 @@ test('close() cancels pending retry sleeps (real timers) and blocks further call
   await assert.rejects(p, (e) => e instanceof GoStackError && e.code === 'client_closed');
   await assert.rejects(client.wallet.get(), (e) => e instanceof GoStackError && e.code === 'client_closed');
 });
+
+test('saves.put uses the sent payload unless the server merged', async () => {
+  const meta = { slot: 'main', revision: 4, schema_version: 1, checksum: 'c', updated_at: 1 };
+  const { client } = setup([res(200, LOGIN), res(200, meta), res(200, { ...meta, revision: 5, merged: true, payload: { a: 9 } })]);
+  await client.auth.loginGuest();
+  const plain = await client.saves.put('main', { a: 1 }, { expectedRevision: 3 });
+  assert.deepEqual(plain.payload, { a: 1 });
+  assert.equal(plain.merged, undefined);
+  const merged = await client.saves.put('main', { a: 2 }, { expectedRevision: 3, merge: true });
+  assert.deepEqual(merged.payload, { a: 9 });
+  assert.equal(merged.merged, true);
+});

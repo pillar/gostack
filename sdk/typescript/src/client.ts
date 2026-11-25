@@ -314,7 +314,8 @@ export function createGameClient(o: GameClientOptions): GameClient {
             idempotencyKey: opts.idempotencyKey ?? newKey(random),
           }),
         );
-        return toSave<T>(j);
+        // The server echoes the payload only when it merged; otherwise what we sent is what it stored.
+        return toSave<T>('payload' in j ? j : { ...j, payload });
       },
     },
     boards: {

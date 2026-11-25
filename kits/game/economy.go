@@ -163,11 +163,20 @@ type Mismatch struct {
 func Reconcile(ctx context.Context, q interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }, gameID string) ([]Mismatch, error) {
+	// Two indexed passes instead of a FULL OUTER JOIN (which SQLite plans as a
+	// nested scan — quadratic in players): (1) per-key ledger sums joined to the
+	// balance by primary key; (2) non-zero balances without any ledger row.
 	rows, err := q.QueryContext(ctx, `
-		WITH l AS (SELECT game_id, player_id, asset, sum(amount) AS s FROM game_ledger WHERE (?='' OR game_id=?) GROUP BY 1,2,3)
-		SELECT coalesce(w.game_id,l.game_id), coalesce(w.player_id,l.player_id), coalesce(w.asset,l.asset), coalesce(w.balance,0), coalesce(l.s,0)
-		FROM wallet_balances w FULL OUTER JOIN l ON w.game_id=l.game_id AND w.player_id=l.player_id AND w.asset=l.asset
-		WHERE (?='' OR coalesce(w.game_id,l.game_id)=?) AND coalesce(w.balance,0) <> coalesce(l.s,0)`, gameID, gameID, gameID, gameID)
+		SELECT l.game_id, l.player_id, l.asset, coalesce(w.balance,0), l.s
+		FROM (SELECT game_id, player_id, asset, sum(amount) AS s FROM game_ledger
+		      WHERE (?='' OR game_id=?) GROUP BY game_id, player_id, asset) l
+		LEFT JOIN wallet_balances w ON w.game_id=l.game_id AND w.player_id=l.player_id AND w.asset=l.asset
+		WHERE coalesce(w.balance,0) <> l.s
+		UNION ALL
+		SELECT w.game_id, w.player_id, w.asset, w.balance, 0 FROM wallet_balances w
+		WHERE (?='' OR w.game_id=?) AND w.balance <> 0 AND NOT EXISTS (
+		      SELECT 1 FROM game_ledger g WHERE g.game_id=w.game_id AND g.player_id=w.player_id AND g.asset=w.asset)`,
+		gameID, gameID, gameID, gameID)
 	if err != nil {
 		return nil, err
 	}

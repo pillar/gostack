@@ -94,8 +94,9 @@ func TestAnalyticsFlushIsolatesPoisonRow(t *testing.T) {
 	}
 }
 
-// The payload bytes of PUT /saves and restore responses are exactly the stored
-// payload covered by the checksum, on the first response and on replay.
+// The checksum covers the exact payload bytes sent. PUT responses (and their
+// replays) carry no payload — the client holds it — while restore and GET
+// return the stored bytes verbatim, matching the checksum.
 func TestSaveResponsePayloadMatchesChecksum(t *testing.T) {
 	e := newEnv(t)
 	p := e.guest("alpha")
@@ -117,13 +118,23 @@ func TestSaveResponsePayloadMatchesChecksum(t *testing.T) {
 			t.Errorf("%s: checksum %s, sha256(payload)=%x want %s; payload %q", what, out.Checksum, got, want, out.Payload)
 		}
 	}
+	putCheck := func(r resp, what string) {
+		t.Helper()
+		if r.Body["checksum"] != want {
+			t.Errorf("%s: checksum %v want %s", what, r.Body["checksum"], want)
+		}
+		if _, ok := r.Body["payload"]; ok {
+			t.Errorf("%s: PUT response must not echo the payload: %s", what, r.Raw)
+		}
+	}
 	r := e.expect(e.do("PUT", "/v1/games/alpha/saves/main", p.token, body, "Idempotency-Key", "k1"), 200)
-	check(r, "first put")
+	putCheck(r, "first put")
 	r = e.expect(e.do("PUT", "/v1/games/alpha/saves/main", p.token, body, "Idempotency-Key", "k1"), 200)
 	if r.Header.Get("Idempotent-Replayed") != "true" {
 		t.Fatal("expected replay")
 	}
-	check(r, "replayed put")
+	putCheck(r, "replayed put")
+	check(e.expect(e.do("GET", "/v1/games/alpha/saves/main", p.token, nil), 200), "get after put")
 	e.expect(e.do("PUT", "/v1/games/alpha/saves/main", p.token, `{"expected_revision":1,"schema_version":1,"payload":{"x":1}}`), 200)
 	restore := `{"revision":1,"expected_revision":2}`
 	r = e.expect(e.do("POST", "/v1/games/alpha/saves/main/restore", p.token, restore, "Idempotency-Key", "k2"), 200)

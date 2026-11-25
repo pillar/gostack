@@ -34,13 +34,18 @@ type saveDTO struct {
 
 // saveJSON renders d with the payload bytes exactly as stored (json.Marshal
 // would compact and escape RawMessage, breaking the checksum contract).
+// saveJSON renders a save; payload (raw stored bytes) is omitted when nil.
 func saveJSON(d saveDTO, payload []byte) []byte {
 	merged := ""
 	if d.Merged {
 		merged = `,"merged":true`
 	}
-	return fmt.Appendf(nil, `{"slot":%q,"revision":%d,"schema_version":%d,"checksum":%q,"updated_at":%d%s,"payload":%s}`,
-		d.Slot, d.Revision, d.SchemaVersion, d.Checksum, d.UpdatedAt, merged, payload)
+	body := ""
+	if payload != nil {
+		body = `,"payload":` + string(payload)
+	}
+	return fmt.Appendf(nil, `{"slot":%q,"revision":%d,"schema_version":%d,"checksum":%q,"updated_at":%d%s%s}`,
+		d.Slot, d.Revision, d.SchemaVersion, d.Checksum, d.UpdatedAt, merged, body)
 }
 
 func writeSave(w http.ResponseWriter, d saveDTO, payload []byte) {
@@ -204,7 +209,15 @@ func (k *Kit) putSave(w http.ResponseWriter, r *http.Request) error {
 			if err := k.commitRevision(ctx, tx, s, d); err != nil {
 				return idempotency.Result{}, err
 			}
-			return idempotency.Result{Raw: saveJSON(d, d.Payload)}, nil
+			// The client already holds what it sent: echo the payload only when
+			// the server produced it (merge). This keeps idempotency records small;
+			// they are retained for the retry window, so storing every save body
+			// would grow the database by the whole save write volume.
+			var echo []byte
+			if d.Merged {
+				echo = d.Payload
+			}
+			return idempotency.Result{Raw: saveJSON(d, echo)}, nil
 		})
 	if err != nil {
 		return mapWriteErr(err)

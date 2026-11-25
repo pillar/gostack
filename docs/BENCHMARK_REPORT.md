@@ -83,8 +83,8 @@ macOS 的 `fsync(2)` 不刷新磁盘写缓存，所以**本机所有 FULL 写场
 1. **单核 CPU 是读场景的上限**：失败步服务端 CPU 达 77–92%（GOMAXPROCS=1）。memory 场景在 17k RPS 仍通过，说明 HTTP 栈本身不是首要瓶颈；带会话查找的读（`config_player`、`pointread`）在 8.5k–11.5k RPS 饱和。每请求 info 级访问日志（JSON 写文件）计入了这部分 CPU。
 2. **过载时连接被重置，而不是全部返回 503**：失败步的 transport 错误样本为 `connect: connection reset by peer`（`diag_overload_gamemix.json` 的 `error_samples`）。开环压测在过载时不断新建连接，macOS `kern.ipc.somaxconn=128` 的 accept 队列溢出；同时 `http.max_concurrent=512` 的并发闸门返回了明确的 503。PRD 要求"明确 429/503"：应用层闸门满足，但 TCP 层在建连洪峰下仍会重置。Linux 上 `somaxconn` 默认 4096，需在目标机复测；客户端连接池复用（SDK）可减轻该现象。
 3. **写场景的饱和点偏乐观**：见 §2；目标机必须重测 `fullwrite`/`save8k`/`economy`。ADR-0002（串行短事务、未实现组提交）的触发条件"FULL 写达不到 100 RPS / P99 ≤150 ms"在本机未触发，但本机数据不能作为不需要组提交的证据。
-4. **磁盘增长**：运行结束时 `app.db` 从 1.62 GB 增至 6.81 GB。其中 `idempotency_records` 637,163 行、响应体合计 1.84 GB（存档 PUT 的幂等响应包含完整 8 KiB payload，TTL 72 h），`save_revisions` 350,052 行、1.76 GB（`save_history` 10）。按 PRD 的 50 RPS 8 KiB 存档写持续 72 h 估算，幂等记录约 107 GB——在 1C1G 机器的本地盘上不可接受。需要在目标机上测量并评估（例如幂等响应不保存 payload、缩短存档写的 TTL）；本报告不修改实现。
-5. **`game reconcile` 在 10 万玩家规模下不可用**：`EXPLAIN QUERY PLAN` 显示 `wallet_balances` 与物化 CTE 的 FULL OUTER JOIN 为嵌套全表扫描（约 10 万 × 10 万次比较），运行 8.5 min（96% CPU）未完成后中止（`verify_reconcile_note.txt`）。全局不变式已用 `gsseed -verify` 核对，但逐玩家余额对账在本次未得到验证。
+4. **磁盘增长**：运行结束时 `app.db` 从 1.62 GB 增至 6.81 GB。其中 `idempotency_records` 637,163 行、响应体合计 1.84 GB（存档 PUT 的幂等响应包含完整 8 KiB payload，TTL 72 h），`save_revisions` 350,052 行、1.76 GB（`save_history` 10）。按 PRD 的 50 RPS 8 KiB 存档写持续 72 h 估算，幂等记录约 107 GB——在 1C1G 机器的本地盘上不可接受。需要在目标机上测量并评估。**已修复（本报告之后）**：存档 PUT 响应与幂等记录不再包含 payload（仅服务端合并时回传），幂等记录大小与存档体积无关；本数据集需重跑以得到新的磁盘增长数字。
+5. **`game reconcile` 在 10 万玩家规模下不可用**：`EXPLAIN QUERY PLAN` 显示 `wallet_balances` 与物化 CTE 的 FULL OUTER JOIN 为嵌套全表扫描（约 10 万 × 10 万次比较），运行 8.5 min（96% CPU）未完成后中止（`verify_reconcile_note.txt`）。全局不变式已用 `gsseed -verify` 核对，但逐玩家余额对账在本次未得到验证。**已修复（本报告之后）**：对账改为"账本分组求和按主键关联余额 + 无账本的非零余额反连接"，`TestReconcileMismatchKindsAndScale` 中 2 万玩家从约 130 s 降到约 0.08 s（SQLite，本机），三类差异均能检出；10 万玩家数据集上需重跑确认。
 6. **榜单**：Top-100（当前赛季 10 万行，表 100 万行）在 200 RPS 时 P95 0.66 ms，3417 RPS 仍通过；"本人名次"计数（PRD 评审 D5）不在本场景中，未测。
 
 ## 5. 驱动对比（ADR-0001）

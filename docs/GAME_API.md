@@ -128,7 +128,7 @@
 { "expected_revision": 3, "schema_version": 1, "payload": <JSON>, "checksum": "可选，sha256hex(payload 原始字节)" }
 ```
 
-`checksum` 若提供，必须是请求 JSON 中 `payload` 值原始字节（不重新序列化）的 SHA-256 十六进制；服务端返回的 checksum 按同一规则计算。`expected_revision` 为 0 表示首次创建。成功返回新存档（revision+1）。版本不匹配返回 `409 revision_conflict` 与 `details.current_revision`。支持幂等键。
+`checksum` 若提供，必须是请求 JSON 中 `payload` 值原始字节（不重新序列化）的 SHA-256 十六进制；服务端返回的 checksum 按同一规则计算。`expected_revision` 为 0 表示首次创建。成功返回新存档的元数据（revision+1、schema_version、checksum、updated_at）；**响应不回传 payload**（存储的就是请求中 payload 的原始字节，checksum 覆盖它），只有服务端合并时（`merged: true`）才带合并后的 `payload`。这样幂等记录不随存档体积增长（本机基准中，回传 payload 时 72 h 幂等保留使数据库从 1.6 GB 涨到 6.8 GB）。版本不匹配返回 `409 revision_conflict` 与 `details.current_revision`。支持幂等键。
 
 - 兼容性：配置 `saves.min_schema_version` 存在且 `schema_version` 低于它时返回 `409 schema_outdated`（`details.min_schema_version`），客户端需升级后迁移存档。
 - 合并（可选）：请求带 `"merge": true`，且应用在服务端设置了 `Kit.SaveMerge` 时，版本冲突不返回 409，而是以 `base`（客户端 `expected_revision` 对应的历史版本 payload；`expected_revision` 为 0 时为空）、`server`（当前 payload）、`client`（本次 payload）调用合并函数，并把结果提交为下一 revision，响应带 `"merged": true`，`checksum` 为合并结果的哈希。基准版本已不在历史中时返回 `409 merge_base_unavailable`；未设置合并函数或存档不存在时仍返回 `409 revision_conflict`。合并函数在写事务内执行，必须快速、确定、可重入且不做网络 IO。
