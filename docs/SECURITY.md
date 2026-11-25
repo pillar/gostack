@@ -20,7 +20,7 @@
 | 邮箱 | 去空白、转小写后唯一（每租户）；简单格式检查，不验证邮箱所有权。 |
 | 错误一致性 | 账号不存在、密码错误、密码长度非法均返回同一 `401 invalid_credentials`；不存在的账号也会对一个虚拟哈希执行一次 Argon2id，避免计时枚举（测试比较最小耗时）。 |
 | 枚举边界 | **注册接口**对已存在邮箱返回 `409 email_taken`，可被用于判断邮箱是否注册（受每 IP 限流约束）。需要防枚举时关闭 `allow_signup`，由应用实现带邮箱验证的注册。 |
-| 限流 | 登录/注册按 IP（IPv6 按 /64）`ip_rate_per_minute`，登录与改密按账号 `account_rate_per_minute`；进程内令牌桶（多实例时限额相乘）；均可热更新。按账号限流可被他人消耗导致该账号短时无法登录（锁定型 DoS），这是有意的权衡。 |
+| 限流 | 登录/注册按 IP（IPv6 按 /64）`ip_rate_per_minute`，登录与改密按账号 `account_rate_per_minute`；进程内令牌桶（多实例时限额相乘）；profile scale 设 `rate_limit.driver: valkey` 时为跨实例全局限流，Valkey 故障时退化为每实例令牌桶（ADR-0004）；均可热更新。按账号限流可被他人消耗导致该账号短时无法登录（锁定型 DoS），这是有意的权衡。 |
 | 会话 | 256 位不透明令牌（`gws_` 前缀），库内只存 SHA-256；绝对有效期 `session_ttl`（默认 7 天）+ 空闲超时 `idle_timeout`（默认 24h，最近使用时间至多每 idle/10 写一次）；登录时作废浏览器带来的旧会话（防会话固定）；登出删除会话。 |
 | Cookie | `HttpOnly; SameSite=Lax; Path=/`。`environment: production` 时加 `Secure` 且名称为 `__Host-gostack_session`（仅限当前主机、必须 HTTPS）；开发环境名称 `gostack_session`、无 Secure。 |
 | CSRF | 非安全方法（非 GET/HEAD/OPTIONS）需要 `X-CSRF-Token` 等于会话的 CSRF 令牌（登录/注册/me 返回，常量时间比较）；同时检查 `Origin`（须与请求 Host 相同，生产必须 https，或在 `allowed_origins` 中）与 `Sec-Fetch-Site`（仅 `same-origin`/`none`，或来源在白名单）。登录与注册也做来源检查（防登录 CSRF）。请求体必须是 `application/json`。无 Origin 与 Sec-Fetch-Site 的非浏览器请求通过来源检查，但仍需 CSRF 令牌。 |

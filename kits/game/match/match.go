@@ -40,7 +40,7 @@ type Module struct {
 	TicketsPerMinute int           // per-player ticket creation limit (default 60)
 
 	once    sync.Once
-	limiter *ratelimit.Limiter
+	limiter ratelimit.Allower
 	apiKeys auth.APIKeys
 }
 
@@ -67,7 +67,7 @@ func (m *Module) init() {
 		if m.TicketsPerMinute <= 0 {
 			m.TicketsPerMinute = 60
 		}
-		m.limiter = ratelimit.PerMinute(m.TicketsPerMinute, 100_000)
+		m.limiter = m.Kit.NewLimiter("match_tickets", m.TicketsPerMinute, ratelimit.FailLocal)
 		m.apiKeys = auth.APIKeys{DB: m.DB}
 	})
 }

@@ -16,13 +16,13 @@
 5. **排序规则**：PG 数据库必须按字节排序（`LC_COLLATE 'C'`，与 SQLite BINARY 一致）；打开时实测比较结果，不满足则拒绝启动（`ErrCollation`）。
 6. **Analytics**：表在 schema `gostack_analytics`，通过 `database.analytics_dsn_ref` 连接（为空时用主库 DSN：同一服务器、独立 schema、独立小连接池与独立 `schema_migrations`）。若需与主库 IO 隔离，请指向另一个数据库或服务器。
 7. **队列**：`queue.driver: postgres` 就是同一张 `jobs` 表；Claim 在 SERIALIZABLE 事务中执行并使用 `FOR UPDATE SKIP LOCKED` 降低冲突。**未使用 pgmq**。
-8. **配置校验**：`profile: scale` 要求 `database.driver: postgres`、`queue.driver: postgres`、`database.dsn_ref`（env:/file:）；拒绝 lite+postgres、scale+sqlite、`distributed`、scale 下的 `realtime` 模块（进程内 hub，多实例会把玩家分散到不同实例）、scale 下的 `storage.driver: local`、scale 下的 Litestream 备份；lite 下拒绝 PG 专用键。所有限流器仍是**每实例本地**的，scale 必须显式设置 `rate_limit.accept_per_instance: true` 承认"有效配额 = 配置 × 实例数"，避免本地限流冒充全局限流（PRD §3）。
+8. **配置校验**：`profile: scale` 要求 `database.driver: postgres`、`queue.driver: postgres`、`database.dsn_ref`（env:/file:）；拒绝 lite+postgres、scale+sqlite、`distributed`、scale 下的 `realtime` 模块（进程内 hub，多实例会把玩家分散到不同实例）、scale 下的 `storage.driver: local`、scale 下的 Litestream 备份；lite 下拒绝 PG 专用键。`rate_limit.driver: local`（每实例本地）在 scale 下必须显式设置 `rate_limit.accept_per_instance: true` 承认"有效配额 = 配置 × 实例数"，避免本地限流冒充全局限流（PRD §3）；全局限流见 ADR-0004（`rate_limit.driver: valkey`）。
 9. **SQLite→PG 迁移工具**（PRD §12）：`gostack migrate to-postgres --from app.db --to-dsn-ref env:X [--analytics-from analytics.db]`。取得 SQLite 实例锁（服务运行时拒绝）、源库 integrity_check 与迁移版本必须与二进制一致、对目标执行迁移并要求所有表为空；在**一个** PG 事务内按外键顺序复制所有表、重置 identity 序列，并在提交前比较逐表行数与确定性摘要（按主键、C 排序、全部列的类型化编码），再运行 GameKit 账本对账与计费对账；任何不一致即回滚（目标保持为空）并以非零码退出，输出 JSON 报告。不做在线双写；切流前需停写并排空队列。
 10. **备份**：`backup snapshot/verify/restore` 只适用于 SQLite 文件，配置为 PG 时报错并提示使用 `pg_dump` 或基础备份 + WAL 归档（PITR）。PG 备份由运维负责，本项目未实现也未演练。
 
 ## 未实现 / 不在本阶段
 
-- pgmq、Valkey（缓存与全局限流）、PostgreSQL HA / 故障切换 / fencing、Distributed profile。
+- pgmq、PostgreSQL HA / 故障切换 / fencing、Distributed profile。（Valkey 缓存与全局限流已由 ADR-0004 实现。）
 - 在线双写迁移、PG→SQLite 反向迁移。
 - PG 的备份/PITR 自动化与恢复演练。
 - 实时（WebSocket）模块的多实例广播。

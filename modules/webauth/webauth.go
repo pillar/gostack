@@ -51,9 +51,11 @@ type Module struct {
 	Tenant string
 	Now    func() time.Time
 	Log    *slog.Logger
+	// Limits builds the password-check limiters (nil: process-local).
+	Limits ratelimit.Factory
 
-	ipLimit   *ratelimit.Limiter
-	acctLimit *ratelimit.Limiter
+	ipLimit   ratelimit.Allower
+	acctLimit ratelimit.Allower
 	hashSlots chan struct{}
 	dummyHash string
 }
@@ -97,8 +99,11 @@ func (m *Module) Init() {
 	if m.ClientIP == nil {
 		m.ClientIP, _ = httpx.NewClientIP(nil)
 	}
-	m.ipLimit = ratelimit.PerMinute(m.Cfg.IPRatePerMinute, 100_000)
-	m.acctLimit = ratelimit.PerMinute(m.Cfg.AccountRatePerMinute, 100_000)
+	// A global limiter whose backend fails degrades to per-instance buckets:
+	// password guessing stays bounded and login stays available.
+	f := ratelimit.OrLocal(m.Limits)
+	m.ipLimit = f("web_auth_ip", m.Cfg.IPRatePerMinute, ratelimit.FailLocal)
+	m.acctLimit = f("web_auth_account", m.Cfg.AccountRatePerMinute, ratelimit.FailLocal)
 	m.hashSlots = make(chan struct{}, max(m.Cfg.MaxConcurrentHashes, 1))
 	m.dummyHash = hashPassword(auth.NewSecret("dummy_"))
 }

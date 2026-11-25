@@ -32,7 +32,7 @@ type Module struct {
 	RedeemPerIPPerMinute     int
 
 	once                 sync.Once
-	playerLimit, ipLimit *ratelimit.Limiter
+	playerLimit, ipLimit ratelimit.Allower
 }
 
 func (m *Module) now() time.Time {
@@ -51,8 +51,11 @@ func (m *Module) init() {
 		if i <= 0 {
 			i = 60
 		}
-		m.playerLimit = ratelimit.PerMinute(p, 100_000)
-		m.ipLimit = ratelimit.PerMinute(i, 100_000)
+		// Redeem codes are guessable secrets: a global limiter fails closed
+		// (redemption pauses during a Valkey outage) rather than letting
+		// instances multiply the guessing budget.
+		m.playerLimit = m.Kit.NewLimiter("redeem_player", p, ratelimit.FailClosed)
+		m.ipLimit = m.Kit.NewLimiter("redeem_ip", i, ratelimit.FailClosed)
 	})
 }
 

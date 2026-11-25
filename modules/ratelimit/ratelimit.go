@@ -1,7 +1,13 @@
-// Package ratelimit provides a process-local token bucket limiter.
+// Package ratelimit provides request limiters behind the Allower interface:
 //
-// Semantics: LOCAL. Limits apply per process only; with multiple instances the
-// effective limit multiplies. It must not be presented as a global limiter.
+//   - Limiter (scope LOCAL): a process-local token bucket. Limits apply per
+//     process only; with multiple instances the effective limit multiplies. It
+//     must not be presented as a global limiter.
+//   - Global (scope GLOBAL): a Valkey-backed token bucket, atomic across all
+//     instances sharing the Valkey server and key prefix (see global.go).
+//
+// Metric names state the scope: ratelimit_local_denied_total,
+// ratelimit_global_denied_total, ratelimit_global_errors_total.
 package ratelimit
 
 import (

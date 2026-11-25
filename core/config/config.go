@@ -34,16 +34,43 @@ type Config struct {
 	Billing     BillingConfig   `yaml:"billing" json:"billing"`
 	Storage     StorageConfig   `yaml:"storage" json:"storage"`
 	RateLimit   RateLimitConfig `yaml:"rate_limit" json:"rate_limit"`
+	Valkey      ValkeyConfig    `yaml:"valkey" json:"valkey"`
 }
 
-// RateLimitConfig describes how request budgets are enforced. Every limiter
-// implemented today (game auth/score, web auth, redeem, social, match) is
-// process-local: with N instances the effective budget is up to N times the
-// configured one. Profile scale (multi-instance) refuses to start until the
-// operator acknowledges that with accept_per_instance: true, so a local
-// limiter is never mistaken for a global one (PRD §3).
+// RateLimitConfig describes how request budgets (game auth/score/events, web
+// auth, redeem, social, match) are enforced.
+//
+// Driver local: process-local token buckets; with N instances the effective
+// budget is up to N times the configured one. Profile scale refuses to start
+// with it until the operator acknowledges that with accept_per_instance: true,
+// so a local limiter is never mistaken for a global one (PRD §3).
+//
+// Driver valkey (profile scale): one budget shared by all instances (token bucket in a
+// Valkey script, server clock). Each check is bounded by Timeout; when Valkey
+// fails each limiter applies its documented failure policy (docs/adr/0004).
 type RateLimitConfig struct {
-	AcceptPerInstance bool `yaml:"accept_per_instance" json:"accept_per_instance"`
+	Driver            string        `yaml:"driver" json:"driver"` // local | valkey
+	AcceptPerInstance bool          `yaml:"accept_per_instance" json:"accept_per_instance"`
+	Timeout           time.Duration `yaml:"timeout" json:"timeout"`
+}
+
+// ValkeyConfig is the Valkey server used by cache.driver valkey and
+// rate_limit.driver valkey (profile scale). A single primary is supported;
+// Sentinel, Cluster and TLS are not implemented.
+type ValkeyConfig struct {
+	Address     string `yaml:"address" json:"address"` // host:port
+	Username    string `yaml:"username" json:"username"`
+	PasswordRef string `yaml:"password_ref" json:"password_ref"` // env:NAME or file:/path
+	DB          int    `yaml:"db" json:"db"`
+	// KeyPrefix namespaces every key of this application (required, e.g. "mygame:").
+	KeyPrefix   string        `yaml:"key_prefix" json:"key_prefix"`
+	DialTimeout time.Duration `yaml:"dial_timeout" json:"dial_timeout"`
+	PoolSize    int           `yaml:"pool_size" json:"pool_size"`
+}
+
+// UsesValkey reports whether any driver needs the Valkey connection.
+func (c Config) UsesValkey() bool {
+	return c.Cache.Driver == "valkey" || c.RateLimit.Driver == "valkey"
 }
 
 // AuthConfig groups optional end-user authentication modules.
@@ -113,9 +140,15 @@ type DatabaseConfig struct {
 	AcceptNormalSyncRisk bool `yaml:"accept_normal_sync_risk" json:"accept_normal_sync_risk"`
 }
 
+// CacheConfig selects App.Cache: memory (bounded in-process LRU, max_bytes) or
+// valkey (shared; requires valkey.address). A cache never holds business facts.
 type CacheConfig struct {
 	Driver   string `yaml:"driver" json:"driver"`
 	MaxBytes int64  `yaml:"max_bytes" json:"max_bytes"`
+	// MaxValueBytes bounds one value (both drivers).
+	MaxValueBytes int64 `yaml:"max_value_bytes" json:"max_value_bytes"`
+	// Timeout bounds each Valkey cache operation.
+	Timeout time.Duration `yaml:"timeout" json:"timeout"`
 }
 
 type QueueConfig struct {
@@ -196,10 +229,12 @@ func Defaults() Config {
 			WALAutocheckpoint: 1000,
 			WriteQueue:        1024,
 		},
-		Cache:  CacheConfig{Driver: "memory", MaxBytes: 32 << 20},
-		Queue:  QueueConfig{Driver: "sqlite", PollInterval: 500 * time.Millisecond, Lease: 30 * time.Second, Workers: 2},
-		Backup: BackupConfig{Enabled: false, Driver: "litestream"},
-		Log:    LogConfig{Level: "info", Format: "json"},
+		Cache:     CacheConfig{Driver: "memory", MaxBytes: 32 << 20, MaxValueBytes: 1 << 20, Timeout: 100 * time.Millisecond},
+		RateLimit: RateLimitConfig{Driver: "local", Timeout: 50 * time.Millisecond},
+		Valkey:    ValkeyConfig{DialTimeout: time.Second, PoolSize: 16},
+		Queue:     QueueConfig{Driver: "sqlite", PollInterval: 500 * time.Millisecond, Lease: 30 * time.Second, Workers: 2},
+		Backup:    BackupConfig{Enabled: false, Driver: "litestream"},
+		Log:       LogConfig{Level: "info", Format: "json"},
 		Game: GameConfig{
 			SessionTTL:          24 * time.Hour,
 			SaveMaxBytes:        64 << 10,
@@ -310,7 +345,12 @@ func fields(c *Config) map[string]func(string) error {
 		"DATABASE_MAX_OPEN_CONNECTIONS":    integer(&c.Database.MaxOpenConnections),
 		"QUEUE_DRIVER":                     str(&c.Queue.Driver),
 		"RATE_LIMIT_ACCEPT_PER_INSTANCE":   boolean(&c.RateLimit.AcceptPerInstance),
+		"RATE_LIMIT_DRIVER":                str(&c.RateLimit.Driver),
+		"CACHE_DRIVER":                     str(&c.Cache.Driver),
 		"CACHE_MAX_BYTES":                  i64(&c.Cache.MaxBytes),
+		"VALKEY_ADDRESS":                   str(&c.Valkey.Address),
+		"VALKEY_PASSWORD_REF":              str(&c.Valkey.PasswordRef),
+		"VALKEY_KEY_PREFIX":                str(&c.Valkey.KeyPrefix),
 		"QUEUE_WORKERS":                    integer(&c.Queue.Workers),
 		"BACKUP_ENABLED":                   boolean(&c.Backup.Enabled),
 		"LOG_LEVEL":                        str(&c.Log.Level),
@@ -337,7 +377,8 @@ func fields(c *Config) map[string]func(string) error {
 var (
 	implementedProfiles = map[string]bool{"lite": true, "scale": true}
 	implementedDB       = map[string]bool{"sqlite": true, "postgres": true}
-	implementedCache    = map[string]bool{"memory": true}
+	implementedCache    = map[string]bool{"memory": true, "valkey": true}
+	implementedLimiter  = map[string]bool{"local": true, "valkey": true}
 	implementedQueue    = map[string]bool{"sqlite": true, "postgres": true}
 	implementedBackup   = map[string]bool{"litestream": true}
 	implementedKits     = map[string]bool{"game": true}
@@ -392,8 +433,12 @@ func (c Config) Validate() error {
 		errs = append(errs, c.validateSQLite()...)
 	}
 	if !implementedCache[c.Cache.Driver] {
-		add("cache.driver %q is not implemented", c.Cache.Driver)
+		add("cache.driver %q is not implemented (implemented: memory, valkey)", c.Cache.Driver)
 	}
+	if !implementedLimiter[c.RateLimit.Driver] {
+		add("rate_limit.driver %q is not implemented (implemented: local, valkey)", c.RateLimit.Driver)
+	}
+	errs = append(errs, c.validateValkey()...)
 	if !implementedQueue[c.Queue.Driver] {
 		add("queue.driver %q is not implemented", c.Queue.Driver)
 	}

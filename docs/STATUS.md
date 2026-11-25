@@ -22,7 +22,8 @@
 | F08 部署 | 模板 | systemd 单元模板（生成项目内）；**安装/升级/回滚脚本未实现，未在 Linux 实测** |
 | F09 容灾 | 模板 | Litestream 配置模板；**R2 复制与恢复演练未执行（A08 未通过）** |
 | F10、F11、F13 | 未实现 | 通用计费、对象存储、HA（本行未随 F12 重新核实） |
-| F12 Scale | 部分（见下节） | PostgreSQL 存储、多实例、PG 任务队列、SQLite→PG 迁移工具；Valkey/全局限流/HA/PG 备份未实现 |
+| F12 Scale | 部分（见下节） | PostgreSQL 存储、多实例、PG 任务队列、SQLite→PG 迁移工具、Valkey 全局限流与 Valkey 缓存（单主节点）；Valkey HA/TLS、PG HA、PG 备份未实现 |
+| 缓存（PRD §4.2） | 已实现（无内置使用方） | `modules/cache`：memory（LRU、`max_bytes` 字节计量、TTL）与 valkey（前缀、超时、单值上限）；`App.Cache`；读错误降级为未命中；资金/账本路径不使用 |
 | 6.2 组提交写入调度器 | 未实现 | 首期用串行短事务 + 有界准入（见 ADR-0002），组提交需基准证明收益 |
 
 ## F12 Scale：PostgreSQL（2026-11-25，ADR-0003）
@@ -31,7 +32,13 @@
 - 已实现且有测试：`adapters/store` 方言无关句柄；`adapters/postgres`（pgx stdlib、SERIALIZABLE + 40001/40P01 有界重试、fn 吞错仍重试、读池只读、`?`→`$n` 改写单测、C 排序校验、analytics 独立 schema）；`migrations/postgres{,_analytics}` 与 SQLite 逐版本对应，`TestSchemaEquivalence` 比较 60 张表的列/主键/唯一约束/索引/外键/触发器；账本 UPDATE/DELETE/TRUNCATE 被拒；迁移 advisory lock 并发启动；配置校验（scale/lite/distributed、realtime、local storage、litestream、`rate_limit.accept_per_instance`）；`migrate status|up`、`doctor`、`game reconcile` 在 PG 上运行，`backup *` 在 PG 配置下报错并指向 pg_dump/PITR。
 - 多实例（`tests/scale`）：两个 App 实例共享一个 PG 库，并发领奖/购买/幂等重放、赛季结算、撮合、任务 Claim 均只生效一次。
 - SQLite→PG 迁移（`migrate to-postgres`）：经 HTTP 在 SQLite 上写入玩家/会话/存档/分数/隔离记录/账本/邮件/好友/撮合票/计费/网页用户/任务/埋点 → 服务运行时迁移被拒（实例锁）→ 停服后迁移，逐表行数与摘要一致、对账 0 差异 → 再次迁移因目标非空被拒 → 在 PG 上启动应用，11 个读接口响应与迁移前逐字节一致，幂等重放一致，identity 序列续号正常。
-- 未验证 / 未实现：Scale 性能预算（PRD §13/§23）未压测；PG 备份/PITR 与恢复演练；Valkey 与全局限流；PG HA；pgmq（不使用）；实时模块多实例；在线双写迁移。热点行在 SERIALIZABLE 下产生大量序列化失败重试（测试中可见数百次），吞吐影响未测量。
+- 未验证 / 未实现：Scale 性能预算（PRD §13/§23）未压测；PG 备份/PITR 与恢复演练；PG HA；pgmq（不使用）；实时模块多实例；在线双写迁移。热点行在 SERIALIZABLE 下产生大量序列化失败重试（测试中可见数百次），吞吐影响未测量。
+
+## F12 Scale：Valkey 全局限流与缓存（2026-11-25，ADR-0004）
+验证环境：本机 macOS arm64，Valkey 9.2.0（临时实例，无持久化）、PostgreSQL 17.11（临时集群），Go 1.27.4。CI 配置为 `valkey/valkey:8` 服务容器（本次未在 CI 上运行）。
+- 命令与结果：`./scripts/ci.sh`（不设任何测试变量，SQLite）通过；`GOSTACK_TEST_POSTGRES_DSN=… GOSTACK_TEST_VALKEY_ADDR=127.0.0.1:56391 GOSTACK_TEST_VALKEY_SERVER=…/valkey-server ./scripts/ci.sh`（SQLite 一遍、PG+Valkey 全套一遍、PG 无 Valkey 的 app/kits/tests/scale 一遍）通过。
+- 已实现且有测试：自写 RESP2 客户端（假服务器测协议、超时丢弃连接、ctx 取消、连接池上限；真服务器测二进制安全与 NOSCRIPT 回退）；令牌桶 Lua 脚本（服务器时间、键 TTL、热更新升降配额、两个实例 + 400 goroutine 共享键总放行不超过配额、无响应/拒连时按 FailOpen/FailClosed/FailLocal 快速返回并计数、服务器重启后自动恢复且配额从满额开始）；所有限流使用点改为 `ratelimit.Allower`；配置校验（valkey 驱动需地址与键前缀、lite 拒绝 valkey、scale 下 local 需确认、valkey 时拒绝确认项、孤立 `valkey.*` 被拒）；`tests/scale`：两个 App 实例共享 PG 与 Valkey，游客登录每 IP 配额 12/分钟，48 个并发请求在两实例上合计放行 12（全局生效），两实例均记录全局拒绝；跨实例缓存可见；Valkey 不可达时拒绝启动。
+- 未实现 / 未验证：Valkey Sentinel/Cluster/HA、TLS、主从切换下的语义；Valkey 往返对延迟/吞吐的影响未压测；内置功能尚未使用缓存。
 
 ## GameKit（PRD §20）
 | ID | 状态 | 测试 |

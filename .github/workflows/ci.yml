@@ -13,7 +13,9 @@ jobs:
       - run: go install golang.org/x/vuln/cmd/govulncheck@latest && govulncheck ./...
   postgres:
     # Business contract tests on PostgreSQL (profile scale): every storage-backed
-    # test runs against a fresh database per test (adapters/pgtest).
+    # test runs against a fresh database per test (adapters/pgtest). With Valkey
+    # set, scale apps use the global limiter and the Valkey cache
+    # (adapters/valkeytest); a second run covers the local-limiter path.
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -23,11 +25,19 @@ jobs:
         ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 5s --health-retries 30
+      valkey:
+        image: valkey/valkey:8
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "valkey-cli ping" --health-interval 2s --health-timeout 5s --health-retries 30
     env:
       GOSTACK_TEST_POSTGRES_DSN: postgres://postgres@127.0.0.1:5432/postgres?sslmode=disable
+      GOSTACK_TEST_VALKEY_ADDR: 127.0.0.1:6379
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod }
       - run: go vet ./...
       - run: go test -race -count=1 ./...
+      - name: PostgreSQL without Valkey (local limiters, memory cache)
+        run: env -u GOSTACK_TEST_VALKEY_ADDR go test -race -count=1 ./app/... ./kits/... ./tests/scale/...
