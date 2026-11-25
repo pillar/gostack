@@ -223,8 +223,16 @@ func (s *StatusRecorder) Write(b []byte) (int, error) {
 func (s *StatusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 
 // ClientIP resolves the caller address. Forwarding headers are honoured only
-// when the direct peer is inside a trusted proxy CIDR.
-type ClientIP struct{ trusted []*net.IPNet }
+// when the direct peer is inside a trusted proxy CIDR: X-Forwarded-For is
+// walked right to left skipping trusted hops; CF-Connecting-IP only when
+// TrustCFConnectingIP is set.
+type ClientIP struct {
+	trusted []*net.IPNet
+	// TrustCFConnectingIP honours CF-Connecting-IP from trusted peers. Enable
+	// it only when every trusted proxy is Cloudflare (which overwrites the
+	// header); any other proxy passes a client-supplied value through.
+	TrustCFConnectingIP bool
+}
 
 func NewClientIP(cidrs []string) (*ClientIP, error) {
 	c := &ClientIP{}
@@ -247,8 +255,10 @@ func (c *ClientIP) Of(r *http.Request) string {
 	if ip == nil || !c.isTrusted(ip) {
 		return host
 	}
-	if v := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); net.ParseIP(v) != nil {
-		return v
+	if c.TrustCFConnectingIP {
+		if v := net.ParseIP(strings.TrimSpace(r.Header.Get("CF-Connecting-IP"))); v != nil {
+			return v.String()
+		}
 	}
 	// Walk X-Forwarded-For right to left, skipping trusted hops.
 	parts := strings.Split(r.Header.Get("X-Forwarded-For"), ",")

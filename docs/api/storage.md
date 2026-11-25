@@ -58,11 +58,16 @@ mux.Handle("/v1/files/", l.Handler())
     405 `method_not_allowed` (any method other than GET and PUT, with `Allow: GET, PUT`), 413 `payload_too_large`, 400 `invalid_request`
     (length mismatch, bad content type).
   - A presigned PUT URL does not bind content type or size; size is bounded by
-    `MaxObjectBytes`. When the route is mounted by the application (`app/modules.go`),
-    the global `http.max_body_bytes` limit (default 1 MiB, configurable up to 64 MiB)
-    also applies to presigned PUT bodies: a larger body is rejected with
-    413 `payload_too_large` regardless of `MaxObjectBytes`, so raise
-    `http.max_body_bytes` to at least the largest upload you intend to allow.
+    `MaxObjectBytes` (`storage.max_object_bytes`): a declared or streamed size above
+    it is rejected with 413 `payload_too_large`.
+  - When the application mounts the route (`app.Handler`, path of `storage.local.public_url`),
+    it is served outside the generic `http.max_body_bytes` / `http.request_timeout`
+    limits, which apply to every other route: transfers are bounded by
+    `storage.max_object_bytes` and `storage.timeout` (operation context), and the
+    listener's read/write deadlines for that request are extended to
+    `storage.timeout` + 5 s. Request ids, access logs, panic recovery and the
+    `http.max_concurrent` in-flight cap still apply (`TestStorageRouteBypassesGenericBodyLimit`,
+    `TestStorageRouteSlowTransferOutlastsRequestTimeout`).
   - URLs are bearer capabilities until they expire; there is no revocation
     other than rotating the secret.
 

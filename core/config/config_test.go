@@ -67,6 +67,29 @@ func TestRejectsUnknownKeysAndUnimplemented(t *testing.T) {
 	}
 }
 
+func TestTrustCFConnectingIP(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "c.yaml")
+	os.WriteFile(p, []byte("http:\n  trusted_proxies: [173.245.48.0/20]\n  trust_cf_connecting_ip: true\n"), 0o600)
+	c, err := config.Load(p, env(nil), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.HTTP.TrustCFConnectingIP || config.Defaults().HTTP.TrustCFConnectingIP {
+		t.Fatal("trust_cf_connecting_ip must load and default to false")
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := config.Load(p, env(map[string]string{"GOSTACK_HTTP_TRUST_CF_CONNECTING_IP": "false"}), nil); err != nil || c.HTTP.TrustCFConnectingIP {
+		t.Fatalf("env override: %v", err)
+	}
+	c.HTTP.TrustedProxies = nil
+	if err := c.Validate(); err == nil {
+		t.Fatal("trust_cf_connecting_ip without trusted_proxies accepted")
+	}
+}
+
 func scale() config.Config {
 	c := config.Defaults()
 	c.Profile = "scale"

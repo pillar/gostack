@@ -192,29 +192,33 @@ func (k *Kit) submitScore(w http.ResponseWriter, r *http.Request) error {
 	if req.Score == nil {
 		return httpx.BadRequest("score required")
 	}
-	def, _, err := k.boardDef(ctx, k.DB.Read, s.GameID, board)
-	if err != nil {
-		return err
-	}
-	if def.RuleVersion > 0 && req.RuleVersion != def.RuleVersion {
-		e := httpx.Conflict("rule_version_mismatch", "board rules changed; update the client")
-		e.Details = map[string]any{"rule_version": def.RuleVersion}
-		return e
-	}
-	if def.RequireRun && req.RunToken == "" {
-		return httpx.BadRequest("run_token required for this board")
-	}
 	if len(req.RunToken) > 128 {
 		return httpx.BadRequest("invalid run_token")
 	}
 	score := *req.Score
-	if score < def.MinScore || score > def.MaxScore {
-		return httpx.BadRequest(fmt.Sprintf("score must be within [%d,%d]", def.MinScore, def.MaxScore))
-	}
 	now := k.Now()
-	season := SeasonID(def.Period, now)
+	quarantined := false
 	status, resp, replayed, err := idempotency.Do(ctx, k.DB, "game:"+s.GameID+":"+s.PlayerID, r.Header.Get("Idempotency-Key"), "score.submit:"+board, body,
 		func(tx *sql.Tx) (idempotency.Result, error) {
+			quarantined = false
+			// The board rules are read in the write transaction so the
+			// submission is judged by the revision it commits against.
+			def, _, err := k.boardDef(ctx, tx, s.GameID, board)
+			if err != nil {
+				return idempotency.Result{}, err
+			}
+			if def.RuleVersion > 0 && req.RuleVersion != def.RuleVersion {
+				e := httpx.Conflict("rule_version_mismatch", "board rules changed; update the client")
+				e.Details = map[string]any{"rule_version": def.RuleVersion}
+				return idempotency.Result{}, e
+			}
+			if def.RequireRun && req.RunToken == "" {
+				return idempotency.Result{}, httpx.BadRequest("run_token required for this board")
+			}
+			if score < def.MinScore || score > def.MaxScore {
+				return idempotency.Result{}, httpx.BadRequest(fmt.Sprintf("score must be within [%d,%d]", def.MinScore, def.MaxScore))
+			}
+			season := SeasonID(def.Period, now)
 			type result struct {
 				Status string `json:"status"`
 				Best   *int64 `json:"best"`
@@ -239,9 +243,7 @@ func (k *Kit) submitScore(w http.ResponseWriter, r *http.Request) error {
 					s.GameID, board, season, s.PlayerID, score, reason, now.UnixMilli()); err != nil {
 					return idempotency.Result{}, err
 				}
-				if k.Metrics != nil {
-					k.Metrics.Counter("game_scores_quarantined_total", "").Add(1)
-				}
+				quarantined = true
 				res.Status = "quarantined"
 				var cur int64
 				err := tx.QueryRowContext(ctx, `SELECT score FROM scores WHERE game_id=? AND board_id=? AND season_id=? AND player_id=?`, s.GameID, board, season, s.PlayerID).Scan(&cur)
@@ -261,6 +263,11 @@ func (k *Kit) submitScore(w http.ResponseWriter, r *http.Request) error {
 		})
 	if err != nil {
 		return mapWriteErr(err)
+	}
+	// Counted once the quarantine committed: fn may run several times (retried
+	// conflicts) or roll back, and a replay quarantines nothing new.
+	if quarantined && !replayed && k.Metrics != nil {
+		k.Metrics.Counter("game_scores_quarantined_total", "").Add(1)
 	}
 	idempotency.Write(w, status, resp, replayed)
 	return nil

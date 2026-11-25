@@ -226,3 +226,21 @@ func TestReloadRetunesGameLimiters(t *testing.T) {
 		t.Fatalf("after lowering auth rate: %d, %d; want 201, 429", first, second)
 	}
 }
+
+// http.trust_cf_connecting_ip reaches the client IP resolver shared by GameKit and web auth.
+func TestTrustCFConnectingIPWired(t *testing.T) {
+	for _, on := range []bool{false, true} {
+		c := testConfig(t)
+		c.HTTP.TrustedProxies = []string{"127.0.0.0/8"}
+		c.HTTP.TrustCFConnectingIP = on
+		a := newTestApp(t, c)
+		r := httptest.NewRequest("GET", "/", nil)
+		r.RemoteAddr = "127.0.0.1:1"
+		r.Header.Set("CF-Connecting-IP", "9.9.9.9")
+		r.Header.Set("X-Forwarded-For", "1.2.3.4")
+		want := map[bool]string{false: "1.2.3.4", true: "9.9.9.9"}[on]
+		if got := a.Game.ClientIP.Of(r); got != want {
+			t.Fatalf("trust_cf_connecting_ip=%v: client IP %s, want %s", on, got, want)
+		}
+	}
+}

@@ -105,8 +105,12 @@ type HTTPConfig struct {
 	RequestTimeout  time.Duration `yaml:"request_timeout" json:"request_timeout"`
 	MaxConcurrent   int           `yaml:"max_concurrent" json:"max_concurrent"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" json:"shutdown_timeout"`
-	// TrustedProxies lists CIDRs whose CF-Connecting-IP / X-Forwarded-For headers are trusted.
+	// TrustedProxies lists CIDRs whose X-Forwarded-For header is trusted.
 	TrustedProxies []string `yaml:"trusted_proxies" json:"trusted_proxies"`
+	// TrustCFConnectingIP also honours CF-Connecting-IP from trusted proxies.
+	// Enable only when every trusted proxy is Cloudflare: other proxies pass a
+	// client-supplied header through, which would let clients pick their IP.
+	TrustCFConnectingIP bool `yaml:"trust_cf_connecting_ip" json:"trust_cf_connecting_ip"`
 	// InternalListen serves /metrics and pprof; empty disables them.
 	InternalListen string `yaml:"internal_listen" json:"internal_listen"`
 }
@@ -333,6 +337,7 @@ func fields(c *Config) map[string]func(string) error {
 		"HTTP_MAX_BODY_BYTES":              i64(&c.HTTP.MaxBodyBytes),
 		"HTTP_REQUEST_TIMEOUT":             dur(&c.HTTP.RequestTimeout),
 		"HTTP_MAX_CONCURRENT":              integer(&c.HTTP.MaxConcurrent),
+		"HTTP_TRUST_CF_CONNECTING_IP":      boolean(&c.HTTP.TrustCFConnectingIP),
 		"DATABASE_DRIVER":                  str(&c.Database.Driver),
 		"DATABASE_PATH":                    str(&c.Database.Path),
 		"DATABASE_ANALYTICS_PATH":          str(&c.Database.AnalyticsPath),
@@ -417,6 +422,9 @@ func (c Config) Validate() error {
 		if _, _, err := net.ParseCIDR(cidr); err != nil {
 			add("http.trusted_proxies: %v", err)
 		}
+	}
+	if c.HTTP.TrustCFConnectingIP && len(c.HTTP.TrustedProxies) == 0 {
+		add("http.trust_cf_connecting_ip requires http.trusted_proxies (the Cloudflare ranges)")
 	}
 	if !implementedDB[c.Database.Driver] {
 		add("database.driver %q is not implemented", c.Database.Driver)

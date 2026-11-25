@@ -220,7 +220,7 @@
   "client_version": "1.0.0", "platform": "web|wechat", "schema_version": 1, "properties": {} } ] }
 ```
 
-单批 ≤100 条、请求体 ≤64 KiB、单事件 properties ≤4 KiB。返回 `202 {"accepted": n, "dropped": m}`。服务端缓冲满时丢弃并计数（可丢失语义），`event_id` 去重，因此不使用 `Idempotency-Key`，重发安全。携带无效/过期 token 返回 401，客户端可去掉 token 匿名重发。
+单批 ≤100 条、请求体 ≤64 KiB、单事件 properties ≤4 KiB。`event_id`/`event_name`/`session_id` 为 1–64 个可见 ASCII 字符；`client_version`（≤32 字节）与 `platform`（≤16 字节）须为合法 UTF-8 且不含控制字符（U+0000–U+001F、U+007F–U+009F）；`properties` 须为 JSON 对象且为合法 UTF-8（字符串内的 `\u0000` 转义按原文保存）。任一事件不合规则整批返回 `400 invalid_request`（消息指明事件下标），不接收其中任何事件。返回 `202 {"accepted": n, "dropped": m}`。服务端缓冲满时丢弃并计数（可丢失语义）；写库时若某条事件被数据库拒绝，只丢弃该条并计数，同批其他事件照常写入，`event_id` 去重，因此不使用 `Idempotency-Key`，重发安全。携带无效/过期 token 返回 401，客户端可去掉 token 匿名重发。
 
 ## 管理接口（API Key，`Authorization: Bearer gsk_...`，需 `admin` 权限）
 
