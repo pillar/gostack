@@ -42,7 +42,7 @@ func TestRejectsUnknownKeysAndUnimplemented(t *testing.T) {
 		"two writers":         func(c *config.Config) { c.Database.WriteConnections = 2 },
 		"shared analytics":    func(c *config.Config) { c.Database.AnalyticsPath = c.Database.Path },
 		"checkpoint off":      func(c *config.Config) { c.Database.WALAutocheckpoint = 0 },
-		"agent kit":           func(c *config.Config) { c.Kits = []string{"agent"} },
+		"unknown kit":         func(c *config.Config) { c.Kits = []string{"crm"} },
 		"prod public listen":  func(c *config.Config) { c.Environment = "production"; c.HTTP.Listen = "0.0.0.0:80" },
 		"prod normal sync":    func(c *config.Config) { c.Environment = "production"; c.Database.Synchronous = "NORMAL" },
 		"plain secret": func(c *config.Config) {

@@ -41,6 +41,8 @@ migrations/{sqlite,analytics,postgres,postgres_analytics}  内嵌、只前进的
 | `modules/storage` | 对象存储端口：本地文件系统（带预签名 HTTP 处理器）与 S3 兼容（自实现 SigV4） |
 | `kits/game` | GameKit P0：游戏注册、身份、存档、排行榜与反作弊、钱包/道具/账本、配置与灰度、埋点、赛季结算、管理接口 |
 | `kits/game/{ops,experiments,social,match,commerce,realtime}` | P1/P2 可选模块，由 `game.modules` 启用 |
+| `kits/agent` | AgentKit P1（`kits: [agent]`）：持久化 run/步骤/checkpoint，基于 jobs 租约的回放式恢复、取消、超时、预算、并发上限、工具调用审计（`docs/api/agent.md`） |
+| `kits/web` | WebKit P1（`kits: [web]`）：内容发布与修订、SEO/sitemap/robots、订单状态机示例（billing）、webhook outbox（`docs/api/web.md`） |
 | `app` | 装配、`Handler`、`Serve`（优雅停机）、维护循环、热更新、CLI 子命令（migrate/backup/doctor/game/apikey/jobs/to-postgres） |
 | `templates/app` | `gostack init` 生成的项目骨架（内嵌） |
 | `sdk/typescript` | 引擎无关的 TS 客户端 SDK（核心 + browser/wechat/realtime 入口） |

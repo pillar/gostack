@@ -23,6 +23,7 @@ func allModulesConfig(t *testing.T) config.Config {
 	c := testConfig(t)
 	c.Game.Modules = []string{"ops", "experiments", "social", "match", "commerce", "realtime", "assets"}
 	c.Billing.Enabled = true
+	c.Kits = append(c.Kits, "agent", "web")
 	if pgtest.Enabled() {
 		// Profile scale rejects the in-process realtime hub and local object storage;
 		// assets gets an S3 store (no IO until used).

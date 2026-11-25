@@ -35,6 +35,8 @@ type Config struct {
 	Storage     StorageConfig   `yaml:"storage" json:"storage"`
 	RateLimit   RateLimitConfig `yaml:"rate_limit" json:"rate_limit"`
 	Valkey      ValkeyConfig    `yaml:"valkey" json:"valkey"`
+	Agent       AgentConfig     `yaml:"agent" json:"agent"`
+	Web         WebConfig       `yaml:"web" json:"web"`
 }
 
 // RateLimitConfig describes how request budgets (game auth/score/events, web
@@ -271,6 +273,8 @@ func Defaults() Config {
 			AccountRatePerMinute: 10,
 			MaxConcurrentHashes:  2,
 		}},
+		Agent: defaultAgent(),
+		Web:   defaultWeb(),
 	}
 }
 
@@ -400,6 +404,9 @@ func fields(c *Config) map[string]func(string) error {
 		"GAME_QUOTA_DEFAULTS_SAVE_BYTES_TOTAL":         i64(&c.Game.QuotaDefaults.SaveBytesTotal),
 		"GAME_QUOTA_DEFAULTS_ANALYTICS_EVENTS_PER_DAY": i64(&c.Game.QuotaDefaults.AnalyticsEventsPerDay),
 		"GAME_QUOTA_DEFAULTS_WRITE_CONCURRENCY":        i64(&c.Game.QuotaDefaults.WriteConcurrency),
+		"AGENT_MAX_RUNNING_PER_TENANT":                 integer(&c.Agent.MaxRunningPerTenant),
+		"AGENT_STEP_TIMEOUT":                           dur(&c.Agent.StepTimeout),
+		"WEB_PUBLIC_MAX_AGE":                           dur(&c.Web.PublicMaxAge),
 	}
 }
 
@@ -411,7 +418,7 @@ var (
 	implementedLimiter  = map[string]bool{"local": true, "valkey": true}
 	implementedQueue    = map[string]bool{"sqlite": true, "postgres": true}
 	implementedBackup   = map[string]bool{"litestream": true}
-	implementedKits     = map[string]bool{"game": true}
+	implementedKits     = map[string]bool{"game": true, "agent": true, "web": true}
 	implementedPlatform = map[string]bool{"wechat": true}
 )
 
@@ -491,7 +498,7 @@ func (c Config) Validate() error {
 	}
 	for _, k := range c.Kits {
 		if !implementedKits[k] {
-			add("kit %q is not implemented (implemented: game)", k)
+			add("kit %q is not implemented (implemented: game, agent, web)", k)
 		}
 	}
 	g := c.Game
@@ -544,6 +551,7 @@ func (c Config) Validate() error {
 	}
 	errs = append(errs, c.validateProfile()...)
 	errs = append(errs, c.validateModules()...)
+	errs = append(errs, c.validateKits()...)
 	return errors.Join(errs...)
 }
 

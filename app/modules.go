@@ -256,6 +256,9 @@ func (a *App) maintainers() map[string]maintainer {
 	if m.Commerce != nil {
 		out["commerce"] = m.Commerce
 	}
+	if a.Agent != nil {
+		out["agent"] = a.Agent
+	}
 	if m.Billing != nil {
 		out["billing"] = m.Billing
 	}

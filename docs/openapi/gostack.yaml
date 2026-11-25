@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: GoStack HTTP API
   version: v1
-  summary: GameKit, optional game modules, web auth, billing and local object storage.
+  summary: GameKit, optional game modules, AgentKit, WebKit, web auth, billing and local object storage.
   description: |
     Machine-readable contract for every HTTP route a GoStack application can mount
     on its public listener (`app.Handler`). The Go handlers are the source of
@@ -73,6 +73,10 @@ tags:
     description: "Cookie session + CSRF web authentication (`auth.web.enabled: true`). See docs/api/webauth.md."
   - name: billing
     description: "Tenant billing accounts and reservations (`billing.enabled: true`, API key scope `billing`). See docs/api/billing.md."
+  - name: agent
+    description: "AgentKit durable runs (`kits: [agent]`, API key scope `agent`). See docs/api/agent.md."
+  - name: web
+    description: "WebKit content publishing, SEO, order example and webhooks (`kits: [web]`, API key scope `web` or editor web session). See docs/api/web.md."
   - name: storage-local
     description: "Presigned GET/PUT for the local object store (`storage.driver: local`, profile lite only). See docs/api/storage.md."
   - name: assets
@@ -4568,6 +4572,764 @@ paths:
         '413': {$ref: '#/components/responses/PayloadTooLarge'}
         '503': {$ref: '#/components/responses/Overloaded'}
 
+  /v1/agent/runs:
+    post:
+      operationId: agentCreateRun
+      tags: [agent]
+      x-gostack-module: agent
+      summary: Start a run of a registered workflow
+      description: |
+        Inserts a queued run and its `agent.run` job in one transaction. Body ≤ 68 KiB; `input` is any JSON value ≤ 64 KiB (default `{}`).
+        `max_steps` 0 → `agent.default_max_steps` (≤ `agent.max_steps`); `max_cost_units` 0 = unlimited; `timeout_seconds` 0 → `agent.default_timeout` (≤ `agent.max_timeout`).
+        Errors: `400 invalid_request` (unknown workflow, limits), `409 idempotency_key_reused`.
+      security: [{agentKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AgentCreateRun'}
+      responses:
+        '201':
+          description: Run created (status `queued`).
+          headers:
+            Idempotent-Replayed: {$ref: '#/components/headers/IdempotentReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentRun'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '503': {$ref: '#/components/responses/Overloaded'}
+    get:
+      operationId: agentListRuns
+      tags: [agent]
+      x-gostack-module: agent
+      summary: List the tenant's runs, newest first
+      security: [{agentKey: []}]
+      parameters:
+        - {name: status, in: query, required: false, schema: {$ref: '#/components/schemas/AgentRunStatus'}}
+        - {name: before, in: query, required: false, description: Run id cursor (exclusive); use `next_before`., schema: {type: string}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+      responses:
+        '200':
+          description: Runs without steps.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [runs, next_before]
+                properties:
+                  runs:
+                    type: array
+                    items: {$ref: '#/components/schemas/AgentRun'}
+                  next_before: {type: string, description: Cursor for the next page; empty at the end.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/agent/runs/{id}:
+    parameters:
+      - {name: id, in: path, required: true, description: Run id in the key's tenant (other tenants' runs are 404)., schema: {type: string}}
+    get:
+      operationId: agentGetRun
+      tags: [agent]
+      x-gostack-module: agent
+      summary: Read a run with its steps
+      security: [{agentKey: []}]
+      responses:
+        '200':
+          description: Run with `steps` (step outputs are not returned).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentRun'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/agent/runs/{id}/cancel:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: agentCancelRun
+      tags: [agent]
+      x-gostack-module: agent
+      summary: Cancel a run
+      description: |
+        Queued/waiting runs become `cancelled` at once. A running run gets `cancel_requested: true`; the worker stops it between steps or cancels the current step's context (polled every `agent.cancel_poll`).
+        Cancelling a cancelled run is a no-op. Errors: `409 invalid_state` (run already finished otherwise).
+      security: [{agentKey: []}]
+      responses:
+        '200':
+          description: Run after the request.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentRun'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Overloaded'}
+  /v1/agent/runs/{id}/audit:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: agentRunAudit
+      tags: [agent]
+      x-gostack-module: agent
+      summary: Tool-call audit log of a run (append-only)
+      security: [{agentKey: []}]
+      responses:
+        '200':
+          description: Audit rows in order.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tool_calls]
+                properties:
+                  tool_calls:
+                    type: array
+                    items: {$ref: '#/components/schemas/AgentToolCall'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/agent/runs/{id}/steps/{seq}/resolve:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+      - {name: seq, in: path, required: true, schema: {type: integer, minimum: 0}}
+    post:
+      operationId: agentResolveStep
+      tags: [agent]
+      x-gostack-module: agent
+      summary: Operator decision for a step in needs_reconciliation
+      description: |
+        After verifying the external system, record whether the interrupted tool call took effect. `succeeded` stores `output` (≤ `agent.inline_output_bytes`) as the step's checkpoint; `failed` makes the step return an error on replay. The run is requeued and resumes without calling the tool again.
+        Errors: `400 invalid_request` (outcome, missing note), `404 not_found`, `409 invalid_state` (step is not in needs_reconciliation).
+      security: [{agentKey: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome, note]
+              additionalProperties: false
+              properties:
+                outcome: {type: string, enum: [succeeded, failed]}
+                output: {description: Step output (JSON) used on replay when succeeded.}
+                external_ref: {type: string, maxLength: 256}
+                note: {type: string, minLength: 1, maxLength: 1000}
+      responses:
+        '200':
+          description: Run after the decision.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentRun'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Overloaded'}
+
+  /v1/web/sites:
+    post:
+      operationId: webCreateSite
+      tags: [web]
+      x-gostack-module: web
+      summary: Create a site
+      description: |
+        Site ids are global (they appear in public URLs). `base_url` is used for canonical links, sitemap and robots (trailing `/` removed; https required in production).
+        Errors: `400 invalid_request`, `409 conflict` (id exists).
+      security: [{webKey: []}, {webSession: [], csrfToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/WebSite'}
+      responses:
+        '201':
+          description: Site.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebSite'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    get:
+      operationId: webListSites
+      tags: [web]
+      x-gostack-module: web
+      summary: List the tenant's sites
+      security: [{webKey: []}, {webSession: []}]
+      responses:
+        '200':
+          description: Sites.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sites]
+                properties:
+                  sites:
+                    type: array
+                    items: {$ref: '#/components/schemas/WebSite'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/web/editors:
+    post:
+      operationId: webAddEditor
+      tags: [web]
+      x-gostack-module: web
+      summary: Allow a web-auth user of the key's tenant to edit (API key only)
+      description: Idempotent. Web sessions get `403 forbidden`.
+      security: [{webKey: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id: {type: string}
+      responses:
+        '200':
+          description: Editor added.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tenant_id: {type: string}
+                  user_id: {type: string}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/web/editors/{user}:
+    parameters:
+      - {name: user, in: path, required: true, schema: {type: string}}
+    delete:
+      operationId: webRemoveEditor
+      tags: [web]
+      x-gostack-module: web
+      summary: Remove an editor (API key only; idempotent)
+      security: [{webKey: []}]
+      responses:
+        '204': {$ref: '#/components/responses/NoContent'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/web/sites/{site}/pages:
+    parameters:
+      - {name: site, in: path, required: true, description: Site id of the caller's tenant (others are 404)., schema: {type: string}}
+    post:
+      operationId: webCreatePage
+      tags: [web]
+      x-gostack-module: web
+      summary: Create a draft page or post (revision 1)
+      description: |
+        Errors: `400 invalid_request`, `404 not_found` (site), `409 slug_taken` (slug unique per tenant and site).
+      security: [{webKey: []}, {webSession: [], csrfToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/WebPageInput'}
+      responses:
+        '201':
+          description: Page with its draft revision.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    get:
+      operationId: webListPages
+      tags: [web]
+      x-gostack-module: web
+      summary: List a site's pages by slug (at most 1000)
+      security: [{webKey: []}, {webSession: []}]
+      parameters:
+        - {name: status, in: query, required: false, schema: {$ref: '#/components/schemas/WebPageStatus'}}
+      responses:
+        '200':
+          description: Pages without revision content.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [pages]
+                properties:
+                  pages:
+                    type: array
+                    items: {$ref: '#/components/schemas/WebPage'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/web/pages/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: webGetPage
+      tags: [web]
+      x-gostack-module: web
+      summary: Read a page with its draft revision
+      security: [{webKey: []}, {webSession: []}]
+      responses:
+        '200':
+          description: Page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebPage'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    put:
+      operationId: webUpdatePage
+      tags: [web]
+      x-gostack-module: web
+      summary: Append a revision and make it the draft
+      description: |
+        `expected_version` must equal the page's `version` (`409 revision_conflict` otherwise). A published page keeps serving its published revision until it is published again. `kind` cannot change.
+        Errors: `400 invalid_request`, `404 not_found`, `409 revision_conflict`, `409 slug_taken`.
+      security: [{webKey: []}, {webSession: [], csrfToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/WebPageInput'}
+      responses:
+        '200':
+          description: Page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/web/pages/{id}/revisions:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: webListRevisions
+      tags: [web]
+      x-gostack-module: web
+      summary: Revisions of a page, newest first (at most 200)
+      security: [{webKey: []}, {webSession: []}]
+      responses:
+        '200':
+          description: Revisions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revisions]
+                properties:
+                  revisions:
+                    type: array
+                    items: {$ref: '#/components/schemas/WebRevision'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/web/pages/{id}/publish:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: webPublishPage
+      tags: [web]
+      x-gostack-module: web
+      summary: Publish now or schedule
+      description: |
+        `revision` 0 = current draft. `at` (unix ms) in the future schedules a `web.publish` job (status `scheduled`); otherwise the page is published now. Publishing the live revision again is a no-op.
+        Transitions: draft|archived → published|scheduled; scheduled → published|scheduled; published → published (another revision).
+        Errors: `400 invalid_request` (unknown revision), `409 invalid_transition` (scheduling a published page).
+      security: [{webKey: []}, {webSession: [], csrfToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                revision: {type: integer, format: int64, minimum: 0}
+                at: {type: integer, format: int64, description: Publish time (unix ms); 0 or past = now.}
+      responses:
+        '200':
+          description: Page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/web/pages/{id}/unschedule:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: webUnschedulePage
+      tags: [web]
+      x-gostack-module: web
+      summary: scheduled → draft (the pending job becomes a no-op)
+      description: 'Errors: `409 invalid_transition` (not scheduled).'
+      security: [{webKey: []}, {webSession: [], csrfToken: []}]
+      responses:
+        '200':
+          description: Page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebPage'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/web/pages/{id}/archive:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: webArchivePage
+      tags: [web]
+      x-gostack-module: web
+      summary: Take a page offline (idempotent)
+      security: [{webKey: []}, {webSession: [], csrfToken: []}]
+      responses:
+        '200':
+          description: Page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebPage'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/web/webhooks:
+    post:
+      operationId: webCreateWebhook
+      tags: [web]
+      x-gostack-module: web
+      summary: Register a webhook endpoint (secret returned once)
+      description: |
+        `events` empty = all order events. At most 20 active endpoints per tenant (`409 conflict`). https required in production; deliveries refuse private/loopback targets unless `web.webhook_allow_private_networks`.
+      security: [{webKey: []}, {webSession: [], csrfToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: {type: string, format: uri}
+                events:
+                  type: array
+                  items: {$ref: '#/components/schemas/WebEventType'}
+      responses:
+        '201':
+          description: Endpoint including `secret` (`whsec_...`).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebWebhook'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    get:
+      operationId: webListWebhooks
+      tags: [web]
+      x-gostack-module: web
+      summary: List endpoints (without secrets)
+      security: [{webKey: []}, {webSession: []}]
+      responses:
+        '200':
+          description: Endpoints.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [webhooks]
+                properties:
+                  webhooks:
+                    type: array
+                    items: {$ref: '#/components/schemas/WebWebhook'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/web/webhooks/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    delete:
+      operationId: webDisableWebhook
+      tags: [web]
+      x-gostack-module: web
+      summary: Disable an endpoint (pending deliveries end as failed)
+      security: [{webKey: []}, {webSession: [], csrfToken: []}]
+      responses:
+        '204': {$ref: '#/components/responses/NoContent'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/web/webhooks/{id}/deliveries:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: webListDeliveries
+      tags: [web]
+      x-gostack-module: web
+      summary: Latest deliveries of an endpoint (at most 200)
+      security: [{webKey: []}, {webSession: []}]
+      responses:
+        '200':
+          description: Deliveries.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deliveries]
+                properties:
+                  deliveries:
+                    type: array
+                    items: {$ref: '#/components/schemas/WebDelivery'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/web/orders:
+    post:
+      operationId: webCreateOrder
+      tags: [web]
+      x-gostack-module: web
+      summary: Create an order (example state machine; requires billing.enabled)
+      description: |
+        The billing account must exist in the tenant (`404`); the order takes its currency.
+        Errors: `400 invalid_request`, `404 not_found`, `409 idempotency_key_reused`.
+      security: [{webKey: []}, {webSession: [], csrfToken: []}]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_id, amount]
+              properties:
+                account_id: {type: string}
+                amount: {type: integer, format: int64, minimum: 1}
+                customer_ref: {type: string, maxLength: 128}
+                items: {description: 'Any JSON (≤ 32 KiB); default `[]`.'}
+      responses:
+        '201':
+          description: Order (status `created`).
+          headers:
+            Idempotent-Replayed: {$ref: '#/components/headers/IdempotentReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebOrder'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    get:
+      operationId: webListOrders
+      tags: [web]
+      x-gostack-module: web
+      summary: List orders, newest first
+      security: [{webKey: []}, {webSession: []}]
+      parameters:
+        - {name: status, in: query, required: false, schema: {$ref: '#/components/schemas/WebOrderStatus'}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+      responses:
+        '200':
+          description: Orders.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [orders]
+                properties:
+                  orders:
+                    type: array
+                    items: {$ref: '#/components/schemas/WebOrder'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/web/orders/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: webGetOrder
+      tags: [web]
+      x-gostack-module: web
+      summary: Read an order
+      security: [{webKey: []}, {webSession: []}]
+      responses:
+        '200':
+          description: Order.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebOrder'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/web/orders/{id}/events:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: webOrderEvents
+      tags: [web]
+      x-gostack-module: web
+      summary: Append-only events of an order, in order
+      security: [{webKey: []}, {webSession: []}]
+      responses:
+        '200':
+          description: Events.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events:
+                    type: array
+                    items: {$ref: '#/components/schemas/WebEvent'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/web/orders/{id}/pay:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: webPayOrder
+      tags: [web]
+      x-gostack-module: web
+      summary: created → paid (billing reserve + settle)
+      description: |
+        Reserve and settle use keys derived from the order id, so retries never charge twice. Paying a paid/fulfilled order is a no-op; if the order was cancelled meanwhile the charge is refunded.
+        Errors: `409 insufficient_funds`, `409 invalid_transition`, billing `409` codes.
+      security: [{webKey: []}, {webSession: [], csrfToken: []}]
+      responses:
+        '200': {description: Order., content: {application/json: {schema: {$ref: '#/components/schemas/WebOrder'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/web/orders/{id}/fulfill:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: webFulfillOrder
+      tags: [web]
+      x-gostack-module: web
+      summary: paid → fulfilled (no-op when fulfilled)
+      description: 'Errors: `409 invalid_transition`.'
+      security: [{webKey: []}, {webSession: [], csrfToken: []}]
+      responses:
+        '200': {description: Order., content: {application/json: {schema: {$ref: '#/components/schemas/WebOrder'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/web/orders/{id}/cancel:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: webCancelOrder
+      tags: [web]
+      x-gostack-module: web
+      summary: created → cancelled (releases or refunds an in-flight payment)
+      description: 'Repeating it re-runs the idempotent compensation. Errors: `409 invalid_transition`.'
+      security: [{webKey: []}, {webSession: [], csrfToken: []}]
+      responses:
+        '200': {description: Order., content: {application/json: {schema: {$ref: '#/components/schemas/WebOrder'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/web/orders/{id}/refund:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: webRefundOrder
+      tags: [web]
+      x-gostack-module: web
+      summary: paid|fulfilled → refunded (billing credit, at most once)
+      description: 'Repeating it re-runs the idempotent credit. Errors: `409 invalid_transition`.'
+      security: [{webKey: []}, {webSession: [], csrfToken: []}]
+      responses:
+        '200': {description: Order., content: {application/json: {schema: {$ref: '#/components/schemas/WebOrder'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/web/public/{site}/pages/{slug}:
+    parameters:
+      - {name: site, in: path, required: true, schema: {type: string}}
+      - {name: slug, in: path, required: true, description: 'Page slug; may contain `/` (route `{slug...}`).', schema: {type: string}}
+    get:
+      operationId: webPublicPage
+      tags: [web]
+      x-gostack-module: web
+      summary: Published page with effective SEO metadata (public, cached)
+      description: |
+        Only status `published`. `Cache-Control: public, max-age=<web.public_max_age>` and a strong `ETag`; `If-None-Match` gets `304`. `X-Robots-Tag: noindex` when the revision is noindex. Effective SEO: `title`/`og_title` fall back to the page title, `canonical_url` to `<base_url>/<slug>`.
+      security: []
+      parameters:
+        - {name: If-None-Match, in: header, required: false, schema: {type: string}}
+      responses:
+        '200':
+          description: Page.
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebPublicPage'}
+        '304': {description: Not modified.}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/web/public/{site}/sitemap.xml:
+    parameters:
+      - {name: site, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: webSitemap
+      tags: [web]
+      x-gostack-module: web
+      summary: sitemap.xml of published, indexable pages (≤ 50 000)
+      security: []
+      responses:
+        '200':
+          description: Sitemap (ETag / Cache-Control as for pages).
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+          content:
+            application/xml:
+              schema: {type: string}
+        '304': {description: Not modified.}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/web/public/{site}/robots.txt:
+    parameters:
+      - {name: site, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: webRobots
+      tags: [web]
+      x-gostack-module: web
+      summary: "robots.txt (disallow list and `Sitemap: <base_url>/sitemap.xml`)"
+      security: []
+      responses:
+        '200':
+          description: robots.txt.
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+          content:
+            text/plain:
+              schema: {type: string}
+        '304': {description: Not modified.}
+        '404': {$ref: '#/components/responses/NotFound'}
+
 components:
   securitySchemes:
     gameSession:
@@ -4607,6 +5369,14 @@ components:
       in: header
       name: X-CSRF-Token
       description: CSRF token returned by signup/login/me/password; required with the session cookie on unsafe methods.
+    agentKey:
+      type: http
+      scheme: bearer
+      description: API key (`gsk_...`) with scope `agent`. The tenant is the key's tenant; a key without a tenant gets `403 forbidden`.
+    webKey:
+      type: http
+      scheme: bearer
+      description: API key (`gsk_...`) with scope `web`. The tenant is the key's tenant. Alternatively a web session of a user listed with `POST /v1/web/editors` (unsafe methods also need `X-CSRF-Token`).
     presignedUrl:
       type: apiKey
       in: query
@@ -4870,6 +5640,8 @@ components:
         # assets
         - release_pruned
         - release_incomplete
+        # web
+        - slug_taken
     AssetsFile:
       type: object
       required: [key, size, sha256, content_type]
@@ -6601,3 +7373,205 @@ components:
         stored: {type: integer, format: int64}
         expected: {type: integer, format: int64}
 
+    AgentRunStatus:
+      type: string
+      enum: [queued, running, waiting, succeeded, failed, cancelled, timed_out]
+    AgentCreateRun:
+      type: object
+      required: [workflow]
+      additionalProperties: false
+      properties:
+        workflow: {type: string, description: Name registered with `Hooks.Workflows` / `agent.Kit.Register`.}
+        input: {description: Any JSON value (≤ 64 KiB).}
+        max_steps: {type: integer, format: int64, minimum: 0}
+        max_cost_units: {type: integer, format: int64, minimum: 0}
+        timeout_seconds: {type: integer, format: int64, minimum: 0}
+    AgentRun:
+      type: object
+      required: [id, workflow, status, input, max_steps, max_cost_units, steps_used, cost_units, deadline_at, cancel_requested, created_at, updated_at]
+      properties:
+        id: {type: string, description: '`run_...`'}
+        workflow: {type: string}
+        status: {$ref: '#/components/schemas/AgentRunStatus'}
+        wait_reason: {type: string, enum: [sleep, reconciliation, concurrency], description: Why the run is waiting (or queued for `concurrency`).}
+        input: {description: Run input (JSON).}
+        output: {description: Output set by the workflow (JSON), on success.}
+        error_code: {type: string, enum: [budget_exceeded, timed_out, cancelled, workflow_error, nondeterministic_workflow, unknown_workflow, output_too_large]}
+        error: {type: string, description: Redacted, truncated to 1000 bytes.}
+        max_steps: {type: integer, format: int64}
+        max_cost_units: {type: integer, format: int64, description: 0 = unlimited.}
+        steps_used: {type: integer, format: int64}
+        cost_units: {type: integer, format: int64}
+        deadline_at: {type: integer, format: int64}
+        cancel_requested: {type: boolean}
+        created_at: {type: integer, format: int64}
+        updated_at: {type: integer, format: int64}
+        finished_at: {type: integer, format: int64}
+        steps:
+          type: array
+          items: {$ref: '#/components/schemas/AgentStep'}
+    AgentStep:
+      type: object
+      required: [seq, name, kind, status, attempt, cost_units, output_bytes, started_at]
+      properties:
+        seq: {type: integer, format: int64}
+        name: {type: string}
+        kind: {type: string, enum: [llm, tool, wait]}
+        status: {type: string, enum: [running, succeeded, failed, waiting, needs_reconciliation]}
+        attempt: {type: integer, format: int64}
+        tool: {type: string}
+        idempotent: {type: boolean}
+        cost_units: {type: integer, format: int64}
+        output_ref: {type: string, description: Object storage key when the output exceeded `agent.inline_output_bytes`.}
+        output_bytes: {type: integer, format: int64}
+        wake_at: {type: integer, format: int64}
+        error: {type: string}
+        started_at: {type: integer, format: int64}
+        finished_at: {type: integer, format: int64}
+    AgentToolCall:
+      type: object
+      required: [id, seq, attempt, tool, idempotency_key, request_hash, outcome, created_at]
+      properties:
+        id: {type: string}
+        seq: {type: integer, format: int64}
+        attempt: {type: integer, format: int64}
+        tool: {type: string}
+        idempotency_key: {type: string, description: '`<run_id>:<seq>`, stable across attempts.'}
+        request_hash: {type: string, description: SHA-256 hex of the request bytes (the request itself is not stored).}
+        outcome: {type: string, enum: [started, succeeded, failed, unknown, retry, resolved_succeeded, resolved_failed]}
+        external_ref: {type: string}
+        error: {type: string}
+        created_at: {type: integer, format: int64}
+    WebSite:
+      type: object
+      required: [id, name, base_url]
+      properties:
+        id: {type: string, pattern: '^[a-z0-9-]{1,64}$'}
+        tenant_id: {type: string, readOnly: true}
+        name: {type: string}
+        base_url: {type: string, format: uri}
+        robots_disallow:
+          type: array
+          maxItems: 100
+          items: {type: string, pattern: '^/'}
+        created_at: {type: integer, format: int64, readOnly: true}
+    WebSEO:
+      type: object
+      properties:
+        title: {type: string, maxLength: 300}
+        description: {type: string, maxLength: 1000}
+        canonical_url: {type: string, format: uri}
+        og_title: {type: string, maxLength: 300}
+        og_description: {type: string, maxLength: 1000}
+        og_image: {type: string, format: uri}
+        noindex: {type: boolean}
+    WebPageInput:
+      type: object
+      required: [slug, title]
+      additionalProperties: false
+      properties:
+        kind: {type: string, enum: [page, post], description: Create only (default page).}
+        slug: {type: string, pattern: '^[a-z0-9-]+(/[a-z0-9-]+)*$', maxLength: 200}
+        title: {type: string, maxLength: 300}
+        body: {type: string, description: ≤ 256 KiB.}
+        seo: {$ref: '#/components/schemas/WebSEO'}
+        expected_version: {type: integer, format: int64, description: Required for updates.}
+    WebPageStatus:
+      type: string
+      enum: [draft, scheduled, published, archived]
+    WebRevision:
+      type: object
+      required: [rev, title, body, seo, author, created_at]
+      properties:
+        rev: {type: integer, format: int64}
+        title: {type: string}
+        body: {type: string}
+        seo: {$ref: '#/components/schemas/WebSEO'}
+        author: {type: string, description: '`key:<id>` or `user:<id>`'}
+        created_at: {type: integer, format: int64}
+    WebPage:
+      type: object
+      required: [id, site_id, kind, slug, status, draft_revision, published_revision, scheduled_revision, version, created_at, updated_at]
+      properties:
+        id: {type: string}
+        site_id: {type: string}
+        kind: {type: string, enum: [page, post]}
+        slug: {type: string}
+        status: {$ref: '#/components/schemas/WebPageStatus'}
+        draft_revision: {type: integer, format: int64}
+        published_revision: {type: integer, format: int64, description: 0 = never published.}
+        scheduled_revision: {type: integer, format: int64}
+        publish_at: {type: integer, format: int64}
+        published_at: {type: integer, format: int64}
+        version: {type: integer, format: int64}
+        created_at: {type: integer, format: int64}
+        updated_at: {type: integer, format: int64}
+        draft: {$ref: '#/components/schemas/WebRevision'}
+    WebPublicPage:
+      type: object
+      required: [site, kind, slug, title, body, published_at, seo]
+      properties:
+        site: {type: string}
+        kind: {type: string}
+        slug: {type: string}
+        title: {type: string}
+        body: {type: string}
+        published_at: {type: integer, format: int64}
+        seo: {$ref: '#/components/schemas/WebSEO'}
+    WebOrderStatus:
+      type: string
+      enum: [created, paid, fulfilled, cancelled, refunded]
+    WebOrder:
+      type: object
+      required: [id, status, account_id, amount, currency, customer_ref, items, version, created_at, updated_at]
+      properties:
+        id: {type: string}
+        status: {$ref: '#/components/schemas/WebOrderStatus'}
+        account_id: {type: string}
+        amount: {type: integer, format: int64}
+        currency: {type: string}
+        customer_ref: {type: string}
+        items: {description: JSON supplied at creation.}
+        reservation_id: {type: string}
+        version: {type: integer, format: int64}
+        created_at: {type: integer, format: int64}
+        updated_at: {type: integer, format: int64}
+    WebEventType:
+      type: string
+      enum: [order.created, order.paid, order.fulfilled, order.cancelled, order.refunded]
+    WebEvent:
+      type: object
+      required: [id, type, order_id, from_status, to_status, created_at, data]
+      properties:
+        id: {type: string, description: '`evt_...`; also the `GoStack-Webhook-Id` header.'}
+        type: {$ref: '#/components/schemas/WebEventType'}
+        order_id: {type: string}
+        from_status: {type: string}
+        to_status: {type: string}
+        created_at: {type: integer, format: int64}
+        data: {$ref: '#/components/schemas/WebOrder'}
+    WebWebhook:
+      type: object
+      required: [id, url, events, active, created_at]
+      properties:
+        id: {type: string}
+        url: {type: string}
+        events:
+          type: array
+          items: {$ref: '#/components/schemas/WebEventType'}
+        active: {type: boolean}
+        secret: {type: string, description: Only in the creation response.}
+        created_at: {type: integer, format: int64}
+    WebDelivery:
+      type: object
+      required: [event_id, webhook_id, status, attempts, last_status, created_at, updated_at]
+      properties:
+        event_id: {type: string}
+        webhook_id: {type: string}
+        status: {type: string, enum: [pending, delivered, failed]}
+        attempts: {type: integer, format: int64}
+        last_status: {type: integer, format: int64, description: Last HTTP status (0 = network error).}
+        last_error: {type: string}
+        created_at: {type: integer, format: int64}
+        updated_at: {type: integer, format: int64}
+        delivered_at: {type: integer, format: int64}

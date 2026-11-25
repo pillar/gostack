@@ -4,7 +4,7 @@
 
 ## 验证命令与结果（本机 macOS arm64，Go 1.27.4 toolchain，Node 24，PostgreSQL 17.11，Valkey 9.2.0）
 - `GOSTACK_TEST_POSTGRES_DSN=… GOSTACK_TEST_VALKEY_ADDR=… GOSTACK_TEST_VALKEY_SERVER=… ./scripts/ci.sh`：gofmt、`go vet`、`go test -race -count=1 ./...` 分别在 SQLite、PostgreSQL+Valkey、PostgreSQL（本地限流）三轮全部通过；linux amd64/arm64 `CGO_ENABLED=0` 交叉编译；SDK typecheck + 64 个测试；SDK 核心 gzip 6830 B（预算 30720 B），realtime 独立入口 2149 B。
-- OpenAPI：`docs/openapi/gostack.yaml`（OpenAPI 3.1，109 路径/129 操作）；`app/openapi_test.go` 双向核对文档与源码路由、错误码枚举与源码一致、每个文档化操作在开启全部模块的 app 上存在。
+- OpenAPI：`docs/openapi/gostack.yaml`（OpenAPI 3.1，137 路径/163 操作，含 AgentKit/WebKit）；`app/openapi_test.go` 双向核对文档与源码路由、错误码枚举与源码一致、每个文档化操作在开启全部模块的 app 上存在。
 - 独立审查（第二轮，只读子代理，覆盖认证/资金/存储层/生命周期）：10 项问题全部修复且均有回归测试——PG 下埋点毒批次（入口拒绝控制字符/非法 UTF-8 + flush 逐行 SAVEPOINT 隔离）、`CF-Connecting-IP` 仅在 `http.trust_cf_connecting_ip` 显式开启时信任、本地存储预签名路由脱离通用 body/超时限制、存档响应字节与 checksum 一致、签到/任务改时区不再重复领取、游客邀请奖励延迟到绑定平台身份后领取、对战房间 token 改随机并绑定认领 key、空租户 billing key 被拒、隔离指标不在可重跑事务内计数、榜单规则在写事务内读取。另一项由 OpenAPI 核对发现：运营/社交发放绕过道具目录与 `max_stack`，已改走 `Kit.Grant`。
 - 第一轮审查（P0 主干）7 项问题已修复（见 git 历史）。
 - govulncheck：GitHub Actions 中运行；`toolchain go1.27.4`（1.27.1 标准库漏洞的修复版本）。CI 新增的 PostgreSQL / Valkey service job 尚未在 GitHub 上运行过。
@@ -65,6 +65,13 @@
 | 多游戏配额（G-A09） | 已实现 | `kits/game/quota.go`，迁移 0014：`max_players`/`save_bytes_total` 与业务写同事务条件更新计数（SQLite、PG 并发存档/恢复/删除后计数 = 实际字节且不超限）；`requests_per_minute` 每游戏限流器（Valkey 下两实例合计放行 = 配额，已测）；`analytics_events_per_day` 按实例按 UTC 日计数、启动后从埋点库补计（N 实例最多约 N×配额）；`write_concurrency` 按实例限制每游戏在途写请求（503）；管理 API GET/PUT `/v1/admin/games/{game}/quotas`、5 s 缓存、CLI `game quotas [--recount]`；每游戏指标（标签基数 = 游戏数）。测试：`kits/game/quota_test.go`（alpha 触发每项配额时 beta 不受影响）。未测：PG 单游戏计数行串行化的吞吐影响 |
 | 资源发布（PRD §22，G-A07） | 已实现（MinIO 实测；R2/CDN 未实测） | `modules/assets` + `gostack assets publish/list/rollback/verify/prune` + 模块 `assets`（manifest/entry 公共接口、管理端列表/回滚）：内容哈希不可变键 + `Cache-Control: immutable`、版本化 manifest、发布顺序资源→manifest→入口→事务切换指针、失败保留旧版本、按游戏租约串行化、去重、回滚前存在性检查、verify 全量哈希、prune 永不删除保留/当前版本引用的对象；见 `docs/api/assets.md`、`docs/ASSET_RELEASE.md` |
 
+## AgentKit / WebKit P1（PRD §19、§24，2026-11-25）
+验证环境：本机 macOS arm64，Go 1.27.4，PostgreSQL 17.11（临时集群）。命令：`gofmt -l .`（无输出）、`go vet ./...`、`go test -race -count=1 ./...`（SQLite）与 `GOSTACK_TEST_POSTGRES_DSN=… go test -race -count=1 ./...`（PostgreSQL，`TestSchemaEquivalence` 含迁移 0017/0018）全部通过。生成项目 `gostack init --kit agent|web|game` 在本机 `go mod tidy`（离线模块缓存）+ `go build` + `config validate` 通过，agent/web 项目各自 `serve` 后用 curl 走通一次（创建 run 至 succeeded；建站/发布/公开读/sitemap/robots/下单支付）。
+| ID | 状态 | 说明与测试 |
+|---|---|---|
+| AgentKit（`kits/agent`，`docs/api/agent.md`） | 已实现（P1） | run_id、步骤（llm/tool/wait）状态与 attempt、每步 checkpoint（大输出进对象存储）、回放式恢复（租约过期由另一 worker 接管，已完成步骤不重跑，旧 worker 被 owner_token 隔离）、不确定结果的非幂等工具调用进入 `needs_reconciliation` 并由人工 resolve、幂等工具同 key 重发、取消（步骤间 + 步骤 ctx）、运行截止与单步超时、`max_steps`/`max_cost_units` 预算、租户与工作流并发上限、租约前让出续跑任务、密钥引用解析与错误脱敏、追加型工具调用审计、HTTP（`agent` scope，租户来自 key）。不提供 exactly-once；工作流版本化、步骤自动重试策略、已完成 run 的保留清理未实现 |
+| WebKit（`kits/web`，`docs/api/web.md`） | 已实现（P1） | 站点/页面/文章、不可变修订、slug 租户内唯一、draft→scheduled→published→archived（定时发布走 jobs，过期任务无效）、SEO 元数据、公开读 + sitemap.xml + robots.txt（ETag/304、Cache-Control）；订单状态机示例（billing 预留→结算、取消/退款补偿至多一次、事件追加日志）；webhook outbox（同事务入队、HMAC 签名、退避重试、重复任务不重发、SSRF 防护）；管理端 API key（`web` scope）或编辑者 web 会话（CSRF）。非 CMS/电商：无编辑器 UI、媒体库、商品目录、真实支付渠道、正文 HTML 清洗 |
+
 ## 验收项对照
 - A01 构建：linux amd64/arm64 交叉编译通过，迁移与模板内嵌；未在 Linux 实机运行。
 - A02 数据库：每连接 PRAGMA、读库拒写、迁移重复执行与漂移检测、两方言 schema 等价——通过。
@@ -84,4 +91,4 @@
 2. Cloudflare R2：S3 适配器实测、资源发布（`assets`）与 CDN 实测、Litestream→R2 复制与恢复（RPO/RTO、费用）。
 3. 真实平台：微信 code2session、Apple 沙盒交易与通知、Google Play 购买与 RTDN、微信支付下单与回调、AdMob 回调。
 4. 真机：Safari iPhone 与微信小游戏验证 SDK（G-A08）。
-5. 未实现：F13 HA/Distributed、Valkey HA/TLS、realtime 多实例、WebKit/AgentKit（PRD §24）。
+5. 未实现：F13 HA/Distributed、Valkey HA/TLS、realtime 多实例；AgentKit/WebKit 仅 P1 范围（见上节“不提供”项）。
