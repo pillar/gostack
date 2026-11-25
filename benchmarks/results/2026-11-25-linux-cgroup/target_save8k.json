@@ -1,0 +1,90 @@
+{
+  "label": "local, not acceptance",
+  "scenario": "save8k",
+  "description": "PUT /saves/main with an 8 KiB payload (FULL, history 10, Idempotency-Key)",
+  "budget": {
+    "prd": "§23 8KiB 存档写入",
+    "target_rps": 50,
+    "percentile": 0.95,
+    "limit_ms": 50,
+    "max_error_rate": 0.001
+  },
+  "offered_rps": 50,
+  "warmup_s": 15,
+  "steady_s": 60,
+  "started_at": "2026-11-25T18:48:13.41864009+08:00",
+  "scheduled": 3000,
+  "completed": 3000,
+  "achieved_rps": 50,
+  "ok": 3000,
+  "expected_rejections": 0,
+  "errors": 0,
+  "error_rate": 0,
+  "error_kinds": {},
+  "latency_corrected": {
+    "count": 3000,
+    "min_ms": 2.693,
+    "mean_ms": 3.94926,
+    "p50_ms": 3.679,
+    "p90_ms": 4.799,
+    "p95_ms": 5.663,
+    "p99_ms": 9.407,
+    "p999_ms": 13.439,
+    "max_ms": 15.001
+  },
+  "latency_service": {
+    "count": 3000,
+    "min_ms": 2.674,
+    "mean_ms": 3.9210366666666667,
+    "p50_ms": 3.647,
+    "p90_ms": 4.767,
+    "p95_ms": 5.631,
+    "p99_ms": 9.279,
+    "p999_ms": 12.351,
+    "max_ms": 13.718
+  },
+  "client_schedule_lag": {
+    "count": 3000,
+    "min_ms": 0,
+    "mean_ms": 0.0017430000000000002,
+    "p50_ms": 0,
+    "p90_ms": 0,
+    "p95_ms": 0,
+    "p99_ms": 0.001,
+    "p999_ms": 0.731,
+    "max_ms": 1.164
+  },
+  "ops": {
+    "save_put_8k": {
+      "count": 3000,
+      "ok": 3000,
+      "expected_rejections": 0,
+      "errors": 0,
+      "latency": {
+        "count": 3000,
+        "min_ms": 2.693,
+        "mean_ms": 3.94926,
+        "p50_ms": 3.679,
+        "p90_ms": 4.799,
+        "p95_ms": 5.663,
+        "p99_ms": 9.407,
+        "p999_ms": 13.439,
+        "max_ms": 15.001
+      }
+    }
+  },
+  "budget_measured_ms": 5.663,
+  "pass_local": true,
+  "server": {
+    "pid": 449582,
+    "rss_start_kib": 37980,
+    "rss_max_kib": 38000,
+    "rss_end_kib": 38000,
+    "cpu_seconds": 5,
+    "cpu_util": 0.08334720314279745
+  },
+  "client_dropped": 0,
+  "client_max_inflight": 1,
+  "client_go": "go1.27.1",
+  "client_gomaxprocs": 2
+}

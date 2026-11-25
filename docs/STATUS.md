@@ -83,12 +83,12 @@
 - A07 安全：跨游戏/跨玩家/跨租户拒绝、未知字段拒绝、参数化 SQL、CSRF、两轮独立审查问题已修复、govulncheck；**无第三方渗透测试**。
 - A08 容灾：本地文件、MinIO 与 Cloudflare R2（开发机经公网）副本恢复演练通过；R2 高写入时丢失窗口 22–24 s、中等负载 + 1 s 同步约 1 s；**目标服务器 → R2 未演练**。
 - A09 运维：install/upgrade/rollback/reload/失败升级自动回退在真实 systemd 上通过（见上）；生产机长期运行与重启演练未做。
-- A10 性能：**目标环境未执行**（本机基准见 `docs/BENCHMARK_REPORT.md`，仅供参考）。
+- A10 性能：Linux 云主机上以 cgroup 模拟 1C1G（1 核、1 GiB、GOMAXPROCS=1，真实云盘 fsync p99 3.3 ms），§13/§23 的 9 个目标速率场景全部达标、错误率 0，3000 长连接 RSS ≤ 181 MiB（`docs/BENCHMARK_REPORT.md` §8）；**不是正式验收**：模拟环境、客户端同机、稳态 60 s（PRD 要求 10 min + 24 h 稳定性）。
 - A11 扩展：PG 跑同一套业务契约测试 + 多实例测试——通过。
 - 游戏专项：G-A01/02/03/04/06 通过；G-A05 通过（规则版本、对局令牌、隔离不发奖）；G-A07（资源版本切换与回滚无缺失文件）在 local 存储（SQLite/PG 测试）与真实 MinIO（`scripts/drill/assets_minio.sh`）上通过，**R2 与真实 CDN 未执行**；G-A08 真机未执行；G-A09 通过（多游戏隔离 + 每游戏资源配额，见 `docs/api/quotas.md`；配额吞吐成本未测）；G-A10 本地恢复后对账通过，R2 未执行。
 
 ## 仍需外部环境才能完成
-1. 1C1G Linux 目标机：§13/§23 压测、驱动选型确认（ADR-0001）、断电模型（部署脚本已在真实 systemd 上通过）。
+1. 真实 1C1G 机器上的正式 A10（10 min 稳态、24 h 稳定性、独立压测机）、驱动选型的 Linux 对比（ADR-0001）、断电模型；cgroup 近似与 systemd 部署已在 Linux 云主机上通过。
 2. Cloudflare：CDN 实测（资源缓存命中与清除）；目标服务器 → R2 的复制 RPO/RTO 与费用。
 3. 真实平台：微信 code2session、Apple 沙盒交易与通知、Google Play 购买与 RTDN、微信支付下单与回调、AdMob 回调。
 4. 真机：Safari iPhone 与微信小游戏验证 SDK（G-A08）。

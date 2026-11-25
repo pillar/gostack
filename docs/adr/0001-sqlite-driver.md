@@ -31,3 +31,7 @@
 3. CGO 静态 Linux 构建（musl/zig）的可行性与体积。
 
 在以上完成之前保持 modernc。若 1C1G 上点查/混合负载被证明受驱动 CPU 限制且 CGO 构建链可接受，再考虑切换；驱动差异仍被限制在 `adapters/sqlite`（DSN 构造与错误码判断）。
+
+## 补充证据（2026-11-25，Linux cgroup 1C1G 近似）
+
+modernc.org/sqlite 在 Linux x86_64 云主机（1 核、1 GiB cgroup，真实云盘 fsync p99 3.3 ms）上满足 PRD §13/§23 全部 9 个目标速率场景（FULL 同步写 100 RPS P99 8.9 ms，见 `docs/BENCHMARK_REPORT.md` §8）。这说明纯 Go 驱动在目标速率下不是瓶颈；但 Linux 上未与 CGO 驱动做对比、未做饱和点对比，状态仍为暂定。

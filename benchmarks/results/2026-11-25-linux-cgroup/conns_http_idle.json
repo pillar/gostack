@@ -1,0 +1,34 @@
+{
+  "label": "local, not acceptance",
+  "scenario": "idlehttp",
+  "description": "idle HTTP/1.1 keep-alive connections after one GET /healthz each",
+  "target_connections": 3000,
+  "opened": 3000,
+  "open_errors": {},
+  "hold_s": 60,
+  "alive_at_end": 3000,
+  "dropped_during_hold": 0,
+  "connect_latency": {
+    "count": 3000,
+    "min_ms": 0.26,
+    "mean_ms": 0.5383896666666667,
+    "p50_ms": 0.479,
+    "p90_ms": 0.655,
+    "p95_ms": 0.751,
+    "p99_ms": 2.143,
+    "p999_ms": 6.591,
+    "max_ms": 7.796
+  },
+  "server": {
+    "pid": 457743,
+    "rss_start_kib": 180428,
+    "rss_max_kib": 180532,
+    "rss_end_kib": 180532,
+    "cpu_seconds": 0,
+    "cpu_util": 0
+  },
+  "client_go": "go1.27.1",
+  "notes": [
+    "server http.Server IdleTimeout is 120s (app/app.go); holds longer than that are expected to be closed by the server"
+  ]
+}

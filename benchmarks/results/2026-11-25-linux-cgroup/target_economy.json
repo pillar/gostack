@@ -1,0 +1,108 @@
+{
+  "label": "local, not acceptance",
+  "scenario": "economy",
+  "description": "POST /rewards/bench_coin/claim (FULL); 2% replays of an earlier Idempotency-Key",
+  "budget": {
+    "prd": "§23 经济事务 FULL",
+    "target_rps": 50,
+    "percentile": 0.99,
+    "limit_ms": 150,
+    "max_error_rate": 0.001
+  },
+  "offered_rps": 50,
+  "warmup_s": 15,
+  "steady_s": 60,
+  "started_at": "2026-11-25T18:49:28.511983435+08:00",
+  "scheduled": 3000,
+  "completed": 3000,
+  "achieved_rps": 50,
+  "ok": 3000,
+  "expected_rejections": 0,
+  "errors": 0,
+  "error_rate": 0,
+  "error_kinds": {},
+  "latency_corrected": {
+    "count": 3000,
+    "min_ms": 0.777,
+    "mean_ms": 3.678900666666667,
+    "p50_ms": 3.487,
+    "p90_ms": 4.415,
+    "p95_ms": 5.151,
+    "p99_ms": 8.895,
+    "p999_ms": 12.927,
+    "max_ms": 14.306
+  },
+  "latency_service": {
+    "count": 3000,
+    "min_ms": 0.756,
+    "mean_ms": 3.6526793333333334,
+    "p50_ms": 3.455,
+    "p90_ms": 4.383,
+    "p95_ms": 5.119,
+    "p99_ms": 8.831,
+    "p999_ms": 12.927,
+    "max_ms": 14.284
+  },
+  "client_schedule_lag": {
+    "count": 3000,
+    "min_ms": 0,
+    "mean_ms": 0.0022803333333333334,
+    "p50_ms": 0,
+    "p90_ms": 0,
+    "p95_ms": 0,
+    "p99_ms": 0.002,
+    "p999_ms": 0.763,
+    "max_ms": 1.747
+  },
+  "ops": {
+    "claim": {
+      "count": 2942,
+      "ok": 2942,
+      "expected_rejections": 0,
+      "errors": 0,
+      "latency": {
+        "count": 2942,
+        "min_ms": 2.365,
+        "mean_ms": 3.7336519374575117,
+        "p50_ms": 3.487,
+        "p90_ms": 4.447,
+        "p95_ms": 5.151,
+        "p99_ms": 8.895,
+        "p999_ms": 12.927,
+        "max_ms": 14.306
+      }
+    },
+    "claim_replay": {
+      "count": 58,
+      "ok": 58,
+      "expected_rejections": 0,
+      "errors": 0,
+      "latency": {
+        "count": 58,
+        "min_ms": 0.777,
+        "mean_ms": 0.9016896551724138,
+        "p50_ms": 0.875,
+        "p90_ms": 0.999,
+        "p95_ms": 1.019,
+        "p99_ms": 1.063,
+        "p999_ms": 1.364,
+        "max_ms": 1.364
+      }
+    }
+  },
+  "budget_measured_ms": 8.895,
+  "pass_local": true,
+  "server": {
+    "pid": 449582,
+    "rss_start_kib": 38020,
+    "rss_max_kib": 38060,
+    "rss_end_kib": 38060,
+    "cpu_seconds": 4,
+    "cpu_util": 0.06667803818156169
+  },
+  "client_dropped": 0,
+  "client_max_inflight": 1,
+  "claim_replays_ok": 72,
+  "client_go": "go1.27.1",
+  "client_gomaxprocs": 2
+}

@@ -1,0 +1,90 @@
+{
+  "label": "local, not acceptance",
+  "scenario": "memory",
+  "description": "GET /healthz (no storage access)",
+  "budget": {
+    "prd": "§13 内存 API",
+    "target_rps": 1000,
+    "percentile": 0.99,
+    "limit_ms": 30,
+    "max_error_rate": 0.001
+  },
+  "offered_rps": 1000,
+  "warmup_s": 15,
+  "steady_s": 60,
+  "started_at": "2026-11-25T18:58:11.143079345+08:00",
+  "scheduled": 60000,
+  "completed": 60000,
+  "achieved_rps": 1000,
+  "ok": 60000,
+  "expected_rejections": 0,
+  "errors": 0,
+  "error_rate": 0,
+  "error_kinds": {},
+  "latency_corrected": {
+    "count": 60000,
+    "min_ms": 0.135,
+    "mean_ms": 0.732501,
+    "p50_ms": 0.283,
+    "p90_ms": 1.727,
+    "p95_ms": 2.431,
+    "p99_ms": 5.535,
+    "p999_ms": 10.815,
+    "max_ms": 19.066
+  },
+  "latency_service": {
+    "count": 60000,
+    "min_ms": 0.133,
+    "mean_ms": 0.7195432666666667,
+    "p50_ms": 0.279,
+    "p90_ms": 1.719,
+    "p95_ms": 2.367,
+    "p99_ms": 5.375,
+    "p999_ms": 10.495,
+    "max_ms": 19.061
+  },
+  "client_schedule_lag": {
+    "count": 60000,
+    "min_ms": 0,
+    "mean_ms": 0.008585633333333334,
+    "p50_ms": 0,
+    "p90_ms": 0,
+    "p95_ms": 0,
+    "p99_ms": 0.103,
+    "p999_ms": 2.031,
+    "max_ms": 5.104
+  },
+  "ops": {
+    "healthz": {
+      "count": 60000,
+      "ok": 60000,
+      "expected_rejections": 0,
+      "errors": 0,
+      "latency": {
+        "count": 60000,
+        "min_ms": 0.135,
+        "mean_ms": 0.732501,
+        "p50_ms": 0.283,
+        "p90_ms": 1.727,
+        "p95_ms": 2.431,
+        "p99_ms": 5.535,
+        "p999_ms": 10.815,
+        "max_ms": 19.066
+      }
+    }
+  },
+  "budget_measured_ms": 5.535,
+  "pass_local": true,
+  "server": {
+    "pid": 462422,
+    "rss_start_kib": 23036,
+    "rss_max_kib": 23172,
+    "rss_end_kib": 23172,
+    "cpu_seconds": 8,
+    "cpu_util": 0.1333226159548691
+  },
+  "client_dropped": 0,
+  "client_max_inflight": 15,
+  "client_go": "go1.27.1",
+  "client_gomaxprocs": 2
+}

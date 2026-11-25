@@ -1,0 +1,93 @@
+{
+  "label": "local, not acceptance",
+  "scenario": "memory",
+  "description": "GET /healthz (no storage access)",
+  "budget": {
+    "prd": "§13 内存 API",
+    "target_rps": 1000,
+    "percentile": 0.99,
+    "limit_ms": 30,
+    "max_error_rate": 0.001
+  },
+  "offered_rps": 1000,
+  "warmup_s": 15,
+  "steady_s": 60,
+  "started_at": "2026-11-25T18:40:42.621201881+08:00",
+  "scheduled": 60000,
+  "completed": 60000,
+  "achieved_rps": 1000,
+  "ok": 60000,
+  "expected_rejections": 0,
+  "errors": 0,
+  "error_rate": 0,
+  "error_kinds": {},
+  "latency_corrected": {
+    "count": 60000,
+    "min_ms": 0.133,
+    "mean_ms": 5.811611883333333,
+    "p50_ms": 0.631,
+    "p90_ms": 22.399,
+    "p95_ms": 27.647,
+    "p99_ms": 32.255,
+    "p999_ms": 38.143,
+    "max_ms": 48.106
+  },
+  "latency_service": {
+    "count": 60000,
+    "min_ms": 0.131,
+    "mean_ms": 1.6635727666666666,
+    "p50_ms": 0.611,
+    "p90_ms": 3.343,
+    "p95_ms": 4.255,
+    "p99_ms": 21.759,
+    "p999_ms": 34.047,
+    "max_ms": 48.104
+  },
+  "client_schedule_lag": {
+    "count": 60000,
+    "min_ms": 0,
+    "mean_ms": 3.9753960833333335,
+    "p50_ms": 0,
+    "p90_ms": 17.919,
+    "p95_ms": 23.679,
+    "p99_ms": 27.903,
+    "p999_ms": 33.023,
+    "max_ms": 37.691
+  },
+  "ops": {
+    "healthz": {
+      "count": 60000,
+      "ok": 60000,
+      "expected_rejections": 0,
+      "errors": 0,
+      "latency": {
+        "count": 60000,
+        "min_ms": 0.133,
+        "mean_ms": 5.811611883333333,
+        "p50_ms": 0.631,
+        "p90_ms": 22.399,
+        "p95_ms": 27.647,
+        "p99_ms": 32.255,
+        "p999_ms": 38.143,
+        "max_ms": 48.106
+      }
+    }
+  },
+  "budget_measured_ms": 32.255,
+  "pass_local": false,
+  "fail_reasons": [
+    "p99 32.3ms \u003e 30ms"
+  ],
+  "server": {
+    "pid": 449582,
+    "rss_start_kib": 24100,
+    "rss_max_kib": 25132,
+    "rss_end_kib": 24708,
+    "cpu_seconds": 7,
+    "cpu_util": 0.11665653254064434
+  },
+  "client_dropped": 0,
+  "client_max_inflight": 48,
+  "client_go": "go1.27.1",
+  "client_gomaxprocs": 2
+}

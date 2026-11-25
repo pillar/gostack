@@ -1,0 +1,17 @@
+18:38:32 env
+18:38:33 fsync probe
+18:38:39 seed (cgroup 1 CPU / 1G)
+18:40:27 scenario memory
+18:41:42 scenario config_player
+18:42:57 scenario pointread
+18:44:13 scenario mixed9010
+18:45:28 scenario fullwrite
+18:46:43 scenario board
+18:47:58 scenario save8k
+18:49:13 scenario economy
+18:50:28 scenario gamemix
+18:51:43 ws idle 3000 x 120s
+18:53:50 ws active 3000, msg every 30s, 120s
+18:55:56 http idle 3000 x 60s
+18:57:02 verify economy + reconcile
+18:57:03 done

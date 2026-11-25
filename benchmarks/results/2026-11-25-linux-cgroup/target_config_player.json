@@ -1,0 +1,107 @@
+{
+  "label": "local, not acceptance",
+  "scenario": "config_player",
+  "description": "GET /config (cached doc + game row read) 50% / GET /me (session + player point reads) 50%",
+  "budget": {
+    "prd": "§23 配置与玩家读取",
+    "target_rps": 300,
+    "percentile": 0.95,
+    "limit_ms": 30,
+    "max_error_rate": 0.001
+  },
+  "offered_rps": 300,
+  "warmup_s": 15,
+  "steady_s": 60,
+  "started_at": "2026-11-25T18:41:57.863397806+08:00",
+  "scheduled": 18000,
+  "completed": 18000,
+  "achieved_rps": 300,
+  "ok": 18000,
+  "expected_rejections": 0,
+  "errors": 0,
+  "error_rate": 0,
+  "error_kinds": {},
+  "latency_corrected": {
+    "count": 18000,
+    "min_ms": 0.367,
+    "mean_ms": 0.7219882222222223,
+    "p50_ms": 0.671,
+    "p90_ms": 0.855,
+    "p95_ms": 1.031,
+    "p99_ms": 2.079,
+    "p999_ms": 5.919,
+    "max_ms": 12.268
+  },
+  "latency_service": {
+    "count": 18000,
+    "min_ms": 0.36,
+    "mean_ms": 0.6987258888888889,
+    "p50_ms": 0.655,
+    "p90_ms": 0.835,
+    "p95_ms": 0.987,
+    "p99_ms": 1.903,
+    "p999_ms": 4.447,
+    "max_ms": 11.598
+  },
+  "client_schedule_lag": {
+    "count": 18000,
+    "min_ms": 0,
+    "mean_ms": 0.006708277777777778,
+    "p50_ms": 0,
+    "p90_ms": 0,
+    "p95_ms": 0.002,
+    "p99_ms": 0.038,
+    "p999_ms": 1.719,
+    "max_ms": 8.54
+  },
+  "ops": {
+    "config": {
+      "count": 8974,
+      "ok": 8974,
+      "expected_rejections": 0,
+      "errors": 0,
+      "latency": {
+        "count": 8974,
+        "min_ms": 0.367,
+        "mean_ms": 0.6540897035881434,
+        "p50_ms": 0.615,
+        "p90_ms": 0.767,
+        "p95_ms": 0.847,
+        "p99_ms": 1.759,
+        "p999_ms": 4.735,
+        "max_ms": 8.085
+      }
+    },
+    "me": {
+      "count": 9026,
+      "ok": 9026,
+      "expected_rejections": 0,
+      "errors": 0,
+      "latency": {
+        "count": 9026,
+        "min_ms": 0.446,
+        "mean_ms": 0.7894955683580767,
+        "p50_ms": 0.727,
+        "p90_ms": 0.923,
+        "p95_ms": 1.207,
+        "p99_ms": 2.223,
+        "p999_ms": 7.167,
+        "max_ms": 12.268
+      }
+    }
+  },
+  "budget_measured_ms": 1.031,
+  "pass_local": true,
+  "server": {
+    "pid": 449582,
+    "rss_start_kib": 33316,
+    "rss_max_kib": 33492,
+    "rss_end_kib": 33492,
+    "cpu_seconds": 9,
+    "cpu_util": 0.14999128594126154
+  },
+  "client_dropped": 0,
+  "client_max_inflight": 4,
+  "client_go": "go1.27.1",
+  "client_gomaxprocs": 2
+}

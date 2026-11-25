@@ -1,0 +1,90 @@
+{
+  "label": "local, not acceptance",
+  "scenario": "board",
+  "description": "GET /boards/main?limit=100 (anonymous Top-100, 100k-row current season, 1M-row table)",
+  "budget": {
+    "prd": "§23 Top 100 榜单",
+    "target_rps": 200,
+    "percentile": 0.95,
+    "limit_ms": 20,
+    "max_error_rate": 0.001
+  },
+  "offered_rps": 200,
+  "warmup_s": 15,
+  "steady_s": 60,
+  "started_at": "2026-11-25T18:46:58.303294259+08:00",
+  "scheduled": 12000,
+  "completed": 12000,
+  "achieved_rps": 200,
+  "ok": 12000,
+  "expected_rejections": 0,
+  "errors": 0,
+  "error_rate": 0,
+  "error_kinds": {},
+  "latency_corrected": {
+    "count": 12000,
+    "min_ms": 0.641,
+    "mean_ms": 0.9986156666666667,
+    "p50_ms": 0.943,
+    "p90_ms": 1.167,
+    "p95_ms": 1.287,
+    "p99_ms": 2.127,
+    "p999_ms": 4.863,
+    "max_ms": 12.391
+  },
+  "latency_service": {
+    "count": 12000,
+    "min_ms": 0.629,
+    "mean_ms": 0.9752733333333333,
+    "p50_ms": 0.923,
+    "p90_ms": 1.143,
+    "p95_ms": 1.247,
+    "p99_ms": 1.983,
+    "p999_ms": 4.447,
+    "max_ms": 12.377
+  },
+  "client_schedule_lag": {
+    "count": 12000,
+    "min_ms": 0,
+    "mean_ms": 0.002927,
+    "p50_ms": 0,
+    "p90_ms": 0,
+    "p95_ms": 0,
+    "p99_ms": 0.005,
+    "p999_ms": 0.719,
+    "max_ms": 3.98
+  },
+  "ops": {
+    "board_top100": {
+      "count": 12000,
+      "ok": 12000,
+      "expected_rejections": 0,
+      "errors": 0,
+      "latency": {
+        "count": 12000,
+        "min_ms": 0.641,
+        "mean_ms": 0.9986156666666667,
+        "p50_ms": 0.943,
+        "p90_ms": 1.167,
+        "p95_ms": 1.287,
+        "p99_ms": 2.127,
+        "p999_ms": 4.863,
+        "max_ms": 12.391
+      }
+    }
+  },
+  "budget_measured_ms": 1.287,
+  "pass_local": true,
+  "server": {
+    "pid": 449582,
+    "rss_start_kib": 37832,
+    "rss_max_kib": 37904,
+    "rss_end_kib": 37904,
+    "cpu_seconds": 11,
+    "cpu_util": 0.18332743716852096
+  },
+  "client_dropped": 0,
+  "client_max_inflight": 2,
+  "client_go": "go1.27.1",
+  "client_gomaxprocs": 2
+}

@@ -1,0 +1,35 @@
+{
+  "arch": "amd64",
+  "dir": "/var/lib/gsbench",
+  "file_sync": {
+    "latency": {
+      "count": 2000,
+      "min_ms": 0.337,
+      "mean_ms": 1.679231,
+      "p50_ms": 1.567,
+      "p90_ms": 2.127,
+      "p95_ms": 2.495,
+      "p99_ms": 3.295,
+      "p999_ms": 5.407,
+      "max_ms": 95.916
+    },
+    "per_second": 588.2715115723202
+  },
+  "fsync": {
+    "latency": {
+      "count": 2000,
+      "min_ms": 0.319,
+      "mean_ms": 1.6925145,
+      "p50_ms": 1.615,
+      "p90_ms": 2.175,
+      "p95_ms": 2.511,
+      "p99_ms": 3.375,
+      "p999_ms": 5.471,
+      "max_ms": 10.381
+    },
+    "per_second": 585.4753531432106
+  },
+  "iterations": 2000,
+  "os": "linux",
+  "write_bytes": 4096
+}

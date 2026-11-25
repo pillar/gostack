@@ -1,0 +1,90 @@
+{
+  "label": "local, not acceptance",
+  "scenario": "pointread",
+  "description": "GET /saves/profile: session lookup + PK read of a 1 KiB save",
+  "budget": {
+    "prd": "§13 索引点查",
+    "target_rps": 500,
+    "percentile": 0.99,
+    "limit_ms": 50,
+    "max_error_rate": 0.001
+  },
+  "offered_rps": 500,
+  "warmup_s": 15,
+  "steady_s": 60,
+  "started_at": "2026-11-25T18:43:12.958685091+08:00",
+  "scheduled": 30000,
+  "completed": 30000,
+  "achieved_rps": 500,
+  "ok": 30000,
+  "expected_rejections": 0,
+  "errors": 0,
+  "error_rate": 0,
+  "error_kinds": {},
+  "latency_corrected": {
+    "count": 30000,
+    "min_ms": 0.396,
+    "mean_ms": 11.9125778,
+    "p50_ms": 6.879,
+    "p90_ms": 31.231,
+    "p95_ms": 37.119,
+    "p99_ms": 46.847,
+    "p999_ms": 57.599,
+    "max_ms": 81.176
+  },
+  "latency_service": {
+    "count": 30000,
+    "min_ms": 0.393,
+    "mean_ms": 8.583233966666667,
+    "p50_ms": 6.047,
+    "p90_ms": 19.327,
+    "p95_ms": 24.959,
+    "p99_ms": 34.559,
+    "p999_ms": 49.663,
+    "max_ms": 63.268
+  },
+  "client_schedule_lag": {
+    "count": 30000,
+    "min_ms": 0,
+    "mean_ms": 3.2066348,
+    "p50_ms": 0,
+    "p90_ms": 14.847,
+    "p95_ms": 20.863,
+    "p99_ms": 26.751,
+    "p999_ms": 30.975,
+    "max_ms": 36.781
+  },
+  "ops": {
+    "save_get_1k": {
+      "count": 30000,
+      "ok": 30000,
+      "expected_rejections": 0,
+      "errors": 0,
+      "latency": {
+        "count": 30000,
+        "min_ms": 0.396,
+        "mean_ms": 11.9125778,
+        "p50_ms": 6.879,
+        "p90_ms": 31.231,
+        "p95_ms": 37.119,
+        "p99_ms": 46.847,
+        "p999_ms": 57.599,
+        "max_ms": 81.176
+      }
+    }
+  },
+  "budget_measured_ms": 46.847,
+  "pass_local": true,
+  "server": {
+    "pid": 449582,
+    "rss_start_kib": 43676,
+    "rss_max_kib": 44312,
+    "rss_end_kib": 44280,
+    "cpu_seconds": 17,
+    "cpu_util": 0.2832419615961165
+  },
+  "client_dropped": 0,
+  "client_max_inflight": 40,
+  "client_go": "go1.27.1",
+  "client_gomaxprocs": 2
+}

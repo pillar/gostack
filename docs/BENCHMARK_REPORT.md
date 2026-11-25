@@ -116,6 +116,32 @@ macOS 的 `fsync(2)` 不刷新磁盘写缓存，所以**本机所有 FULL 写场
 - 二进制（`driver_size.txt`，最小程序）：darwin/arm64 strip 后 modernc 6.45 MB、mattn 3.77 MB；modernc linux/amd64 6.65 MB、linux/arm64 6.49 MB（`CGO_ENABLED=0`）；mattn 在本机交叉编译 linux **失败**（无 Linux C 工具链）。
 - 许可证核对见 ADR-0001。结论：ADR-0001 **保持暂定**，缺 Linux 1C1G 上的整机对比。
 
+## 8. Linux cgroup 1C1G 近似（2026-11-25，共享云主机，**近似，不是正式 A10 验收**）
+
+**环境**：腾讯云新加坡，Ubuntu 24.04.4、Linux 6.8、x86_64（AMD EPYC 9754），主机 2 vCPU / 3.6 GiB，ext4 云盘；主机上同时运行其他服务（负载基线 0.1）。GoStack 服务以 systemd 临时单元运行，`CPUQuota=100%`、`MemoryMax=1G`、`GOMAXPROCS=1`、`GOMEMLIMIT=900MiB`（cgroup 模拟 1 vCPU / 1 GiB）；压测客户端在同机另一个 cgroup。数据集同 §23：10 万玩家、100 万榜单行、8 KiB 存档（库 1.62 GB）。每场景预热 15 s + 稳态 60 s（短于 PRD 的 2 min + 10 min），开环恒定到达率，PRD 目标速率，未做饱和搜索。脚本：`benchmarks/scripts/run_linux_cgroup.sh`；原始结果：`benchmarks/results/2026-11-25-linux-cgroup/`。
+
+**fsync（真实云盘）**：p50 1.6 ms、p99 3.3 ms、p999 5.5 ms（macOS 本机 `fsync` 只有 0.02 ms 且不落盘，§2 的写场景数字因此偏乐观；本节是真实持久化）。
+
+| 场景 | PRD 目标 | 实测 | 结果 |
+|---|---|---|---|
+| memory | 1000 RPS，P99 ≤30 ms | P99 5.5 ms（客户端 1 核）；客户端限 0.7 核时 32.3 ms | 通过（见注） |
+| config_player | 300 RPS，P95 ≤30 ms | P95 1.0 ms | 通过 |
+| pointread | 500 RPS，P99 ≤50 ms | P99 10.7 ms（客户端 1 核）；客户端限 0.7 核时 46.8 ms | 通过（见注） |
+| mixed9010 | 300 RPS，P99 ≤100 ms | P99 6.8 ms | 通过 |
+| fullwrite（FULL 同步） | 100 RPS，P99 ≤150 ms | P99 8.9 ms | 通过 |
+| board Top-100 | 200 RPS，P95 ≤20 ms | P95 1.3 ms | 通过 |
+| save8k | 50 RPS，P95 ≤50 ms | P95 5.7 ms | 通过 |
+| economy | 50 RPS，P99 ≤150 ms | P99 8.9 ms | 通过 |
+| gamemix | 200 RPS，P99 ≤150 ms | P99 6.2 ms | 通过 |
+
+所有场景错误率 0。注：首轮客户端被限制在 0.7 核，1000 RPS 时客户端自身被 CFS 节流（调度滞后 p99 约 28 ms，服务端 CPU 只用 12%），memory 的 P99 因此记为 32.3 ms；把客户端放宽到 1 核重跑 memory 与 pointread 后，客户端滞后 p99 < 0.6 ms，P99 分别为 5.5 ms 与 10.7 ms。两轮原始结果都保留（`target_*_client1cpu.json` 为重跑）。
+
+**内存与长连接**：空载 RSS 18 MiB；各目标场景服务端 RSS 峰值 24–50 MiB，CPU 利用率 12–32%（cgroup 1 核内）。3000 个 WebSocket 空闲连接保持 120 s：RSS 144 MiB；3000 个活跃连接（每 30 s 一条消息）120 s：RSS 157 MiB；3000 个 HTTP keep-alive 空闲 60 s：RSS 181 MiB。均远低于 `MemoryMax=1G`，无断开、无 OOM。
+
+**正确性**：运行后经济核对：领奖 8006 = 账本奖励行 8006 = 账本 coin 合计 = 钱包合计，重复领取 0；`game reconcile` 在 10 万玩家库上完成，0 差异（§4 中对账在该规模跑不完的问题已修复）。
+
+**与 PRD 正式验收的差距**：cgroup 模拟而非真实 1C1G 机器（无独立的 page cache 与内核开销隔离；`MemoryMax` 计入页缓存）；压测客户端与服务同机；稳态 60 s 而非 10 min，未做 24 h 稳定性与 30 min 长连接保持；无 TLS/反向代理；共享主机上有其他负载。
+
 ## 6. 复现
 
 ```sh
