@@ -183,6 +183,13 @@ export interface InviteInfo {
 }
 export interface InviteAcceptResult {
   attributed: boolean;
+  /** Grants paid to the caller now ({} when none or pending). */
+  grants: Grants;
+  /** True when the caller is a guest: call invites.claimPending() after binding a platform account. */
+  grantsPending: boolean;
+}
+export interface InviteClaimPendingResult {
+  paid: boolean;
   grants: Grants;
 }
 export interface ShareOpenResult {

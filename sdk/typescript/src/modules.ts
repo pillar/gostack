@@ -15,6 +15,7 @@ import type {
   IapOrder,
   IapVerifyResult,
   InviteAcceptResult,
+  InviteClaimPendingResult,
   InviteInfo,
   Inventory,
   MailClaimResult,
@@ -123,6 +124,9 @@ export interface Apis {
       create(opts?: IdempotentOptions): Promise<{ code: string }>;
       list(): Promise<InviteInfo[]>;
       accept(code: string, opts?: IdempotentOptions): Promise<InviteAcceptResult>;
+      /** Pays invite grants deferred while the invitee was a guest; call after auth.bind succeeds.
+       * 403 identity_required (still guest), 404 (no accepted invite) and 409 already_paid are errors. */
+      claimPending(opts?: IdempotentOptions): Promise<InviteClaimPendingResult>;
     };
     shares: {
       create(channel: string, payload: unknown, opts?: IdempotentOptions): Promise<{ shareId: string }>;
@@ -376,7 +380,11 @@ export function createApis(c: ApiCtx): Apis {
         },
         async accept(code, o) {
           const j = await social.mut('POST', '/invites/' + e(code) + '/accept', undefined, o);
-          return { attributed: !!j['attributed'], grants: j['grants'] ?? {} };
+          return { attributed: !!j['attributed'], grants: j['grants'] ?? {}, grantsPending: !!j['grants_pending'] };
+        },
+        async claimPending(o) {
+          const j = await social.mut('POST', '/invites/claim-pending', undefined, o);
+          return { paid: !!j['paid'], grants: j['grants'] ?? {} };
         },
       },
       shares: {

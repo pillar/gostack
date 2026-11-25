@@ -271,14 +271,16 @@ test('social: invites and shares map responses', async () => {
   const { client } = setup([
     res(200, LOGIN),
     res(201, { code: 'AAAA' }),
-    res(200, { attributed: true, grants: { coin: 5 } }),
+    res(200, { attributed: true, grants: {}, grants_pending: true }),
+    res(200, { paid: true, grants: { coin: 5 } }),
     res(201, { share_id: 'shr_1' }),
     res(200, { share_id: 'shr_1', channel: 'wx', payload: { a: 1 }, first_open: true }),
     res(200, { share_id: 'shr_1', channel: 'wx', payload: { a: 1 }, created_at: 1, opens: 2 }),
   ]);
   await client.auth.loginGuest();
   assert.deepEqual(await client.social.invites.create(), { code: 'AAAA' });
-  assert.deepEqual(await client.social.invites.accept('AAAA'), { attributed: true, grants: { coin: 5 } });
+  assert.deepEqual(await client.social.invites.accept('AAAA'), { attributed: true, grants: {}, grantsPending: true });
+  assert.deepEqual(await client.social.invites.claimPending(), { paid: true, grants: { coin: 5 } });
   assert.deepEqual(await client.social.shares.create('wx', { a: 1 }), { shareId: 'shr_1' });
   assert.equal((await client.social.shares.open('shr_1')).firstOpen, true);
   assert.equal((await client.social.shares.get('shr_1')).opens, 2);
