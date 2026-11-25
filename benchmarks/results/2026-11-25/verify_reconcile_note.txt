@@ -1,0 +1,23 @@
+`example --config bench.yaml --json game reconcile bench` was started after all runs and killed
+after 8.5 minutes at ~96% CPU without finishing (dataset: 100,000 wallet_balances rows,
+287,111 ledger rows). EXPLAIN QUERY PLAN of the Reconcile query (kits/game/economy.go):
+
+QUERY PLAN
+|--MATERIALIZE l
+|  |--SCAN game_ledger USING INDEX game_ledger_player
+|  `--USE TEMP B-TREE FOR GROUP BY
+|--SCAN w
+|--SCAN l LEFT-JOIN
+`--RIGHT-JOIN l
+   `--SCAN l
+
+The FULL OUTER JOIN of wallet_balances against the materialized CTE is a nested-loop scan
+(no index on the CTE), i.e. O(players x ledger groups) ~ 1e10 row comparisons here.
+The global economy invariants were checked instead with `gsseed -verify` (verify_economy.json):
+reward_claims = ledger reward rows = ledger coin sum = wallet coin sum = 287,111, 0 duplicate claim slots.
+Per-player balance equality was NOT checked in this run.
+
+Storage observed at the end (sqlite3 -readonly):
+  idempotency_records: 637,163 rows, response_body total 1,844,515,077 bytes (save PUT responses echo the payload; TTL 72h)
+  save_revisions:      350,052 rows, payload total 1,756,270,592 bytes (save_history 10)
+  app.db grew from 1,621,258,240 bytes (seeded) to 6,805,639,168 bytes.

@@ -1,0 +1,498 @@
+[
+  {
+    "name": "BenchmarkWriteFULL/modernc",
+    "runs": 5,
+    "ns_op": [
+      135646,
+      115094,
+      98732,
+      116550,
+      102731
+    ],
+    "b_op": [
+      811,
+      807,
+      809,
+      807,
+      807
+    ],
+    "allocs_op": [
+      22,
+      22,
+      22,
+      22,
+      22
+    ],
+    "ns_op_min": 98732,
+    "ns_op_median": 115094,
+    "ns_op_max": 135646,
+    "ns_op_spread": 0.3207291431351765,
+    "allocs_op_median": 22,
+    "b_op_median": 807
+  },
+  {
+    "name": "BenchmarkWriteFULL/modernc-4",
+    "runs": 5,
+    "ns_op": [
+      118178,
+      115348,
+      104421,
+      79587,
+      100929
+    ],
+    "b_op": [
+      807,
+      807,
+      807,
+      807,
+      807
+    ],
+    "allocs_op": [
+      22,
+      22,
+      22,
+      22,
+      22
+    ],
+    "ns_op_min": 79587,
+    "ns_op_median": 104421,
+    "ns_op_max": 118178,
+    "ns_op_spread": 0.3695712548242212,
+    "allocs_op_median": 22,
+    "b_op_median": 807
+  },
+  {
+    "name": "BenchmarkWriteFULL/mattn",
+    "runs": 5,
+    "ns_op": [
+      99590,
+      108329,
+      90283,
+      99246,
+      78830
+    ],
+    "b_op": [
+      943,
+      943,
+      943,
+      943,
+      943
+    ],
+    "allocs_op": [
+      28,
+      28,
+      28,
+      28,
+      28
+    ],
+    "ns_op_min": 78830,
+    "ns_op_median": 99246,
+    "ns_op_max": 108329,
+    "ns_op_spread": 0.2972311226648933,
+    "allocs_op_median": 28,
+    "b_op_median": 943
+  },
+  {
+    "name": "BenchmarkWriteFULL/mattn-4",
+    "runs": 5,
+    "ns_op": [
+      76855,
+      82735,
+      104471,
+      88835,
+      131868
+    ],
+    "b_op": [
+      944,
+      943,
+      943,
+      943,
+      943
+    ],
+    "allocs_op": [
+      28,
+      28,
+      28,
+      28,
+      28
+    ],
+    "ns_op_min": 76855,
+    "ns_op_median": 88835,
+    "ns_op_max": 131868,
+    "ns_op_spread": 0.6192716834580965,
+    "allocs_op_median": 28,
+    "b_op_median": 943
+  },
+  {
+    "name": "BenchmarkWriteFULL/modernc/fullfsync",
+    "runs": 5,
+    "ns_op": [
+      4241329,
+      4428795,
+      4458563,
+      4224389,
+      3510365
+    ],
+    "b_op": [
+      776,
+      776,
+      776,
+      776,
+      785
+    ],
+    "allocs_op": [
+      20,
+      20,
+      20,
+      20,
+      20
+    ],
+    "ns_op_min": 3510365,
+    "ns_op_median": 4241329,
+    "ns_op_max": 4458563,
+    "ns_op_spread": 0.22356152988839112,
+    "allocs_op_median": 20,
+    "b_op_median": 776
+  },
+  {
+    "name": "BenchmarkWriteFULL/modernc/fullfsync-4",
+    "runs": 5,
+    "ns_op": [
+      3354253,
+      3360022,
+      3880323,
+      3411773,
+      3323316
+    ],
+    "b_op": [
+      790,
+      788,
+      786,
+      785,
+      787
+    ],
+    "allocs_op": [
+      20,
+      20,
+      20,
+      20,
+      20
+    ],
+    "ns_op_min": 3323316,
+    "ns_op_median": 3360022,
+    "ns_op_max": 3880323,
+    "ns_op_spread": 0.16577480742685613,
+    "allocs_op_median": 20,
+    "b_op_median": 787
+  },
+  {
+    "name": "BenchmarkWriteFULL/mattn/fullfsync",
+    "runs": 5,
+    "ns_op": [
+      3501213,
+      3330155,
+      3428310,
+      3450577,
+      3504906
+    ],
+    "b_op": [
+      927,
+      927,
+      927,
+      927,
+      926
+    ],
+    "allocs_op": [
+      26,
+      26,
+      26,
+      26,
+      26
+    ],
+    "ns_op_min": 3330155,
+    "ns_op_median": 3450577,
+    "ns_op_max": 3504906,
+    "ns_op_spread": 0.050643993743655046,
+    "allocs_op_median": 26,
+    "b_op_median": 927
+  },
+  {
+    "name": "BenchmarkWriteFULL/mattn/fullfsync-4",
+    "runs": 5,
+    "ns_op": [
+      3251744,
+      4124309,
+      5061019,
+      4883511,
+      4471621
+    ],
+    "b_op": [
+      934,
+      928,
+      925,
+      923,
+      922
+    ],
+    "allocs_op": [
+      26,
+      26,
+      26,
+      26,
+      26
+    ],
+    "ns_op_min": 3251744,
+    "ns_op_median": 4471621,
+    "ns_op_max": 5061019,
+    "ns_op_spread": 0.40461277912417,
+    "allocs_op_median": 26,
+    "b_op_median": 925
+  },
+  {
+    "name": "BenchmarkBatchInsert1000/modernc",
+    "runs": 5,
+    "ns_op": [
+      5624834,
+      5724057,
+      5950293,
+      6011413,
+      5498897
+    ],
+    "b_op": [
+      328699,
+      328706,
+      328707,
+      328704,
+      328706
+    ],
+    "allocs_op": [
+      13009,
+      13010,
+      13010,
+      13010,
+      13010
+    ],
+    "ns_op_min": 5498897,
+    "ns_op_median": 5724057,
+    "ns_op_max": 6011413,
+    "ns_op_spread": 0.08953719363731004,
+    "allocs_op_median": 13010,
+    "b_op_median": 328706
+  },
+  {
+    "name": "BenchmarkBatchInsert1000/modernc-4",
+    "runs": 5,
+    "ns_op": [
+      5653423,
+      9907899,
+      12664325,
+      10715258,
+      10094008
+    ],
+    "b_op": [
+      328768,
+      328755,
+      328724,
+      328737,
+      328737
+    ],
+    "allocs_op": [
+      13011,
+      13009,
+      13005,
+      13007,
+      13007
+    ],
+    "ns_op_min": 5653423,
+    "ns_op_median": 10094008,
+    "ns_op_max": 12664325,
+    "ns_op_spread": 0.6945607730843882,
+    "allocs_op_median": 13007,
+    "b_op_median": 328737
+  },
+  {
+    "name": "BenchmarkBatchInsert1000/mattn",
+    "runs": 5,
+    "ns_op": [
+      9147042,
+      8721694,
+      5975238,
+      6578676,
+      5796020
+    ],
+    "b_op": [
+      288874,
+      288878,
+      288882,
+      288879,
+      288889
+    ],
+    "allocs_op": [
+      11016,
+      11017,
+      11017,
+      11017,
+      11018
+    ],
+    "ns_op_min": 5796020,
+    "ns_op_median": 6578676,
+    "ns_op_max": 9147042,
+    "ns_op_spread": 0.509376354755881,
+    "allocs_op_median": 11017,
+    "b_op_median": 288879
+  },
+  {
+    "name": "BenchmarkBatchInsert1000/mattn-4",
+    "runs": 5,
+    "ns_op": [
+      5611059,
+      4774608,
+      5976162,
+      8324288,
+      8028368
+    ],
+    "b_op": [
+      288966,
+      288961,
+      288949,
+      288937,
+      288940
+    ],
+    "allocs_op": [
+      11018,
+      11019,
+      11019,
+      11017,
+      11016
+    ],
+    "ns_op_min": 4774608,
+    "ns_op_median": 5976162,
+    "ns_op_max": 8324288,
+    "ns_op_spread": 0.5939731888124853,
+    "allocs_op_median": 11018,
+    "b_op_median": 288949
+  },
+  {
+    "name": "BenchmarkPointRead4/modernc",
+    "runs": 5,
+    "ns_op": [
+      5914,
+      6051,
+      6228,
+      5522,
+      5526
+    ],
+    "b_op": [
+      2784,
+      2784,
+      2784,
+      2784,
+      2784
+    ],
+    "allocs_op": [
+      25,
+      25,
+      25,
+      25,
+      25
+    ],
+    "ns_op_min": 5522,
+    "ns_op_median": 5914,
+    "ns_op_max": 6228,
+    "ns_op_spread": 0.11937774771728103,
+    "allocs_op_median": 25,
+    "b_op_median": 2784
+  },
+  {
+    "name": "BenchmarkPointRead4/modernc-4",
+    "runs": 5,
+    "ns_op": [
+      4506,
+      4472,
+      4470,
+      4485,
+      4426
+    ],
+    "b_op": [
+      2784,
+      2784,
+      2784,
+      2784,
+      2784
+    ],
+    "allocs_op": [
+      25,
+      25,
+      25,
+      25,
+      25
+    ],
+    "ns_op_min": 4426,
+    "ns_op_median": 4472,
+    "ns_op_max": 4506,
+    "ns_op_spread": 0.017889087656529516,
+    "allocs_op_median": 25,
+    "b_op_median": 2784
+  },
+  {
+    "name": "BenchmarkPointRead4/mattn",
+    "runs": 5,
+    "ns_op": [
+      3730,
+      3676,
+      3832,
+      3852,
+      3550
+    ],
+    "b_op": [
+      2623,
+      2623,
+      2623,
+      2623,
+      2623
+    ],
+    "allocs_op": [
+      17,
+      17,
+      17,
+      17,
+      17
+    ],
+    "ns_op_min": 3550,
+    "ns_op_median": 3730,
+    "ns_op_max": 3852,
+    "ns_op_spread": 0.08096514745308311,
+    "allocs_op_median": 17,
+    "b_op_median": 2623
+  },
+  {
+    "name": "BenchmarkPointRead4/mattn-4",
+    "runs": 5,
+    "ns_op": [
+      3674,
+      3489,
+      3684,
+      3565,
+      5396
+    ],
+    "b_op": [
+      2624,
+      2624,
+      2624,
+      2624,
+      2624
+    ],
+    "allocs_op": [
+      17,
+      17,
+      17,
+      17,
+      17
+    ],
+    "ns_op_min": 3489,
+    "ns_op_median": 3674,
+    "ns_op_max": 5396,
+    "ns_op_spread": 0.5190528034839412,
+    "allocs_op_median": 17,
+    "b_op_median": 2624
+  }
+]

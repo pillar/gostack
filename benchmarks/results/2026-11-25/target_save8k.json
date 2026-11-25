@@ -1,0 +1,90 @@
+{
+  "label": "local, not acceptance",
+  "scenario": "save8k",
+  "description": "PUT /saves/main with an 8 KiB payload (FULL, history 10, Idempotency-Key)",
+  "budget": {
+    "prd": "§23 8KiB 存档写入",
+    "target_rps": 50,
+    "percentile": 0.95,
+    "limit_ms": 50,
+    "max_error_rate": 0.001
+  },
+  "offered_rps": 50,
+  "warmup_s": 30,
+  "steady_s": 90,
+  "started_at": "2026-11-25T09:52:27.920764+08:00",
+  "scheduled": 4500,
+  "completed": 4500,
+  "achieved_rps": 50,
+  "ok": 4500,
+  "expected_rejections": 0,
+  "errors": 0,
+  "error_rate": 0,
+  "error_kinds": {},
+  "latency_corrected": {
+    "count": 4500,
+    "min_ms": 0.514,
+    "mean_ms": 1.2334415555555556,
+    "p50_ms": 1.031,
+    "p90_ms": 1.759,
+    "p95_ms": 1.999,
+    "p99_ms": 4.063,
+    "p999_ms": 9.215,
+    "max_ms": 13.481
+  },
+  "latency_service": {
+    "count": 4500,
+    "min_ms": 0.504,
+    "mean_ms": 1.177508,
+    "p50_ms": 0.995,
+    "p90_ms": 1.695,
+    "p95_ms": 1.935,
+    "p99_ms": 3.615,
+    "p999_ms": 8.255,
+    "max_ms": 9.148
+  },
+  "client_schedule_lag": {
+    "count": 4500,
+    "min_ms": 0,
+    "mean_ms": 0.04459955555555555,
+    "p50_ms": 0.027,
+    "p90_ms": 0.051,
+    "p95_ms": 0.064,
+    "p99_ms": 0.377,
+    "p999_ms": 6.335,
+    "max_ms": 10.325
+  },
+  "ops": {
+    "save_put_8k": {
+      "count": 4500,
+      "ok": 4500,
+      "expected_rejections": 0,
+      "errors": 0,
+      "latency": {
+        "count": 4500,
+        "min_ms": 0.514,
+        "mean_ms": 1.2334415555555556,
+        "p50_ms": 1.031,
+        "p90_ms": 1.759,
+        "p95_ms": 1.999,
+        "p99_ms": 4.063,
+        "p999_ms": 9.215,
+        "max_ms": 13.481
+      }
+    }
+  },
+  "budget_measured_ms": 1.999,
+  "pass_local": true,
+  "server": {
+    "pid": 16361,
+    "rss_start_kib": 51600,
+    "rss_max_kib": 51600,
+    "rss_end_kib": 51600,
+    "cpu_seconds": 4.710000000000001,
+    "cpu_util": 0.05234184668642607
+  },
+  "client_dropped": 0,
+  "client_max_inflight": 1,
+  "client_go": "go1.27.1",
+  "client_gomaxprocs": 15
+}

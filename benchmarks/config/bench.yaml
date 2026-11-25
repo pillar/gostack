@@ -1,0 +1,47 @@
+# Benchmark server configuration. Copy next to the data directory (the run
+# scripts do this); relative paths resolve against this file's directory.
+# Deviations from a production config, and why:
+#   - game.auth_rate_per_minute is raised: every load-generator request comes from
+#     one IP, and the per-IP analytics limiter is derived from it (x4). Production
+#     traffic comes from many IPs; the limiter itself is not what is measured here.
+#   - realtime is enabled so idle/active WebSocket connections can be measured.
+profile: lite
+environment: production
+http:
+  listen: 127.0.0.1:18080
+  internal_listen: 127.0.0.1:19090
+  max_body_bytes: 1048576
+  request_timeout: 10s
+  max_concurrent: 512
+database:
+  driver: sqlite
+  path: data/app.db
+  analytics_path: data/analytics.db
+  read_connections: 2
+  write_connections: 1
+  synchronous: FULL
+  busy_timeout: 5s
+cache:
+  driver: memory
+  max_bytes: 33554432
+queue:
+  driver: sqlite
+  workers: 2
+backup:
+  enabled: false
+  driver: litestream
+log:
+  level: info
+  format: json
+kits: [game]
+game:
+  session_ttl: 24h
+  save_max_bytes: 65536
+  save_slots_per_player: 5
+  auth_rate_per_minute: 1000000
+  score_rate_per_minute: 1000000
+  settlement:
+    interval: 0s
+  modules: [realtime]
+  realtime:
+    max_connections: 4000

@@ -1,0 +1,35 @@
+{
+  "arch": "arm64",
+  "dir": "<BENCH_WORK on internal APFS SSD (/dev/disk3s5)>",
+  "file_sync": {
+    "latency": {
+      "count": 2000,
+      "min_ms": 2.495,
+      "mean_ms": 3.2294319999999996,
+      "p50_ms": 3.023,
+      "p90_ms": 3.807,
+      "p95_ms": 4.351,
+      "p99_ms": 5.695,
+      "p999_ms": 7.327,
+      "max_ms": 14.048
+    },
+    "per_second": 308.0828520953897
+  },
+  "fsync": {
+    "latency": {
+      "count": 2000,
+      "min_ms": 0.017,
+      "mean_ms": 0.024886500000000002,
+      "p50_ms": 0.023,
+      "p90_ms": 0.03,
+      "p95_ms": 0.033,
+      "p99_ms": 0.04,
+      "p999_ms": 0.214,
+      "max_ms": 0.333
+    },
+    "per_second": 34188.49704768653
+  },
+  "iterations": 2000,
+  "os": "darwin",
+  "write_bytes": 4096
+}

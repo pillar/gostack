@@ -1,0 +1,2100 @@
+{
+  "budget": {
+    "prd": "§23 混合负载",
+    "target_rps": 200,
+    "percentile": 0.99,
+    "limit_ms": 150,
+    "max_error_rate": 0.001
+  },
+  "highest_passing_rps": 3417.1875,
+  "label": "local, not acceptance",
+  "mode": "saturation",
+  "scenario": "gamemix",
+  "step_factor": 1.5,
+  "step_steady_s": 15,
+  "step_warmup_s": 5,
+  "steps": [
+    {
+      "label": "local, not acceptance",
+      "scenario": "gamemix",
+      "description": "read 70% (config 20, me 15, save8k get 15, board 10, wallet 10) / save 10% / economy 5% / analytics 15% (20 events)",
+      "budget": {
+        "prd": "§23 混合负载",
+        "target_rps": 200,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 200,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:30:07.577585+08:00",
+      "scheduled": 3000,
+      "completed": 3000,
+      "achieved_rps": 200,
+      "ok": 3000,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 3000,
+        "min_ms": 0.146,
+        "mean_ms": 0.6135243333333333,
+        "p50_ms": 0.437,
+        "p90_ms": 1.215,
+        "p95_ms": 1.535,
+        "p99_ms": 2.847,
+        "p999_ms": 13.247,
+        "max_ms": 14.38
+      },
+      "latency_service": {
+        "count": 3000,
+        "min_ms": 0.142,
+        "mean_ms": 0.5997276666666667,
+        "p50_ms": 0.429,
+        "p90_ms": 1.199,
+        "p95_ms": 1.519,
+        "p99_ms": 2.447,
+        "p999_ms": 13.247,
+        "max_ms": 14.373
+      },
+      "client_schedule_lag": {
+        "count": 3000,
+        "min_ms": 0,
+        "mean_ms": 0.003765333333333333,
+        "p50_ms": 0,
+        "p90_ms": 0.002,
+        "p95_ms": 0.003,
+        "p99_ms": 0.012,
+        "p999_ms": 0.631,
+        "max_ms": 4.114
+      },
+      "ops": {
+        "board_top100": {
+          "count": 298,
+          "ok": 298,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 298,
+            "min_ms": 0.238,
+            "mean_ms": 0.6081375838926175,
+            "p50_ms": 0.591,
+            "p90_ms": 0.835,
+            "p95_ms": 0.931,
+            "p99_ms": 1.311,
+            "p999_ms": 3.834,
+            "max_ms": 3.834
+          }
+        },
+        "claim": {
+          "count": 143,
+          "ok": 143,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 143,
+            "min_ms": 0.497,
+            "mean_ms": 1.2178951048951048,
+            "p50_ms": 1.215,
+            "p90_ms": 1.503,
+            "p95_ms": 1.599,
+            "p99_ms": 2.895,
+            "p999_ms": 14.296,
+            "max_ms": 14.296
+          }
+        },
+        "claim_replay": {
+          "count": 2,
+          "ok": 2,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 2,
+            "min_ms": 0.313,
+            "mean_ms": 0.4145,
+            "p50_ms": 0.313,
+            "p90_ms": 0.516,
+            "p95_ms": 0.516,
+            "p99_ms": 0.516,
+            "p999_ms": 0.516,
+            "max_ms": 0.516
+          }
+        },
+        "config": {
+          "count": 612,
+          "ok": 612,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 612,
+            "min_ms": 0.146,
+            "mean_ms": 0.3734852941176471,
+            "p50_ms": 0.323,
+            "p90_ms": 0.467,
+            "p95_ms": 0.559,
+            "p99_ms": 1.519,
+            "p999_ms": 4.479,
+            "max_ms": 11.149
+          }
+        },
+        "events20": {
+          "count": 413,
+          "ok": 413,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 413,
+            "min_ms": 0.221,
+            "mean_ms": 0.5217384987893463,
+            "p50_ms": 0.455,
+            "p90_ms": 0.647,
+            "p95_ms": 0.807,
+            "p99_ms": 2.367,
+            "p999_ms": 5.657,
+            "max_ms": 5.657
+          }
+        },
+        "me": {
+          "count": 433,
+          "ok": 433,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 433,
+            "min_ms": 0.209,
+            "mean_ms": 0.49675750577367206,
+            "p50_ms": 0.439,
+            "p90_ms": 0.615,
+            "p95_ms": 0.775,
+            "p99_ms": 2.111,
+            "p999_ms": 6.748,
+            "max_ms": 6.748
+          }
+        },
+        "save_get_8k": {
+          "count": 470,
+          "ok": 470,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 470,
+            "min_ms": 0.174,
+            "mean_ms": 0.4911914893617021,
+            "p50_ms": 0.447,
+            "p90_ms": 0.619,
+            "p95_ms": 0.723,
+            "p99_ms": 2.007,
+            "p999_ms": 4.426,
+            "max_ms": 4.426
+          }
+        },
+        "save_put_8k": {
+          "count": 291,
+          "ok": 291,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 291,
+            "min_ms": 0.549,
+            "mean_ms": 1.5951477663230242,
+            "p50_ms": 1.391,
+            "p90_ms": 1.807,
+            "p95_ms": 2.735,
+            "p99_ms": 10.175,
+            "p999_ms": 14.38,
+            "max_ms": 14.38
+          }
+        },
+        "wallet": {
+          "count": 338,
+          "ok": 338,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 338,
+            "min_ms": 0.162,
+            "mean_ms": 0.38510355029585797,
+            "p50_ms": 0.355,
+            "p90_ms": 0.497,
+            "p95_ms": 0.567,
+            "p99_ms": 1.439,
+            "p999_ms": 2.844,
+            "max_ms": 2.844
+          }
+        }
+      },
+      "budget_measured_ms": 2.847,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 218032,
+        "rss_max_kib": 218272,
+        "rss_end_kib": 218272,
+        "cpu_seconds": 1.6599999999999682,
+        "cpu_util": 0.11064948741166482
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 3,
+      "claim_replays_ok": 2,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "gamemix",
+      "description": "read 70% (config 20, me 15, save8k get 15, board 10, wallet 10) / save 10% / economy 5% / analytics 15% (20 events)",
+      "budget": {
+        "prd": "§23 混合负载",
+        "target_rps": 200,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 300,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:30:27.647863+08:00",
+      "scheduled": 4500,
+      "completed": 4500,
+      "achieved_rps": 300,
+      "ok": 4500,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 4500,
+        "min_ms": 0.098,
+        "mean_ms": 0.38130888888888886,
+        "p50_ms": 0.281,
+        "p90_ms": 0.703,
+        "p95_ms": 0.803,
+        "p99_ms": 1.527,
+        "p999_ms": 7.039,
+        "max_ms": 8.95
+      },
+      "latency_service": {
+        "count": 4500,
+        "min_ms": 0.096,
+        "mean_ms": 0.3726308888888889,
+        "p50_ms": 0.273,
+        "p90_ms": 0.691,
+        "p95_ms": 0.795,
+        "p99_ms": 1.503,
+        "p999_ms": 7.039,
+        "max_ms": 8.946
+      },
+      "client_schedule_lag": {
+        "count": 4500,
+        "min_ms": 0,
+        "mean_ms": 0.0020624444444444444,
+        "p50_ms": 0,
+        "p90_ms": 0.001,
+        "p95_ms": 0.002,
+        "p99_ms": 0.012,
+        "p999_ms": 0.491,
+        "max_ms": 2.548
+      },
+      "ops": {
+        "board_top100": {
+          "count": 470,
+          "ok": 470,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 470,
+            "min_ms": 0.214,
+            "mean_ms": 0.39076808510638295,
+            "p50_ms": 0.349,
+            "p90_ms": 0.499,
+            "p95_ms": 0.567,
+            "p99_ms": 1.151,
+            "p999_ms": 4.444,
+            "max_ms": 4.444
+          }
+        },
+        "claim": {
+          "count": 208,
+          "ok": 208,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 208,
+            "min_ms": 0.397,
+            "mean_ms": 0.8101682692307692,
+            "p50_ms": 0.667,
+            "p90_ms": 0.947,
+            "p95_ms": 1.167,
+            "p99_ms": 5.983,
+            "p999_ms": 8.712,
+            "max_ms": 8.712
+          }
+        },
+        "claim_replay": {
+          "count": 3,
+          "ok": 3,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 3,
+            "min_ms": 0.257,
+            "mean_ms": 0.3023333333333333,
+            "p50_ms": 0.287,
+            "p90_ms": 0.364,
+            "p95_ms": 0.364,
+            "p99_ms": 0.364,
+            "p999_ms": 0.364,
+            "max_ms": 0.364
+          }
+        },
+        "config": {
+          "count": 916,
+          "ok": 916,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 916,
+            "min_ms": 0.098,
+            "mean_ms": 0.2381255458515284,
+            "p50_ms": 0.214,
+            "p90_ms": 0.297,
+            "p95_ms": 0.335,
+            "p99_ms": 0.611,
+            "p999_ms": 1.759,
+            "max_ms": 5.384
+          }
+        },
+        "events20": {
+          "count": 669,
+          "ok": 669,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 669,
+            "min_ms": 0.145,
+            "mean_ms": 0.3311001494768311,
+            "p50_ms": 0.283,
+            "p90_ms": 0.399,
+            "p95_ms": 0.455,
+            "p99_ms": 1.047,
+            "p999_ms": 5.247,
+            "max_ms": 7.951
+          }
+        },
+        "me": {
+          "count": 695,
+          "ok": 695,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 695,
+            "min_ms": 0.152,
+            "mean_ms": 0.3092244604316547,
+            "p50_ms": 0.269,
+            "p90_ms": 0.377,
+            "p95_ms": 0.431,
+            "p99_ms": 1.511,
+            "p999_ms": 2.127,
+            "max_ms": 2.631
+          }
+        },
+        "save_get_8k": {
+          "count": 681,
+          "ok": 681,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 681,
+            "min_ms": 0.164,
+            "mean_ms": 0.3071218795888399,
+            "p50_ms": 0.277,
+            "p90_ms": 0.367,
+            "p95_ms": 0.421,
+            "p99_ms": 1.031,
+            "p999_ms": 2.335,
+            "max_ms": 5.628
+          }
+        },
+        "save_put_8k": {
+          "count": 436,
+          "ok": 436,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 436,
+            "min_ms": 0.394,
+            "mean_ms": 0.8833302752293578,
+            "p50_ms": 0.747,
+            "p90_ms": 1.087,
+            "p95_ms": 1.343,
+            "p99_ms": 6.175,
+            "p999_ms": 8.95,
+            "max_ms": 8.95
+          }
+        },
+        "wallet": {
+          "count": 422,
+          "ok": 422,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 422,
+            "min_ms": 0.124,
+            "mean_ms": 0.27010663507109006,
+            "p50_ms": 0.231,
+            "p90_ms": 0.319,
+            "p95_ms": 0.357,
+            "p99_ms": 1.279,
+            "p999_ms": 5.05,
+            "max_ms": 5.05
+          }
+        }
+      },
+      "budget_measured_ms": 1.527,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 218416,
+        "rss_max_kib": 218992,
+        "rss_end_kib": 218992,
+        "cpu_seconds": 1.5499999999999545,
+        "cpu_util": 0.10331922623638716
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 4,
+      "claim_replays_ok": 5,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "gamemix",
+      "description": "read 70% (config 20, me 15, save8k get 15, board 10, wallet 10) / save 10% / economy 5% / analytics 15% (20 events)",
+      "budget": {
+        "prd": "§23 混合负载",
+        "target_rps": 200,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 450,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:30:47.715413+08:00",
+      "scheduled": 6750,
+      "completed": 6750,
+      "achieved_rps": 450,
+      "ok": 6750,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 6750,
+        "min_ms": 0.1,
+        "mean_ms": 0.24288029629629632,
+        "p50_ms": 0.163,
+        "p90_ms": 0.387,
+        "p95_ms": 0.495,
+        "p99_ms": 1.031,
+        "p999_ms": 6.271,
+        "max_ms": 8.382
+      },
+      "latency_service": {
+        "count": 6750,
+        "min_ms": 0.096,
+        "mean_ms": 0.23560755555555557,
+        "p50_ms": 0.159,
+        "p90_ms": 0.383,
+        "p95_ms": 0.487,
+        "p99_ms": 0.967,
+        "p999_ms": 6.271,
+        "max_ms": 8.374
+      },
+      "client_schedule_lag": {
+        "count": 6750,
+        "min_ms": 0,
+        "mean_ms": 0.0033804444444444446,
+        "p50_ms": 0,
+        "p90_ms": 0.003,
+        "p95_ms": 0.004,
+        "p99_ms": 0.007,
+        "p999_ms": 0.305,
+        "max_ms": 4.745
+      },
+      "ops": {
+        "board_top100": {
+          "count": 715,
+          "ok": 715,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 715,
+            "min_ms": 0.176,
+            "mean_ms": 0.25030769230769234,
+            "p50_ms": 0.207,
+            "p90_ms": 0.291,
+            "p95_ms": 0.329,
+            "p99_ms": 1.079,
+            "p999_ms": 2.655,
+            "max_ms": 3.762
+          }
+        },
+        "claim": {
+          "count": 311,
+          "ok": 311,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 311,
+            "min_ms": 0.291,
+            "mean_ms": 0.47737299035369773,
+            "p50_ms": 0.357,
+            "p90_ms": 0.555,
+            "p95_ms": 0.647,
+            "p99_ms": 3.631,
+            "p999_ms": 5.704,
+            "max_ms": 5.704
+          }
+        },
+        "claim_replay": {
+          "count": 2,
+          "ok": 2,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 2,
+            "min_ms": 0.162,
+            "mean_ms": 0.1695,
+            "p50_ms": 0.162,
+            "p90_ms": 0.177,
+            "p95_ms": 0.177,
+            "p99_ms": 0.177,
+            "p999_ms": 0.177,
+            "max_ms": 0.177
+          }
+        },
+        "config": {
+          "count": 1391,
+          "ok": 1391,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 1391,
+            "min_ms": 0.1,
+            "mean_ms": 0.17159669302659958,
+            "p50_ms": 0.124,
+            "p90_ms": 0.186,
+            "p95_ms": 0.23,
+            "p99_ms": 0.907,
+            "p999_ms": 6.426,
+            "max_ms": 6.426
+          }
+        },
+        "events20": {
+          "count": 1004,
+          "ok": 1004,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 1004,
+            "min_ms": 0.129,
+            "mean_ms": 0.19795219123505975,
+            "p50_ms": 0.163,
+            "p90_ms": 0.237,
+            "p95_ms": 0.275,
+            "p99_ms": 0.623,
+            "p999_ms": 2.095,
+            "max_ms": 8.382
+          }
+        },
+        "me": {
+          "count": 1020,
+          "ok": 1020,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 1020,
+            "min_ms": 0.125,
+            "mean_ms": 0.17989215686274512,
+            "p50_ms": 0.151,
+            "p90_ms": 0.217,
+            "p95_ms": 0.242,
+            "p99_ms": 0.355,
+            "p999_ms": 4.127,
+            "max_ms": 6.966
+          }
+        },
+        "save_get_8k": {
+          "count": 990,
+          "ok": 990,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 990,
+            "min_ms": 0.128,
+            "mean_ms": 0.19268383838383837,
+            "p50_ms": 0.162,
+            "p90_ms": 0.228,
+            "p95_ms": 0.251,
+            "p99_ms": 0.647,
+            "p999_ms": 4.415,
+            "max_ms": 4.491
+          }
+        },
+        "save_put_8k": {
+          "count": 665,
+          "ok": 665,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 665,
+            "min_ms": 0.342,
+            "mean_ms": 0.5706932330827068,
+            "p50_ms": 0.407,
+            "p90_ms": 0.635,
+            "p95_ms": 0.791,
+            "p99_ms": 5.407,
+            "p999_ms": 6.431,
+            "max_ms": 6.474
+          }
+        },
+        "wallet": {
+          "count": 652,
+          "ok": 652,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 652,
+            "min_ms": 0.107,
+            "mean_ms": 0.18478067484662578,
+            "p50_ms": 0.134,
+            "p90_ms": 0.194,
+            "p95_ms": 0.227,
+            "p99_ms": 0.871,
+            "p999_ms": 5.631,
+            "max_ms": 5.943
+          }
+        }
+      },
+      "budget_measured_ms": 1.031,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 218992,
+        "rss_max_kib": 219104,
+        "rss_end_kib": 219104,
+        "cpu_seconds": 1.25,
+        "cpu_util": 0.08332611173698279
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 4,
+      "claim_replays_ok": 8,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "gamemix",
+      "description": "read 70% (config 20, me 15, save8k get 15, board 10, wallet 10) / save 10% / economy 5% / analytics 15% (20 events)",
+      "budget": {
+        "prd": "§23 混合负载",
+        "target_rps": 200,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 675,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:31:07.776773+08:00",
+      "scheduled": 10125,
+      "completed": 10125,
+      "achieved_rps": 675,
+      "ok": 10125,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 10125,
+        "min_ms": 0.09,
+        "mean_ms": 0.3550156049382716,
+        "p50_ms": 0.189,
+        "p90_ms": 0.559,
+        "p95_ms": 0.851,
+        "p99_ms": 3.439,
+        "p999_ms": 10.495,
+        "max_ms": 12.906
+      },
+      "latency_service": {
+        "count": 10125,
+        "min_ms": 0.089,
+        "mean_ms": 0.34664118518518516,
+        "p50_ms": 0.186,
+        "p90_ms": 0.547,
+        "p95_ms": 0.815,
+        "p99_ms": 3.247,
+        "p999_ms": 10.495,
+        "max_ms": 12.904
+      },
+      "client_schedule_lag": {
+        "count": 10125,
+        "min_ms": 0,
+        "mean_ms": 0.005702123456790123,
+        "p50_ms": 0,
+        "p90_ms": 0.004,
+        "p95_ms": 0.006,
+        "p99_ms": 0.078,
+        "p999_ms": 1.071,
+        "max_ms": 2.609
+      },
+      "ops": {
+        "board_top100": {
+          "count": 998,
+          "ok": 998,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 998,
+            "min_ms": 0.172,
+            "mean_ms": 0.3396733466933867,
+            "p50_ms": 0.235,
+            "p90_ms": 0.485,
+            "p95_ms": 0.719,
+            "p99_ms": 2.239,
+            "p999_ms": 6.911,
+            "max_ms": 8.01
+          }
+        },
+        "claim": {
+          "count": 525,
+          "ok": 525,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 525,
+            "min_ms": 0.283,
+            "mean_ms": 0.6179790476190477,
+            "p50_ms": 0.433,
+            "p90_ms": 0.791,
+            "p95_ms": 1.311,
+            "p99_ms": 5.727,
+            "p999_ms": 6.431,
+            "max_ms": 7.271
+          }
+        },
+        "claim_replay": {
+          "count": 8,
+          "ok": 8,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 8,
+            "min_ms": 0.19,
+            "mean_ms": 0.272,
+            "p50_ms": 0.205,
+            "p90_ms": 0.349,
+            "p95_ms": 0.514,
+            "p99_ms": 0.514,
+            "p999_ms": 0.514,
+            "max_ms": 0.514
+          }
+        },
+        "config": {
+          "count": 2083,
+          "ok": 2083,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 2083,
+            "min_ms": 0.09,
+            "mean_ms": 0.25572491598655783,
+            "p50_ms": 0.137,
+            "p90_ms": 0.329,
+            "p95_ms": 0.647,
+            "p99_ms": 2.223,
+            "p999_ms": 11.007,
+            "max_ms": 11.369
+          }
+        },
+        "events20": {
+          "count": 1526,
+          "ok": 1526,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 1526,
+            "min_ms": 0.128,
+            "mean_ms": 0.31848492791612054,
+            "p50_ms": 0.183,
+            "p90_ms": 0.409,
+            "p95_ms": 0.755,
+            "p99_ms": 3.231,
+            "p999_ms": 8.447,
+            "max_ms": 11.861
+          }
+        },
+        "me": {
+          "count": 1541,
+          "ok": 1541,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 1541,
+            "min_ms": 0.122,
+            "mean_ms": 0.30542764438676184,
+            "p50_ms": 0.17,
+            "p90_ms": 0.389,
+            "p95_ms": 0.699,
+            "p99_ms": 2.639,
+            "p999_ms": 10.495,
+            "max_ms": 10.634
+          }
+        },
+        "save_get_8k": {
+          "count": 1447,
+          "ok": 1447,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 1447,
+            "min_ms": 0.128,
+            "mean_ms": 0.30101796821008986,
+            "p50_ms": 0.177,
+            "p90_ms": 0.403,
+            "p95_ms": 0.667,
+            "p99_ms": 3.199,
+            "p999_ms": 7.615,
+            "max_ms": 9.173
+          }
+        },
+        "save_put_8k": {
+          "count": 1017,
+          "ok": 1017,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 1017,
+            "min_ms": 0.329,
+            "mean_ms": 0.7513362831858407,
+            "p50_ms": 0.507,
+            "p90_ms": 0.955,
+            "p95_ms": 1.599,
+            "p99_ms": 6.015,
+            "p999_ms": 11.327,
+            "max_ms": 12.041
+          }
+        },
+        "wallet": {
+          "count": 980,
+          "ok": 980,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 980,
+            "min_ms": 0.104,
+            "mean_ms": 0.2447908163265306,
+            "p50_ms": 0.148,
+            "p90_ms": 0.309,
+            "p95_ms": 0.531,
+            "p99_ms": 1.895,
+            "p999_ms": 8.159,
+            "max_ms": 12.906
+          }
+        }
+      },
+      "budget_measured_ms": 3.439,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 219104,
+        "rss_max_kib": 219104,
+        "rss_end_kib": 219104,
+        "cpu_seconds": 2.3600000000000136,
+        "cpu_util": 0.15730048243841435
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 9,
+      "claim_replays_ok": 9,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "gamemix",
+      "description": "read 70% (config 20, me 15, save8k get 15, board 10, wallet 10) / save 10% / economy 5% / analytics 15% (20 events)",
+      "budget": {
+        "prd": "§23 混合负载",
+        "target_rps": 200,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 1012.5,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:31:27.840713+08:00",
+      "scheduled": 15187,
+      "completed": 15187,
+      "achieved_rps": 1012.4666666666667,
+      "ok": 15187,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 15187,
+        "min_ms": 0.097,
+        "mean_ms": 0.5113730822413907,
+        "p50_ms": 0.245,
+        "p90_ms": 0.947,
+        "p95_ms": 1.407,
+        "p99_ms": 4.607,
+        "p999_ms": 14.655,
+        "max_ms": 18.603
+      },
+      "latency_service": {
+        "count": 15187,
+        "min_ms": 0.096,
+        "mean_ms": 0.4960001975373675,
+        "p50_ms": 0.238,
+        "p90_ms": 0.899,
+        "p95_ms": 1.359,
+        "p99_ms": 4.607,
+        "p999_ms": 14.655,
+        "max_ms": 18.601
+      },
+      "client_schedule_lag": {
+        "count": 15187,
+        "min_ms": 0,
+        "mean_ms": 0.012610653848686378,
+        "p50_ms": 0,
+        "p90_ms": 0.008,
+        "p95_ms": 0.019,
+        "p99_ms": 0.385,
+        "p999_ms": 0.959,
+        "max_ms": 2.26
+      },
+      "ops": {
+        "board_top100": {
+          "count": 1525,
+          "ok": 1525,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 1525,
+            "min_ms": 0.184,
+            "mean_ms": 0.5046904918032787,
+            "p50_ms": 0.289,
+            "p90_ms": 0.915,
+            "p95_ms": 1.231,
+            "p99_ms": 3.135,
+            "p999_ms": 12.671,
+            "max_ms": 16.546
+          }
+        },
+        "claim": {
+          "count": 767,
+          "ok": 767,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 767,
+            "min_ms": 0.3,
+            "mean_ms": 0.9017170795306388,
+            "p50_ms": 0.519,
+            "p90_ms": 1.287,
+            "p95_ms": 2.335,
+            "p99_ms": 7.391,
+            "p999_ms": 15.423,
+            "max_ms": 18.603
+          }
+        },
+        "claim_replay": {
+          "count": 12,
+          "ok": 12,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 12,
+            "min_ms": 0.164,
+            "mean_ms": 0.4575,
+            "p50_ms": 0.238,
+            "p90_ms": 0.995,
+            "p95_ms": 0.995,
+            "p99_ms": 1.157,
+            "p999_ms": 1.157,
+            "max_ms": 1.157
+          }
+        },
+        "config": {
+          "count": 3079,
+          "ok": 3079,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 3079,
+            "min_ms": 0.097,
+            "mean_ms": 0.3823926599545307,
+            "p50_ms": 0.165,
+            "p90_ms": 0.791,
+            "p95_ms": 1.239,
+            "p99_ms": 2.927,
+            "p999_ms": 12.927,
+            "max_ms": 16.01
+          }
+        },
+        "events20": {
+          "count": 2242,
+          "ok": 2242,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 2242,
+            "min_ms": 0.134,
+            "mean_ms": 0.4411061552185549,
+            "p50_ms": 0.218,
+            "p90_ms": 0.875,
+            "p95_ms": 1.335,
+            "p99_ms": 3.663,
+            "p999_ms": 11.391,
+            "max_ms": 15.647
+          }
+        },
+        "me": {
+          "count": 2312,
+          "ok": 2312,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 2312,
+            "min_ms": 0.128,
+            "mean_ms": 0.43884904844290656,
+            "p50_ms": 0.203,
+            "p90_ms": 0.843,
+            "p95_ms": 1.247,
+            "p99_ms": 3.327,
+            "p999_ms": 15.295,
+            "max_ms": 16.628
+          }
+        },
+        "save_get_8k": {
+          "count": 2274,
+          "ok": 2274,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 2274,
+            "min_ms": 0.137,
+            "mean_ms": 0.4444639401934916,
+            "p50_ms": 0.215,
+            "p90_ms": 0.847,
+            "p95_ms": 1.247,
+            "p99_ms": 3.423,
+            "p999_ms": 14.335,
+            "max_ms": 17.275
+          }
+        },
+        "save_put_8k": {
+          "count": 1500,
+          "ok": 1500,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 1500,
+            "min_ms": 0.356,
+            "mean_ms": 0.999058,
+            "p50_ms": 0.607,
+            "p90_ms": 1.519,
+            "p95_ms": 2.703,
+            "p99_ms": 7.391,
+            "p999_ms": 14.783,
+            "max_ms": 17.826
+          }
+        },
+        "wallet": {
+          "count": 1476,
+          "ok": 1476,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 1476,
+            "min_ms": 0.109,
+            "mean_ms": 0.41273644986449864,
+            "p50_ms": 0.179,
+            "p90_ms": 0.759,
+            "p95_ms": 1.167,
+            "p99_ms": 3.951,
+            "p999_ms": 14.655,
+            "max_ms": 16.305
+          }
+        }
+      },
+      "budget_measured_ms": 4.607,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 219152,
+        "rss_max_kib": 219168,
+        "rss_end_kib": 219168,
+        "cpu_seconds": 3.8500000000000227,
+        "cpu_util": 0.25662222183636463
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 18,
+      "claim_replays_ok": 20,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "gamemix",
+      "description": "read 70% (config 20, me 15, save8k get 15, board 10, wallet 10) / save 10% / economy 5% / analytics 15% (20 events)",
+      "budget": {
+        "prd": "§23 混合负载",
+        "target_rps": 200,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 1518.75,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:31:47.907178+08:00",
+      "scheduled": 22781,
+      "completed": 22781,
+      "achieved_rps": 1518.7333333333333,
+      "ok": 22781,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 22781,
+        "min_ms": 0.083,
+        "mean_ms": 0.619872174180238,
+        "p50_ms": 0.228,
+        "p90_ms": 1.079,
+        "p95_ms": 2.159,
+        "p99_ms": 7.967,
+        "p999_ms": 16.191,
+        "max_ms": 19.702
+      },
+      "latency_service": {
+        "count": 22781,
+        "min_ms": 0.082,
+        "mean_ms": 0.6053134629735306,
+        "p50_ms": 0.222,
+        "p90_ms": 1.011,
+        "p95_ms": 2.095,
+        "p99_ms": 7.903,
+        "p999_ms": 16.191,
+        "max_ms": 19.7
+      },
+      "client_schedule_lag": {
+        "count": 22781,
+        "min_ms": 0,
+        "mean_ms": 0.011746630964400158,
+        "p50_ms": 0,
+        "p90_ms": 0.008,
+        "p95_ms": 0.017,
+        "p99_ms": 0.343,
+        "p999_ms": 1.111,
+        "max_ms": 2.815
+      },
+      "ops": {
+        "board_top100": {
+          "count": 2182,
+          "ok": 2182,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 2182,
+            "min_ms": 0.177,
+            "mean_ms": 0.6127781851512374,
+            "p50_ms": 0.267,
+            "p90_ms": 1.003,
+            "p95_ms": 1.911,
+            "p99_ms": 7.135,
+            "p999_ms": 15.615,
+            "max_ms": 19.112
+          }
+        },
+        "claim": {
+          "count": 1205,
+          "ok": 1205,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 1205,
+            "min_ms": 0.296,
+            "mean_ms": 1.036592531120332,
+            "p50_ms": 0.497,
+            "p90_ms": 1.783,
+            "p95_ms": 3.759,
+            "p99_ms": 10.175,
+            "p999_ms": 18.303,
+            "max_ms": 19.455
+          }
+        },
+        "claim_replay": {
+          "count": 18,
+          "ok": 18,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 18,
+            "min_ms": 0.171,
+            "mean_ms": 0.30877777777777776,
+            "p50_ms": 0.201,
+            "p90_ms": 0.293,
+            "p95_ms": 0.441,
+            "p99_ms": 1.772,
+            "p999_ms": 1.772,
+            "max_ms": 1.772
+          }
+        },
+        "config": {
+          "count": 4568,
+          "ok": 4568,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 4568,
+            "min_ms": 0.083,
+            "mean_ms": 0.4957340192644484,
+            "p50_ms": 0.152,
+            "p90_ms": 0.859,
+            "p95_ms": 1.871,
+            "p99_ms": 7.007,
+            "p999_ms": 15.615,
+            "max_ms": 19.702
+          }
+        },
+        "events20": {
+          "count": 3323,
+          "ok": 3323,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 3323,
+            "min_ms": 0.123,
+            "mean_ms": 0.5448080048149262,
+            "p50_ms": 0.202,
+            "p90_ms": 1.023,
+            "p95_ms": 1.863,
+            "p99_ms": 7.039,
+            "p999_ms": 15.743,
+            "max_ms": 16.845
+          }
+        },
+        "me": {
+          "count": 3442,
+          "ok": 3442,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 3442,
+            "min_ms": 0.119,
+            "mean_ms": 0.5277536316095293,
+            "p50_ms": 0.19,
+            "p90_ms": 0.879,
+            "p95_ms": 1.767,
+            "p99_ms": 7.487,
+            "p999_ms": 16.639,
+            "max_ms": 17.731
+          }
+        },
+        "save_get_8k": {
+          "count": 3439,
+          "ok": 3439,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 3439,
+            "min_ms": 0.126,
+            "mean_ms": 0.6089476592032568,
+            "p50_ms": 0.202,
+            "p90_ms": 0.983,
+            "p95_ms": 2.175,
+            "p99_ms": 10.047,
+            "p999_ms": 17.663,
+            "max_ms": 19.231
+          }
+        },
+        "save_put_8k": {
+          "count": 2367,
+          "ok": 2367,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 2367,
+            "min_ms": 0.337,
+            "mean_ms": 1.0621960287283483,
+            "p50_ms": 0.563,
+            "p90_ms": 1.719,
+            "p95_ms": 3.775,
+            "p99_ms": 9.087,
+            "p999_ms": 15.359,
+            "max_ms": 18.484
+          }
+        },
+        "wallet": {
+          "count": 2237,
+          "ok": 2237,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 2237,
+            "min_ms": 0.108,
+            "mean_ms": 0.46032498882431827,
+            "p50_ms": 0.164,
+            "p90_ms": 0.863,
+            "p95_ms": 1.679,
+            "p99_ms": 6.431,
+            "p999_ms": 12.351,
+            "max_ms": 14.822
+          }
+        }
+      },
+      "budget_measured_ms": 7.967,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 219232,
+        "rss_max_kib": 219232,
+        "rss_end_kib": 219232,
+        "cpu_seconds": 5.6299999999999955,
+        "cpu_util": 0.37525084069018794
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 27,
+      "claim_replays_ok": 26,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "gamemix",
+      "description": "read 70% (config 20, me 15, save8k get 15, board 10, wallet 10) / save 10% / economy 5% / analytics 15% (20 events)",
+      "budget": {
+        "prd": "§23 混合负载",
+        "target_rps": 200,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 2278.125,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:32:07.976139+08:00",
+      "scheduled": 34172,
+      "completed": 34172,
+      "achieved_rps": 2278.133333333333,
+      "ok": 34172,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 34172,
+        "min_ms": 0.082,
+        "mean_ms": 0.8883223106637013,
+        "p50_ms": 0.207,
+        "p90_ms": 1.863,
+        "p95_ms": 4.191,
+        "p99_ms": 13.247,
+        "p999_ms": 20.735,
+        "max_ms": 26.485
+      },
+      "latency_service": {
+        "count": 34172,
+        "min_ms": 0.082,
+        "mean_ms": 0.8749816223808966,
+        "p50_ms": 0.202,
+        "p90_ms": 1.799,
+        "p95_ms": 4.127,
+        "p99_ms": 13.247,
+        "p999_ms": 20.735,
+        "max_ms": 26.484
+      },
+      "client_schedule_lag": {
+        "count": 34172,
+        "min_ms": 0,
+        "mean_ms": 0.010789564555776659,
+        "p50_ms": 0,
+        "p90_ms": 0.006,
+        "p95_ms": 0.014,
+        "p99_ms": 0.283,
+        "p999_ms": 1.199,
+        "max_ms": 4.115
+      },
+      "ops": {
+        "board_top100": {
+          "count": 3386,
+          "ok": 3386,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 3386,
+            "min_ms": 0.162,
+            "mean_ms": 0.9334081512108683,
+            "p50_ms": 0.237,
+            "p90_ms": 2.143,
+            "p95_ms": 4.255,
+            "p99_ms": 12.799,
+            "p999_ms": 18.943,
+            "max_ms": 20.937
+          }
+        },
+        "claim": {
+          "count": 1686,
+          "ok": 1686,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 1686,
+            "min_ms": 0.264,
+            "mean_ms": 1.3764549228944247,
+            "p50_ms": 0.449,
+            "p90_ms": 3.535,
+            "p95_ms": 6.207,
+            "p99_ms": 14.591,
+            "p999_ms": 19.711,
+            "max_ms": 23.742
+          }
+        },
+        "claim_replay": {
+          "count": 30,
+          "ok": 30,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 30,
+            "min_ms": 0.138,
+            "mean_ms": 1.3127666666666666,
+            "p50_ms": 0.206,
+            "p90_ms": 1.359,
+            "p95_ms": 10.815,
+            "p99_ms": 17.833,
+            "p999_ms": 17.833,
+            "max_ms": 17.833
+          }
+        },
+        "config": {
+          "count": 6769,
+          "ok": 6769,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 6769,
+            "min_ms": 0.082,
+            "mean_ms": 0.7426418968828483,
+            "p50_ms": 0.136,
+            "p90_ms": 1.551,
+            "p95_ms": 3.647,
+            "p99_ms": 12.479,
+            "p999_ms": 19.967,
+            "max_ms": 21.909
+          }
+        },
+        "events20": {
+          "count": 5123,
+          "ok": 5123,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 5123,
+            "min_ms": 0.118,
+            "mean_ms": 0.8571895373804411,
+            "p50_ms": 0.18,
+            "p90_ms": 1.767,
+            "p95_ms": 4.191,
+            "p99_ms": 13.887,
+            "p999_ms": 20.095,
+            "max_ms": 26.485
+          }
+        },
+        "me": {
+          "count": 5185,
+          "ok": 5185,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 5185,
+            "min_ms": 0.112,
+            "mean_ms": 0.8209608486017357,
+            "p50_ms": 0.17,
+            "p90_ms": 1.687,
+            "p95_ms": 4.127,
+            "p99_ms": 12.415,
+            "p999_ms": 21.759,
+            "max_ms": 26.031
+          }
+        },
+        "save_get_8k": {
+          "count": 5103,
+          "ok": 5103,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 5103,
+            "min_ms": 0.118,
+            "mean_ms": 0.8193954536547129,
+            "p50_ms": 0.176,
+            "p90_ms": 1.655,
+            "p95_ms": 3.775,
+            "p99_ms": 13.631,
+            "p999_ms": 22.015,
+            "max_ms": 25.6
+          }
+        },
+        "save_put_8k": {
+          "count": 3382,
+          "ok": 3382,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 3382,
+            "min_ms": 0.313,
+            "mean_ms": 1.2911309875813128,
+            "p50_ms": 0.507,
+            "p90_ms": 2.735,
+            "p95_ms": 5.727,
+            "p99_ms": 13.631,
+            "p999_ms": 21.375,
+            "max_ms": 26.071
+          }
+        },
+        "wallet": {
+          "count": 3508,
+          "ok": 3508,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 3508,
+            "min_ms": 0.098,
+            "mean_ms": 0.7446285632839225,
+            "p50_ms": 0.149,
+            "p90_ms": 1.551,
+            "p95_ms": 3.327,
+            "p99_ms": 11.967,
+            "p999_ms": 20.095,
+            "max_ms": 24.44
+          }
+        }
+      },
+      "budget_measured_ms": 13.247,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 219232,
+        "rss_max_kib": 219232,
+        "rss_end_kib": 219232,
+        "cpu_seconds": 7.269999999999982,
+        "cpu_util": 0.48455561459572705
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 51,
+      "claim_replays_ok": 40,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "gamemix",
+      "description": "read 70% (config 20, me 15, save8k get 15, board 10, wallet 10) / save 10% / economy 5% / analytics 15% (20 events)",
+      "budget": {
+        "prd": "§23 混合负载",
+        "target_rps": 200,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 3417.1875,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:32:28.042278+08:00",
+      "scheduled": 51258,
+      "completed": 51258,
+      "achieved_rps": 3417.2,
+      "ok": 51258,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 51258,
+        "min_ms": 0.083,
+        "mean_ms": 1.7445041749580552,
+        "p50_ms": 0.397,
+        "p90_ms": 4.959,
+        "p95_ms": 8.319,
+        "p99_ms": 20.095,
+        "p999_ms": 29.183,
+        "max_ms": 37.917
+      },
+      "latency_service": {
+        "count": 51258,
+        "min_ms": 0.081,
+        "mean_ms": 1.7286246244488666,
+        "p50_ms": 0.385,
+        "p90_ms": 4.927,
+        "p95_ms": 8.319,
+        "p99_ms": 20.095,
+        "p999_ms": 29.183,
+        "max_ms": 37.914
+      },
+      "client_schedule_lag": {
+        "count": 51258,
+        "min_ms": 0,
+        "mean_ms": 0.013065901907994849,
+        "p50_ms": 0,
+        "p90_ms": 0.011,
+        "p95_ms": 0.037,
+        "p99_ms": 0.331,
+        "p999_ms": 0.895,
+        "max_ms": 4.252
+      },
+      "ops": {
+        "board_top100": {
+          "count": 5058,
+          "ok": 5058,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 5058,
+            "min_ms": 0.162,
+            "mean_ms": 1.7296888098062475,
+            "p50_ms": 0.363,
+            "p90_ms": 4.607,
+            "p95_ms": 8.191,
+            "p99_ms": 19.839,
+            "p999_ms": 29.183,
+            "max_ms": 36.633
+          }
+        },
+        "claim": {
+          "count": 2483,
+          "ok": 2483,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 2483,
+            "min_ms": 0.276,
+            "mean_ms": 2.0261860652436567,
+            "p50_ms": 0.603,
+            "p90_ms": 5.759,
+            "p95_ms": 9.087,
+            "p99_ms": 19.967,
+            "p999_ms": 28.671,
+            "max_ms": 32.82
+          }
+        },
+        "claim_replay": {
+          "count": 54,
+          "ok": 54,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 54,
+            "min_ms": 0.154,
+            "mean_ms": 2.165722222222222,
+            "p50_ms": 0.279,
+            "p90_ms": 9.343,
+            "p95_ms": 11.135,
+            "p99_ms": 16.767,
+            "p999_ms": 18.286,
+            "max_ms": 18.286
+          }
+        },
+        "config": {
+          "count": 10185,
+          "ok": 10185,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 10185,
+            "min_ms": 0.083,
+            "mean_ms": 1.6135571919489446,
+            "p50_ms": 0.236,
+            "p90_ms": 4.607,
+            "p95_ms": 8.063,
+            "p99_ms": 19.711,
+            "p999_ms": 28.671,
+            "max_ms": 37.685
+          }
+        },
+        "events20": {
+          "count": 7822,
+          "ok": 7822,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 7822,
+            "min_ms": 0.122,
+            "mean_ms": 1.6268373817437995,
+            "p50_ms": 0.293,
+            "p90_ms": 4.607,
+            "p95_ms": 7.871,
+            "p99_ms": 19.455,
+            "p999_ms": 25.727,
+            "max_ms": 37.917
+          }
+        },
+        "me": {
+          "count": 7640,
+          "ok": 7640,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 7640,
+            "min_ms": 0.111,
+            "mean_ms": 1.7165145287958115,
+            "p50_ms": 0.287,
+            "p90_ms": 4.895,
+            "p95_ms": 8.383,
+            "p99_ms": 20.351,
+            "p999_ms": 28.543,
+            "max_ms": 37.349
+          }
+        },
+        "save_get_8k": {
+          "count": 7742,
+          "ok": 7742,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 7742,
+            "min_ms": 0.125,
+            "mean_ms": 1.7247658227848102,
+            "p50_ms": 0.311,
+            "p90_ms": 4.991,
+            "p95_ms": 8.255,
+            "p99_ms": 19.199,
+            "p999_ms": 26.111,
+            "max_ms": 35.756
+          }
+        },
+        "save_put_8k": {
+          "count": 5077,
+          "ok": 5077,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 5077,
+            "min_ms": 0.338,
+            "mean_ms": 2.2086669292889503,
+            "p50_ms": 0.671,
+            "p90_ms": 5.855,
+            "p95_ms": 9.087,
+            "p99_ms": 21.887,
+            "p999_ms": 32.255,
+            "max_ms": 34.668
+          }
+        },
+        "wallet": {
+          "count": 5197,
+          "ok": 5197,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 5197,
+            "min_ms": 0.096,
+            "mean_ms": 1.6708000769674813,
+            "p50_ms": 0.263,
+            "p90_ms": 4.799,
+            "p95_ms": 8.511,
+            "p99_ms": 19.583,
+            "p999_ms": 30.975,
+            "max_ms": 36.986
+          }
+        }
+      },
+      "budget_measured_ms": 20.095,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 219264,
+        "rss_max_kib": 219328,
+        "rss_end_kib": 219328,
+        "cpu_seconds": 10.370000000000005,
+        "cpu_util": 0.691136850821302
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 99,
+      "claim_replays_ok": 71,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "gamemix",
+      "description": "read 70% (config 20, me 15, save8k get 15, board 10, wallet 10) / save 10% / economy 5% / analytics 15% (20 events)",
+      "budget": {
+        "prd": "§23 混合负载",
+        "target_rps": 200,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 5125.78125,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:32:48.11022+08:00",
+      "scheduled": 76887,
+      "completed": 76887,
+      "achieved_rps": 5125.8,
+      "ok": 75914,
+      "expected_rejections": 0,
+      "errors": 973,
+      "error_rate": 0.012654935164592193,
+      "error_kinds": {
+        "http_503:overloaded": 808,
+        "transport": 165
+      },
+      "latency_corrected": {
+        "count": 76887,
+        "min_ms": 0.044,
+        "mean_ms": 72.91870381208787,
+        "p50_ms": 3.711,
+        "p90_ms": 229.375,
+        "p95_ms": 329.727,
+        "p99_ms": 602.111,
+        "p999_ms": 954.367,
+        "max_ms": 1234.67
+      },
+      "latency_service": {
+        "count": 76887,
+        "min_ms": 0.044,
+        "mean_ms": 72.90430491500514,
+        "p50_ms": 3.695,
+        "p90_ms": 229.375,
+        "p95_ms": 329.727,
+        "p99_ms": 602.111,
+        "p999_ms": 954.367,
+        "max_ms": 1234.669
+      },
+      "client_schedule_lag": {
+        "count": 76887,
+        "min_ms": 0,
+        "mean_ms": 0.011218541495961605,
+        "p50_ms": 0,
+        "p90_ms": 0.007,
+        "p95_ms": 0.018,
+        "p99_ms": 0.271,
+        "p999_ms": 1.087,
+        "max_ms": 5.131
+      },
+      "ops": {
+        "board_top100": {
+          "count": 7687,
+          "ok": 7587,
+          "expected_rejections": 0,
+          "errors": 100,
+          "latency": {
+            "count": 7687,
+            "min_ms": 0.049,
+            "mean_ms": 69.64600663457786,
+            "p50_ms": 3.519,
+            "p90_ms": 216.063,
+            "p95_ms": 315.391,
+            "p99_ms": 602.111,
+            "p999_ms": 917.503,
+            "max_ms": 1197.357
+          },
+          "kinds": {
+            "http_503:overloaded": 71,
+            "transport": 29
+          }
+        },
+        "claim": {
+          "count": 3854,
+          "ok": 3802,
+          "expected_rejections": 0,
+          "errors": 52,
+          "latency": {
+            "count": 3854,
+            "min_ms": 0.061,
+            "mean_ms": 93.64729865075246,
+            "p50_ms": 8.383,
+            "p90_ms": 290.815,
+            "p95_ms": 376.831,
+            "p99_ms": 610.303,
+            "p999_ms": 942.079,
+            "max_ms": 1074.183
+          },
+          "kinds": {
+            "http_503:overloaded": 40,
+            "transport": 12
+          }
+        },
+        "claim_replay": {
+          "count": 78,
+          "ok": 78,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 78,
+            "min_ms": 0.102,
+            "mean_ms": 137.56388461538464,
+            "p50_ms": 41.983,
+            "p90_ms": 387.071,
+            "p95_ms": 434.175,
+            "p99_ms": 917.503,
+            "p999_ms": 1089.1,
+            "max_ms": 1089.1
+          }
+        },
+        "config": {
+          "count": 15195,
+          "ok": 15028,
+          "expected_rejections": 0,
+          "errors": 167,
+          "latency": {
+            "count": 15195,
+            "min_ms": 0.044,
+            "mean_ms": 69.89153399144455,
+            "p50_ms": 3.407,
+            "p90_ms": 219.135,
+            "p95_ms": 325.631,
+            "p99_ms": 581.631,
+            "p999_ms": 958.463,
+            "max_ms": 1234.67
+          },
+          "kinds": {
+            "http_503:overloaded": 136,
+            "transport": 31
+          }
+        },
+        "events20": {
+          "count": 11565,
+          "ok": 11412,
+          "expected_rejections": 0,
+          "errors": 153,
+          "latency": {
+            "count": 11565,
+            "min_ms": 0.055,
+            "mean_ms": 69.11008032857761,
+            "p50_ms": 3.311,
+            "p90_ms": 215.039,
+            "p95_ms": 321.535,
+            "p99_ms": 598.015,
+            "p999_ms": 917.503,
+            "max_ms": 1115.332
+          },
+          "kinds": {
+            "http_503:overloaded": 126,
+            "transport": 27
+          }
+        },
+        "me": {
+          "count": 11395,
+          "ok": 11252,
+          "expected_rejections": 0,
+          "errors": 143,
+          "latency": {
+            "count": 11395,
+            "min_ms": 0.05,
+            "mean_ms": 67.95164896884599,
+            "p50_ms": 3.359,
+            "p90_ms": 212.991,
+            "p95_ms": 307.199,
+            "p99_ms": 548.863,
+            "p999_ms": 917.503,
+            "max_ms": 1231.479
+          },
+          "kinds": {
+            "http_503:overloaded": 127,
+            "transport": 16
+          }
+        },
+        "save_get_8k": {
+          "count": 11619,
+          "ok": 11469,
+          "expected_rejections": 0,
+          "errors": 150,
+          "latency": {
+            "count": 11619,
+            "min_ms": 0.05,
+            "mean_ms": 68.02952680953611,
+            "p50_ms": 3.183,
+            "p90_ms": 211.967,
+            "p95_ms": 315.391,
+            "p99_ms": 577.535,
+            "p999_ms": 913.407,
+            "max_ms": 1194.879
+          },
+          "kinds": {
+            "http_503:overloaded": 133,
+            "transport": 17
+          }
+        },
+        "save_put_8k": {
+          "count": 7691,
+          "ok": 7582,
+          "expected_rejections": 0,
+          "errors": 109,
+          "latency": {
+            "count": 7691,
+            "min_ms": 0.078,
+            "mean_ms": 97.25341945130673,
+            "p50_ms": 10.431,
+            "p90_ms": 299.007,
+            "p95_ms": 395.263,
+            "p99_ms": 655.359,
+            "p999_ms": 966.655,
+            "max_ms": 1195.49
+          },
+          "kinds": {
+            "http_503:overloaded": 91,
+            "transport": 18
+          }
+        },
+        "wallet": {
+          "count": 7803,
+          "ok": 7704,
+          "expected_rejections": 0,
+          "errors": 99,
+          "latency": {
+            "count": 7803,
+            "min_ms": 0.053,
+            "mean_ms": 67.34650211457132,
+            "p50_ms": 3.343,
+            "p90_ms": 210.943,
+            "p95_ms": 311.295,
+            "p99_ms": 552.959,
+            "p999_ms": 917.503,
+            "max_ms": 1194.307
+          },
+          "kinds": {
+            "http_503:overloaded": 84,
+            "transport": 15
+          }
+        }
+      },
+      "budget_measured_ms": 602.111,
+      "pass_local": false,
+      "fail_reasons": [
+        "p99 602.1ms \u003e 150ms",
+        "error rate 0.0127 \u003e 0.0010"
+      ],
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 219424,
+        "rss_max_kib": 219584,
+        "rss_end_kib": 219584,
+        "cpu_seconds": 12.700000000000045,
+        "cpu_util": 0.8464429776888217
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 1084,
+      "claim_replays_ok": 112,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    }
+  ]
+}

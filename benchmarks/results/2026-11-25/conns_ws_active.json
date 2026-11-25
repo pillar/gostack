@@ -1,0 +1,44 @@
+{
+  "label": "local, not acceptance",
+  "scenario": "ws",
+  "description": "active WebSocket connections, one ping message per connection every 30s",
+  "target_connections": 3000,
+  "opened": 3000,
+  "open_errors": {},
+  "hold_s": 120,
+  "alive_at_end": 3000,
+  "dropped_during_hold": 0,
+  "connect_latency": {
+    "count": 3000,
+    "min_ms": 0.172,
+    "mean_ms": 0.409375,
+    "p50_ms": 0.349,
+    "p90_ms": 0.527,
+    "p95_ms": 0.611,
+    "p99_ms": 1.111,
+    "p999_ms": 9.471,
+    "max_ms": 12.212
+  },
+  "msg_interval_s": 30,
+  "messages_sent": 12319,
+  "message_rtt": {
+    "count": 12319,
+    "min_ms": 0.039,
+    "mean_ms": 0.2876849581946586,
+    "p50_ms": 0.178,
+    "p90_ms": 0.559,
+    "p95_ms": 0.867,
+    "p99_ms": 2.063,
+    "p999_ms": 6.111,
+    "max_ms": 10.309
+  },
+  "server": {
+    "pid": 44067,
+    "rss_start_kib": 155392,
+    "rss_max_kib": 155744,
+    "rss_end_kib": 155744,
+    "cpu_seconds": 2.1199999999999997,
+    "cpu_util": 0.017665279623210735
+  },
+  "client_go": "go1.27.1"
+}
