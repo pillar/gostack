@@ -21,11 +21,16 @@ import (
 
 func allModulesConfig(t *testing.T) config.Config {
 	c := testConfig(t)
-	c.Game.Modules = []string{"ops", "experiments", "social", "match", "commerce", "realtime"}
+	c.Game.Modules = []string{"ops", "experiments", "social", "match", "commerce", "realtime", "assets"}
 	c.Billing.Enabled = true
 	if pgtest.Enabled() {
-		// Profile scale rejects the in-process realtime hub and local object storage.
-		c.Game.Modules = c.Game.Modules[:5]
+		// Profile scale rejects the in-process realtime hub and local object storage;
+		// assets gets an S3 store (no IO until used).
+		c.Game.Modules = []string{"ops", "experiments", "social", "match", "commerce", "assets"}
+		c.Storage.Driver = "s3"
+		c.Storage.S3 = config.S3Storage{Endpoint: "http://127.0.0.1:1", Region: "us-east-1", Bucket: "unused",
+			AccessKeyIDRef: "env:GOSTACK_TEST_S3_ID", SecretAccessKeyRef: "env:GOSTACK_TEST_S3_ID"}
+		t.Setenv("GOSTACK_TEST_S3_ID", "unused-credential")
 		return c
 	}
 	c.Storage.Driver = "local"
@@ -100,7 +105,7 @@ func TestModulesWiredByConfig(t *testing.T) {
 		if a.Mod.Ops == nil || a.Mod.Match == nil || a.Mod.Billing == nil || a.Mod.Realtime != nil {
 			t.Fatal("modules not constructed as configured for profile scale")
 		}
-	} else if a.Mod.Ops == nil || a.Mod.Realtime == nil || a.Mod.Billing == nil || a.Mod.Storage == nil {
+	} else if a.Mod.Ops == nil || a.Mod.Realtime == nil || a.Mod.Billing == nil || a.Mod.Storage == nil || a.Mod.Assets == nil {
 		t.Fatal("modules not constructed")
 	}
 

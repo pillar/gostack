@@ -64,7 +64,7 @@ game:
   #   analytics_events_per_day: 0    # per instance (UTC day); excess events are dropped
   #   write_concurrency: 0           # concurrent mutating requests per game per instance
   # Optional GameKit feature packages (see GoStack docs/api/*.md):
-  # modules: [ops, experiments, social, match, commerce, realtime]
+  # modules: [ops, experiments, social, match, commerce, realtime, assets]
   # commerce:
   #   apple:
   #     root_ca_file: secrets/AppleRootCA-G3.pem   # download and verify from apple.com yourself
@@ -73,6 +73,10 @@ game:
   #     admob: { kind: admob }
   # realtime:
   #   max_connections: 4000
+  # assets:                        # static build releases (`gostack assets publish`); needs storage.driver
+  #   public_base_url: https://cdn.example.com/   # CDN in front of the bucket; manifest gets absolute URLs
+  #   manifest_max_age: 60s         # Cache-Control max-age of /assets/manifest and /assets/entry
+  #   entry_url_ttl: 10m            # presigned entry URL lifetime when public_base_url is empty
 {{else}}kits: []
 {{end}}
 # Optional email/password login with cookie sessions (/v1/auth/*); see GoStack docs/SECURITY.md.

@@ -82,7 +82,7 @@ func TestOpenAPIDocumentWellFormed(t *testing.T) {
 	if doc["openapi"] != "3.1.0" {
 		t.Fatalf("openapi = %v, want 3.1.0", doc["openapi"])
 	}
-	modules := []string{"system", "core", "ops", "experiments", "social", "match", "commerce", "realtime", "webauth", "billing", "storage-local"}
+	modules := []string{"system", "core", "ops", "experiments", "social", "match", "commerce", "realtime", "webauth", "billing", "storage-local", "assets"}
 	ids := map[string]string{}
 	paths := doc["paths"].(map[string]any)
 	for p, item := range paths {

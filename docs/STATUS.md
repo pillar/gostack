@@ -62,6 +62,7 @@
 | G14 实时通信 | 已实现（仅单实例） | WebSocket 网关：token 不进 URL、Origin、连接/消息/速率预算、心跳、序号 + ack + 续传、慢消费者断开、停机 1001；本机 1000 空闲连接约 28 KiB/连接（非验收）；scale 下被配置拒绝 |
 | G15 匹配与房间 | 已实现 | 票据（单次消费）、按 rating 窗口撮合、房间租约 + 随机 token + 绑定认领 key、结算幂等 |
 | 多游戏配额（G-A09） | 已实现 | `kits/game/quota.go`，迁移 0014：`max_players`/`save_bytes_total` 与业务写同事务条件更新计数（SQLite、PG 并发存档/恢复/删除后计数 = 实际字节且不超限）；`requests_per_minute` 每游戏限流器（Valkey 下两实例合计放行 = 配额，已测）；`analytics_events_per_day` 按实例按 UTC 日计数、启动后从埋点库补计（N 实例最多约 N×配额）；`write_concurrency` 按实例限制每游戏在途写请求（503）；管理 API GET/PUT `/v1/admin/games/{game}/quotas`、5 s 缓存、CLI `game quotas [--recount]`；每游戏指标（标签基数 = 游戏数）。测试：`kits/game/quota_test.go`（alpha 触发每项配额时 beta 不受影响）。未测：PG 单游戏计数行串行化的吞吐影响 |
+| 资源发布（PRD §22，G-A07） | 已实现（MinIO 实测；R2/CDN 未实测） | `modules/assets` + `gostack assets publish/list/rollback/verify/prune` + 模块 `assets`（manifest/entry 公共接口、管理端列表/回滚）：内容哈希不可变键 + `Cache-Control: immutable`、版本化 manifest、发布顺序资源→manifest→入口→事务切换指针、失败保留旧版本、按游戏租约串行化、去重、回滚前存在性检查、verify 全量哈希、prune 永不删除保留/当前版本引用的对象；见 `docs/api/assets.md`、`docs/ASSET_RELEASE.md` |
 
 ## 验收项对照
 - A01 构建：linux amd64/arm64 交叉编译通过，迁移与模板内嵌；未在 Linux 实机运行。
@@ -75,11 +76,11 @@
 - A09 运维：脚本在桩环境通过；**真实 systemd 未演练**。
 - A10 性能：**目标环境未执行**（本机基准见 `docs/BENCHMARK_REPORT.md`，仅供参考）。
 - A11 扩展：PG 跑同一套业务契约测试 + 多实例测试——通过。
-- 游戏专项：G-A01/02/03/04/06 通过；G-A05 通过（规则版本、对局令牌、隔离不发奖）；G-A07（CDN 资源发布）未实现；G-A08 真机未执行；G-A09 通过（多游戏隔离 + 每游戏资源配额，见下行与 `docs/api/quotas.md`；配额吞吐成本未测）；G-A10 本地恢复后对账通过，R2 未执行。
+- 游戏专项：G-A01/02/03/04/06 通过；G-A05 通过（规则版本、对局令牌、隔离不发奖）；G-A07（资源版本切换与回滚无缺失文件）在 local 存储（SQLite/PG 测试）与真实 MinIO（`scripts/drill/assets_minio.sh`）上通过，**R2 与真实 CDN 未执行**；G-A08 真机未执行；G-A09 通过（多游戏隔离 + 每游戏资源配额，见 `docs/api/quotas.md`；配额吞吐成本未测）；G-A10 本地恢复后对账通过，R2 未执行。
 
 ## 仍需外部环境才能完成
 1. 1C1G Linux 目标机：§13/§23 压测、驱动选型确认（ADR-0001）、部署脚本与 systemd 实跑、断电模型。
-2. Cloudflare R2：S3 适配器实测、Litestream→R2 复制与恢复（RPO/RTO、费用）。
+2. Cloudflare R2：S3 适配器实测、资源发布（`assets`）与 CDN 实测、Litestream→R2 复制与恢复（RPO/RTO、费用）。
 3. 真实平台：微信 code2session、Apple 沙盒交易与通知、AdMob 回调。
 4. 真机：Safari iPhone 与微信小游戏验证 SDK（G-A08）。
-5. 未实现：F13 HA/Distributed、PG 备份/PITR、Valkey HA/TLS、realtime 多实例、Google Play/微信支付、CDN 资源发布（G-A07）、WebKit/AgentKit（PRD §24）。
+5. 未实现：F13 HA/Distributed、PG 备份/PITR、Valkey HA/TLS、realtime 多实例、Google Play/微信支付、WebKit/AgentKit（PRD §24）。

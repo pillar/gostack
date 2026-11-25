@@ -75,6 +75,8 @@ tags:
     description: "Tenant billing accounts and reservations (`billing.enabled: true`, API key scope `billing`). See docs/api/billing.md."
   - name: storage-local
     description: "Presigned GET/PUT for the local object store (`storage.driver: local`, profile lite only). See docs/api/storage.md."
+  - name: assets
+    description: "Static asset releases: current manifest, entry redirect, admin list/rollback (`game.modules: [assets]`; publish with `gostack assets publish`). See docs/api/assets.md."
 paths:
   /healthz:
     get:
@@ -4331,6 +4333,129 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '413': {$ref: '#/components/responses/PayloadTooLarge'}
 
+  /v1/games/{game}/assets/manifest:
+    get:
+      operationId: assetsGetManifest
+      tags: [assets]
+      x-gostack-module: assets
+      summary: Current asset release manifest
+      description: |
+        The manifest of the game's current release: entry and every file (by
+        path relative to the build directory) with object key, size, sha256 and
+        content type; with `game.assets.public_base_url` also `base_url` and an
+        absolute `url` per file. `ETag` is the quoted release id; `If-None-Match`
+        gives `304`. `Cache-Control: public, max-age=<game.assets.manifest_max_age>`
+        (default 60). `404` until a release is published.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Game'
+        - name: If-None-Match
+          in: header
+          schema: {type: string}
+      responses:
+        '200':
+          description: Current manifest.
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AssetsManifest'}
+        '304':
+          description: Not modified (release unchanged).
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/games/{game}/assets/entry:
+    get:
+      operationId: assetsGetEntry
+      tags: [assets]
+      x-gostack-module: assets
+      summary: Redirect to the current entry file
+      description: |
+        `302` to the current release's entry object: `public_base_url + key`
+        with `Cache-Control: public, max-age=<manifest_max_age>`, or without a
+        public base URL a presigned storage GET URL (`game.assets.entry_url_ttl`,
+        default 10m) with `Cache-Control: no-store`. `404` until a release is published.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Game'
+      responses:
+        '302':
+          description: Redirect to the entry file.
+          headers:
+            Location:
+              schema: {type: string}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/admin/games/{game}/assets/releases:
+    get:
+      operationId: assetsAdminListReleases
+      tags: [assets]
+      x-gostack-module: assets
+      summary: List asset releases (admin)
+      description: Newest first (max 200), including pruned ones; `current_release_id` is empty before the first publish.
+      security: [{adminKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/Game'
+      responses:
+        '200':
+          description: Releases.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [current_release_id, releases]
+                properties:
+                  current_release_id: {type: string}
+                  releases:
+                    type: array
+                    items: {$ref: '#/components/schemas/AssetsRelease'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/admin/games/{game}/assets/rollback:
+    post:
+      operationId: assetsAdminRollback
+      tags: [assets]
+      x-gostack-module: assets
+      summary: Make an earlier (or later) release current (admin)
+      description: |
+        Checks that every object of the release exists in storage with its
+        recorded size (metadata only), then switches the pointer. Idempotent:
+        rolling back to the current release succeeds. `409 release_pruned` for a
+        pruned release, `409 release_incomplete` when objects are missing.
+        Body limit 4 KiB.
+      security: [{adminKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/Game'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [release_id]
+              additionalProperties: false
+              properties:
+                release_id: {type: string}
+      responses:
+        '200':
+          description: Switched.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [current_release_id, previous_release_id]
+                properties:
+                  current_release_id: {type: string}
+                  previous_release_id: {type: string}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '503': {$ref: '#/components/responses/Overloaded'}
+
 components:
   securitySchemes:
     gameSession:
@@ -4619,6 +4744,52 @@ components:
         - account_exists
         - balance_limit
         - reservation_expired
+        # assets
+        - release_pruned
+        - release_incomplete
+    AssetsFile:
+      type: object
+      required: [key, size, sha256, content_type]
+      properties:
+        path: {type: string, description: Entry only (files are keyed by path).}
+        key: {type: string, description: 'Object key, e.g. games/<game>/assets/<sha256>/<name>.'}
+        size: {type: integer, format: int64}
+        sha256: {type: string}
+        content_type: {type: string}
+        url: {type: string, description: Present only with game.assets.public_base_url.}
+    AssetsManifest:
+      type: object
+      required: [manifest_version, game_id, release_id, label, created_at, entry, files]
+      properties:
+        manifest_version: {type: integer, enum: [1]}
+        game_id: {type: string}
+        release_id: {type: string}
+        label: {type: string}
+        created_at: {type: string, format: date-time}
+        base_url: {type: string}
+        entry: {$ref: '#/components/schemas/AssetsFile'}
+        files:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/AssetsFile'}
+    AssetsRelease:
+      type: object
+      properties:
+        game_id: {type: string}
+        release_id: {type: string}
+        label: {type: string}
+        manifest_key: {type: string}
+        manifest_size: {type: integer, format: int64}
+        manifest_sha256: {type: string}
+        entry_path: {type: string}
+        entry_key: {type: string}
+        entry_size: {type: integer, format: int64}
+        entry_sha256: {type: string}
+        file_count: {type: integer}
+        total_bytes: {type: integer, format: int64}
+        created_at: {type: integer, format: int64, description: epoch ms}
+        created_by: {type: string}
+        status: {type: string, enum: [published, pruned]}
+        current: {type: boolean}
     Balances:
       type: object
       description: Asset code → integer balance.

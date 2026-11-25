@@ -229,3 +229,36 @@ func TestLocalPresignHandler(t *testing.T) {
 		t.Fatal("presign ttl > 7d accepted")
 	}
 }
+
+// PutObject records Cache-Control in the trailer; Stat reads metadata only;
+// objects written by Put (no cache control) still read.
+func TestLocalPutObjectCacheControlAndStat(t *testing.T) {
+	l, _ := newLocal(t, "/v1/files")
+	ctx := context.Background()
+	cc := "public, max-age=31536000, immutable"
+	if err := l.PutObject(ctx, "g/a.css", strings.NewReader("body{}"), 6, PutOptions{ContentType: "text/css", CacheControl: cc}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := l.Stat(ctx, "g/a.css")
+	if err != nil || info.Size != 6 || info.CacheControl != cc || info.ContentType != "text/css" || info.ETag == "" {
+		t.Fatalf("stat %+v %v", info, err)
+	}
+	if body, got := readAll(t, l, "g/a.css"); body != "body{}" || got.CacheControl != cc {
+		t.Fatalf("get %q %+v", body, got)
+	}
+	if err := l.Put(ctx, "plain", strings.NewReader("x"), 1, ""); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := l.Stat(ctx, "plain"); err != nil || info.CacheControl != "" || info.Size != 1 {
+		t.Fatalf("plain %+v %v", info, err)
+	}
+	if _, err := l.Stat(ctx, "missing"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing: %v", err)
+	}
+	if _, err := l.Stat(ctx, "../x"); !errors.Is(err, ErrInvalidKey) {
+		t.Fatalf("invalid key: %v", err)
+	}
+	if err := l.PutObject(ctx, "k", strings.NewReader("x"), 1, PutOptions{CacheControl: strings.Repeat("a", 256)}); err == nil {
+		t.Fatal("oversized cache control accepted")
+	}
+}

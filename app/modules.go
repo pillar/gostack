@@ -17,6 +17,7 @@ import (
 	"github.com/pillar/gostack/kits/game/ops"
 	"github.com/pillar/gostack/kits/game/realtime"
 	"github.com/pillar/gostack/kits/game/social"
+	"github.com/pillar/gostack/modules/assets"
 	"github.com/pillar/gostack/modules/billing"
 	"github.com/pillar/gostack/modules/storage"
 )
@@ -34,6 +35,7 @@ type Modules struct {
 	// local driver (its presign handler is mounted on the main listener).
 	Storage      storage.Storage
 	LocalStorage *storage.Local
+	Assets       *assets.Module
 }
 
 // maintainer is implemented by modules with periodic cleanup.
@@ -81,36 +83,51 @@ func (a *App) initModules(cfg config.Config) error {
 	if cfg.Billing.Enabled {
 		m.Billing = &billing.Service{DB: a.DB}
 	}
-	switch st := cfg.Storage; st.Driver {
+	var err error
+	if m.Storage, m.LocalStorage, err = newStorage(cfg.Storage); err != nil {
+		return err
+	}
+	if a.Game != nil && cfg.HasGameModule("assets") {
+		ac := cfg.Game.Assets
+		m.Assets = &assets.Module{Kit: a.Game, DB: a.DB, Storage: m.Storage, PublicBaseURL: ac.PublicBaseURL,
+			ManifestMaxAge: ac.ManifestMaxAge, EntryURLTTL: ac.EntryURLTTL}
+	}
+	return nil
+}
+
+// newStorage builds the configured object store (nil when storage.driver is
+// empty); the *storage.Local is also returned for the local driver.
+func newStorage(st config.StorageConfig) (storage.Storage, *storage.Local, error) {
+	switch st.Driver {
 	case "local":
 		secret, err := config.ResolveSecret(st.Local.PresignSecretRef)
 		if err != nil {
-			return fmt.Errorf("storage.local.presign_secret_ref: %w", err)
+			return nil, nil, fmt.Errorf("storage.local.presign_secret_ref: %w", err)
 		}
 		l, err := storage.NewLocal(storage.LocalConfig{Root: st.Local.Root, PublicURL: st.Local.PublicURL, Secret: []byte(secret),
 			MaxObjectBytes: st.MaxObjectBytes, Timeout: st.Timeout})
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
-		m.Storage, m.LocalStorage = l, l
+		return l, l, nil
 	case "s3":
 		id, err := config.ResolveSecret(st.S3.AccessKeyIDRef)
 		if err != nil {
-			return fmt.Errorf("storage.s3.access_key_id_ref: %w", err)
+			return nil, nil, fmt.Errorf("storage.s3.access_key_id_ref: %w", err)
 		}
 		key, err := config.ResolveSecret(st.S3.SecretAccessKeyRef)
 		if err != nil {
-			return fmt.Errorf("storage.s3.secret_access_key_ref: %w", err)
+			return nil, nil, fmt.Errorf("storage.s3.secret_access_key_ref: %w", err)
 		}
 		s3, err := storage.NewS3(storage.S3Config{Endpoint: st.S3.Endpoint, Region: st.S3.Region, Bucket: st.S3.Bucket,
 			AccessKeyID: id, SecretAccessKey: key, PathStyle: st.S3.PathStyle, SignPayload: st.S3.SignPayload,
 			MaxObjectBytes: st.MaxObjectBytes, Timeout: st.Timeout, TempDir: st.S3.TempDir})
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
-		m.Storage = s3
+		return s3, nil, nil
 	}
-	return nil
+	return nil, nil, nil
 }
 
 func newCommerce(a *App, c config.CommerceConfig) (*commerce.Module, error) {
@@ -173,6 +190,9 @@ func (a *App) moduleRoutes(mux *http.ServeMux) {
 	}
 	if m.Billing != nil {
 		m.Billing.Handler(mux, auth.APIKeys{DB: a.DB})
+	}
+	if m.Assets != nil {
+		m.Assets.Routes(mux)
 	}
 }
 

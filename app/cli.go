@@ -62,6 +62,12 @@ const appUsage = `Application commands:
   apikey create --name N [--scope admin] [--tenant T] [--ttl 720h]
   apikey revoke <key_id>
   jobs replay <job_id>                   move a dead job back to pending
+  assets publish --game G --dir DIR [--entry index.html] [--version LABEL]
+                                         upload a static build (content-addressed) and switch the current release
+  assets list --game G                   list releases (current marked)
+  assets rollback --game G --to RELEASE  make an earlier release current (checks its objects exist)
+  assets verify --game G [--release R]   download every object of a release and check size/sha256
+  assets prune --game G --keep N [--yes] delete releases/objects not kept (dry run without --yes)
 
 Global flags (before the command): --config FILE, --json, --set key=value (repeatable)
 `
@@ -195,6 +201,8 @@ func run(args []string, hooks Hooks, env Env) error {
 		return gameCmd(ctx, cfg, rest, g.json, env)
 	case "apikey":
 		return apikeyCmd(ctx, cfg, rest, g.json, env)
+	case "assets":
+		return assetsCmd(ctx, cfg, rest, g.json, env)
 	case "jobs":
 		if len(rest) != 2 || rest[0] != "replay" {
 			return UsageError{"usage: jobs replay <job_id>"}

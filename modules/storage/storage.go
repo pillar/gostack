@@ -36,6 +36,29 @@ type Info struct {
 	Size        int64
 	ContentType string
 	ETag        string
+	// CacheControl is the Cache-Control stored with the object ("" when none).
+	CacheControl string
+}
+
+// PutOptions are object attributes for ObjectPutter.PutObject.
+type PutOptions struct {
+	ContentType string
+	// CacheControl is stored with the object and returned by S3/CDN GETs
+	// (e.g. "public, max-age=31536000, immutable"). Printable ASCII, <= 255 bytes.
+	CacheControl string
+}
+
+// ObjectPutter is implemented by adapters that store attributes beyond the
+// content type (Local and S3). Put(ctx, k, r, n, ct) equals
+// PutObject(ctx, k, r, n, PutOptions{ContentType: ct}).
+type ObjectPutter interface {
+	PutObject(ctx context.Context, key string, r io.Reader, size int64, o PutOptions) error
+}
+
+// Stater reports an object's metadata without transferring its body
+// (Local: reads the metadata trailer; S3: HEAD). Missing keys yield ErrNotFound.
+type Stater interface {
+	Stat(ctx context.Context, key string) (Info, error)
 }
 
 var (
@@ -95,6 +118,18 @@ func validContentType(ct string) (string, error) {
 		}
 	}
 	return ct, nil
+}
+
+func validCacheControl(cc string) error {
+	if len(cc) > 255 {
+		return errors.New("storage: cache control too long")
+	}
+	for i := 0; i < len(cc); i++ {
+		if cc[i] < 0x20 || cc[i] > 0x7e {
+			return errors.New("storage: cache control has invalid characters")
+		}
+	}
+	return nil
 }
 
 func checkPresign(method string, ttl time.Duration) error {
