@@ -6,6 +6,7 @@
 - `GOSTACK_TEST_POSTGRES_DSN=… GOSTACK_TEST_VALKEY_ADDR=… GOSTACK_TEST_VALKEY_SERVER=… ./scripts/ci.sh`：gofmt、`go vet`、`go test -race -count=1 ./...` 分别在 SQLite、PostgreSQL+Valkey、PostgreSQL（本地限流）三轮全部通过；linux amd64/arm64 `CGO_ENABLED=0` 交叉编译；SDK typecheck + 64 个测试；SDK 核心 gzip 6830 B（预算 30720 B），realtime 独立入口 2149 B。
 - OpenAPI：`docs/openapi/gostack.yaml`（OpenAPI 3.1，137 路径/163 操作，含 AgentKit/WebKit）；`app/openapi_test.go` 双向核对文档与源码路由、错误码枚举与源码一致、每个文档化操作在开启全部模块的 app 上存在。
 - 独立审查（第二轮，只读子代理，覆盖认证/资金/存储层/生命周期）：10 项问题全部修复且均有回归测试——PG 下埋点毒批次（入口拒绝控制字符/非法 UTF-8 + flush 逐行 SAVEPOINT 隔离）、`CF-Connecting-IP` 仅在 `http.trust_cf_connecting_ip` 显式开启时信任、本地存储预签名路由脱离通用 body/超时限制、存档响应字节与 checksum 一致、签到/任务改时区不再重复领取、游客邀请奖励延迟到绑定平台身份后领取、对战房间 token 改随机并绑定认领 key、空租户 billing key 被拒、隔离指标不在可重跑事务内计数、榜单规则在写事务内读取。另一项由 OpenAPI 核对发现：运营/社交发放绕过道具目录与 `max_stack`，已改走 `Kit.Grant`。
+- 第三轮独立审查（第二批：资源发布、配额、PG 备份、realtime 总线、Google Play/微信支付、AgentKit/WebKit）：9 项问题全部修复且有回归测试——Google 确认/消耗任务重试预算覆盖数天 + 403/404 标记待处理 + 定期对账复活/重建任务；支付与广告回调豁免每游戏请求配额；微信支付按商户订单号查单补发货；促销/激励购买允许无 orderId；JWKS 与 OAuth token 刷新不在持锁期间做网络 IO；Webhook SSRF 改为显式拒绝表（含 100.64/10、NAT64、6to4 等）并复用客户端；非幂等工具步骤超时进入人工对账而非判失败；WebKit 预留过期后按代次重新预留；Publish 事务函数可重跑；PG 工具 sslpassword 等秘密不进 argv；WAL 归档用硬链接原子发布。
 - 第一轮审查（P0 主干）7 项问题已修复（见 git 历史）。
 - govulncheck：GitHub Actions 中运行；`toolchain go1.27.4`（1.27.1 标准库漏洞的修复版本）。CI 新增的 PostgreSQL / Valkey service job 尚未在 GitHub 上运行过。
 - 未运行：linux 二进制实机运行、部署脚本在真实 Linux/systemd 上运行。
