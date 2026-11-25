@@ -38,8 +38,9 @@ export interface Run {
 
 // ---- economy ----
 export interface Inventory {
-  currencies: Array<{ id: string; name: string; balance: number }>;
-  items: Array<{ id: string; balance: number; maxStack: number }>;
+  currencies: Array<{ id: string; name?: string; balance: number }>;
+  /** maxStack is absent when the item has no stack limit. */
+  items: Array<{ id: string; balance: number; maxStack?: number }>;
   uncataloged: Record<string, number>;
 }
 export interface PurchaseResult {
@@ -235,13 +236,14 @@ export interface WaitForMatchOptions {
 }
 
 // ---- commerce ----
+export type OrderState = 'created' | 'paid' | 'delivered' | 'refunded' | 'refund_compensated' | 'refund_shortfall';
 export interface IapOrder {
   orderId: string;
   productId: string;
   /** Pass to StoreKit as appAccountToken when purchasing. */
   appAccountToken: string;
   providerProductIds: Record<string, string>;
-  state: string;
+  state: OrderState;
 }
 export interface IapTransaction {
   orderId: string;
@@ -249,7 +251,7 @@ export interface IapTransaction {
   productId: string;
   providerProductId: string;
   providerTxnId: string;
-  state: string;
+  state: OrderState;
   quantity: number;
   grants: Grants;
   outstanding: Grants;

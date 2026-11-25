@@ -131,7 +131,7 @@ export interface Apis {
     };
   };
   match: {
-    createTicket(queue: string, attributes?: Record<string, unknown>, opts?: IdempotentOptions): Promise<MatchTicket>;
+    createTicket(queue: string, attributes?: { rating?: number }, opts?: IdempotentOptions): Promise<MatchTicket>;
     getTicket(id: string): Promise<MatchTicket>;
     /** Cancelling is repeatable on the server, so this is retried. 409 already_matched / ticket_closed are errors. */
     cancelTicket(id: string): Promise<void>;

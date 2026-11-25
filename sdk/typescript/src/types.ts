@@ -139,7 +139,8 @@ export interface BoardGetOptions {
 
 export interface ScoreResult {
   status: 'accepted' | 'quarantined';
-  best: number;
+  /** null when the submission was quarantined and the player has no accepted score yet. */
+  best: number | null;
   season: string;
 }
 
