@@ -1,0 +1,1221 @@
+{
+  "budget": {
+    "prd": "§23 经济事务 FULL",
+    "target_rps": 50,
+    "percentile": 0.99,
+    "limit_ms": 150,
+    "max_error_rate": 0.001
+  },
+  "highest_passing_rps": 1922.16796875,
+  "label": "local, not acceptance",
+  "mode": "saturation",
+  "scenario": "economy",
+  "step_factor": 1.5,
+  "step_steady_s": 15,
+  "step_warmup_s": 5,
+  "steps": [
+    {
+      "label": "local, not acceptance",
+      "scenario": "economy",
+      "description": "POST /rewards/bench_coin/claim (FULL); 2% replays of an earlier Idempotency-Key",
+      "budget": {
+        "prd": "§23 经济事务 FULL",
+        "target_rps": 50,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 50,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:26:26.342532+08:00",
+      "scheduled": 750,
+      "completed": 750,
+      "achieved_rps": 50,
+      "ok": 750,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 750,
+        "min_ms": 0.439,
+        "mean_ms": 1.3119866666666666,
+        "p50_ms": 0.967,
+        "p90_ms": 1.863,
+        "p95_ms": 2.687,
+        "p99_ms": 10.623,
+        "p999_ms": 11.647,
+        "max_ms": 14.461
+      },
+      "latency_service": {
+        "count": 750,
+        "min_ms": 0.429,
+        "mean_ms": 1.1492213333333334,
+        "p50_ms": 0.887,
+        "p90_ms": 1.527,
+        "p95_ms": 2.095,
+        "p99_ms": 10.175,
+        "p999_ms": 11.647,
+        "max_ms": 14.345
+      },
+      "client_schedule_lag": {
+        "count": 750,
+        "min_ms": 0,
+        "mean_ms": 0.14862666666666666,
+        "p50_ms": 0.037,
+        "p90_ms": 0.419,
+        "p95_ms": 0.731,
+        "p99_ms": 1.911,
+        "p999_ms": 3.679,
+        "max_ms": 4.82
+      },
+      "ops": {
+        "claim": {
+          "count": 737,
+          "ok": 737,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 737,
+            "min_ms": 0.587,
+            "mean_ms": 1.3211533242876525,
+            "p50_ms": 0.967,
+            "p90_ms": 1.871,
+            "p95_ms": 2.687,
+            "p99_ms": 10.623,
+            "p999_ms": 11.647,
+            "max_ms": 14.461
+          }
+        },
+        "claim_replay": {
+          "count": 13,
+          "ok": 13,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 13,
+            "min_ms": 0.439,
+            "mean_ms": 0.7923076923076923,
+            "p50_ms": 0.567,
+            "p90_ms": 1.535,
+            "p95_ms": 1.535,
+            "p99_ms": 1.587,
+            "p999_ms": 1.587,
+            "max_ms": 1.587
+          }
+        }
+      },
+      "budget_measured_ms": 10.623,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217328,
+        "rss_max_kib": 217344,
+        "rss_end_kib": 217344,
+        "cpu_seconds": 0.6000000000000227,
+        "cpu_util": 0.040042527834063146
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 1,
+      "claim_replays_ok": 19,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "economy",
+      "description": "POST /rewards/bench_coin/claim (FULL); 2% replays of an earlier Idempotency-Key",
+      "budget": {
+        "prd": "§23 经济事务 FULL",
+        "target_rps": 50,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 75,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:26:46.394526+08:00",
+      "scheduled": 1125,
+      "completed": 1125,
+      "achieved_rps": 75,
+      "ok": 1125,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 1125,
+        "min_ms": 0.402,
+        "mean_ms": 1.1393502222222223,
+        "p50_ms": 0.895,
+        "p90_ms": 1.487,
+        "p95_ms": 1.719,
+        "p99_ms": 9.599,
+        "p999_ms": 15.871,
+        "max_ms": 16.242
+      },
+      "latency_service": {
+        "count": 1125,
+        "min_ms": 0.362,
+        "mean_ms": 1.097447111111111,
+        "p50_ms": 0.859,
+        "p90_ms": 1.447,
+        "p95_ms": 1.655,
+        "p99_ms": 9.599,
+        "p999_ms": 15.871,
+        "max_ms": 16.162
+      },
+      "client_schedule_lag": {
+        "count": 1125,
+        "min_ms": 0,
+        "mean_ms": 0.02935822222222222,
+        "p50_ms": 0.015,
+        "p90_ms": 0.052,
+        "p95_ms": 0.06,
+        "p99_ms": 0.238,
+        "p999_ms": 1.255,
+        "max_ms": 1.371
+      },
+      "ops": {
+        "claim": {
+          "count": 1105,
+          "ok": 1105,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 1105,
+            "min_ms": 0.402,
+            "mean_ms": 1.1497592760180997,
+            "p50_ms": 0.895,
+            "p90_ms": 1.495,
+            "p95_ms": 1.727,
+            "p99_ms": 9.599,
+            "p999_ms": 15.871,
+            "max_ms": 16.242
+          }
+        },
+        "claim_replay": {
+          "count": 20,
+          "ok": 20,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 20,
+            "min_ms": 0.409,
+            "mean_ms": 0.56425,
+            "p50_ms": 0.519,
+            "p90_ms": 0.687,
+            "p95_ms": 0.775,
+            "p99_ms": 0.904,
+            "p999_ms": 0.904,
+            "max_ms": 0.904
+          }
+        }
+      },
+      "budget_measured_ms": 9.599,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217344,
+        "rss_max_kib": 217344,
+        "rss_end_kib": 217344,
+        "cpu_seconds": 1.0699999999999932,
+        "cpu_util": 0.07137495048243529
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 2,
+      "claim_replays_ok": 29,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "economy",
+      "description": "POST /rewards/bench_coin/claim (FULL); 2% replays of an earlier Idempotency-Key",
+      "budget": {
+        "prd": "§23 经济事务 FULL",
+        "target_rps": 50,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 112.5,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:27:06.450241+08:00",
+      "scheduled": 1687,
+      "completed": 1687,
+      "achieved_rps": 112.46666666666667,
+      "ok": 1687,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 1687,
+        "min_ms": 0.281,
+        "mean_ms": 0.9253811499703616,
+        "p50_ms": 0.707,
+        "p90_ms": 1.111,
+        "p95_ms": 1.503,
+        "p99_ms": 9.087,
+        "p999_ms": 12.863,
+        "max_ms": 17.023
+      },
+      "latency_service": {
+        "count": 1687,
+        "min_ms": 0.275,
+        "mean_ms": 0.9099371665678719,
+        "p50_ms": 0.699,
+        "p90_ms": 1.095,
+        "p95_ms": 1.479,
+        "p99_ms": 9.087,
+        "p999_ms": 11.775,
+        "max_ms": 17.013
+      },
+      "client_schedule_lag": {
+        "count": 1687,
+        "min_ms": 0,
+        "mean_ms": 0.004583283935981031,
+        "p50_ms": 0,
+        "p90_ms": 0.001,
+        "p95_ms": 0.002,
+        "p99_ms": 0.009,
+        "p999_ms": 1.471,
+        "max_ms": 2.319
+      },
+      "ops": {
+        "claim": {
+          "count": 1639,
+          "ok": 1639,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 1639,
+            "min_ms": 0.469,
+            "mean_ms": 0.9392977425259305,
+            "p50_ms": 0.711,
+            "p90_ms": 1.119,
+            "p95_ms": 1.519,
+            "p99_ms": 9.279,
+            "p999_ms": 12.863,
+            "max_ms": 17.023
+          }
+        },
+        "claim_replay": {
+          "count": 48,
+          "ok": 48,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 48,
+            "min_ms": 0.281,
+            "mean_ms": 0.4501875,
+            "p50_ms": 0.407,
+            "p90_ms": 0.567,
+            "p95_ms": 0.647,
+            "p99_ms": 1.655,
+            "p999_ms": 1.655,
+            "max_ms": 1.655
+          }
+        }
+      },
+      "budget_measured_ms": 9.087,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217344,
+        "rss_max_kib": 217344,
+        "rss_end_kib": 217344,
+        "cpu_seconds": 1.3000000000000114,
+        "cpu_util": 0.08669924679862691
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 2,
+      "claim_replays_ok": 59,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "economy",
+      "description": "POST /rewards/bench_coin/claim (FULL); 2% replays of an earlier Idempotency-Key",
+      "budget": {
+        "prd": "§23 经济事务 FULL",
+        "target_rps": 50,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 168.75,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:27:26.520569+08:00",
+      "scheduled": 2531,
+      "completed": 2531,
+      "achieved_rps": 168.73333333333332,
+      "ok": 2531,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 2531,
+        "min_ms": 0.204,
+        "mean_ms": 1.3061608060055314,
+        "p50_ms": 1.023,
+        "p90_ms": 1.455,
+        "p95_ms": 1.679,
+        "p99_ms": 12.351,
+        "p999_ms": 16.895,
+        "max_ms": 19.838
+      },
+      "latency_service": {
+        "count": 2531,
+        "min_ms": 0.199,
+        "mean_ms": 1.290303437376531,
+        "p50_ms": 1.015,
+        "p90_ms": 1.447,
+        "p95_ms": 1.655,
+        "p99_ms": 12.287,
+        "p999_ms": 16.895,
+        "max_ms": 19.828
+      },
+      "client_schedule_lag": {
+        "count": 2531,
+        "min_ms": 0,
+        "mean_ms": 0.0024958514421177403,
+        "p50_ms": 0,
+        "p90_ms": 0.002,
+        "p95_ms": 0.003,
+        "p99_ms": 0.008,
+        "p999_ms": 0.019,
+        "max_ms": 4.82
+      },
+      "ops": {
+        "claim": {
+          "count": 2486,
+          "ok": 2486,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 2486,
+            "min_ms": 0.299,
+            "mean_ms": 1.3171403861625102,
+            "p50_ms": 1.039,
+            "p90_ms": 1.463,
+            "p95_ms": 1.687,
+            "p99_ms": 12.351,
+            "p999_ms": 17.023,
+            "max_ms": 19.838
+          }
+        },
+        "claim_replay": {
+          "count": 45,
+          "ok": 45,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 45,
+            "min_ms": 0.204,
+            "mean_ms": 0.6996,
+            "p50_ms": 0.467,
+            "p90_ms": 0.719,
+            "p95_ms": 0.759,
+            "p99_ms": 10.415,
+            "p999_ms": 10.415,
+            "max_ms": 10.415
+          }
+        }
+      },
+      "budget_measured_ms": 12.351,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217344,
+        "rss_max_kib": 217344,
+        "rss_end_kib": 217344,
+        "cpu_seconds": 2.6399999999999864,
+        "cpu_util": 0.1760347541542353
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 4,
+      "claim_replays_ok": 74,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "economy",
+      "description": "POST /rewards/bench_coin/claim (FULL); 2% replays of an earlier Idempotency-Key",
+      "budget": {
+        "prd": "§23 经济事务 FULL",
+        "target_rps": 50,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 253.125,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:27:46.583518+08:00",
+      "scheduled": 3797,
+      "completed": 3797,
+      "achieved_rps": 253.13333333333333,
+      "ok": 3797,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 3797,
+        "min_ms": 0.192,
+        "mean_ms": 0.7853444824861733,
+        "p50_ms": 0.567,
+        "p90_ms": 0.791,
+        "p95_ms": 1.031,
+        "p99_ms": 8.319,
+        "p999_ms": 10.623,
+        "max_ms": 15.173
+      },
+      "latency_service": {
+        "count": 3797,
+        "min_ms": 0.188,
+        "mean_ms": 0.7777334737951014,
+        "p50_ms": 0.563,
+        "p90_ms": 0.783,
+        "p95_ms": 1.015,
+        "p99_ms": 8.319,
+        "p999_ms": 10.559,
+        "max_ms": 15.166
+      },
+      "client_schedule_lag": {
+        "count": 3797,
+        "min_ms": 0,
+        "mean_ms": 0.00046115354227021333,
+        "p50_ms": 0,
+        "p90_ms": 0,
+        "p95_ms": 0.001,
+        "p99_ms": 0.008,
+        "p999_ms": 0.022,
+        "max_ms": 0.415
+      },
+      "ops": {
+        "claim": {
+          "count": 3719,
+          "ok": 3719,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 3719,
+            "min_ms": 0.324,
+            "mean_ms": 0.7922008604463565,
+            "p50_ms": 0.571,
+            "p90_ms": 0.791,
+            "p95_ms": 1.031,
+            "p99_ms": 8.319,
+            "p999_ms": 10.623,
+            "max_ms": 15.173
+          }
+        },
+        "claim_replay": {
+          "count": 78,
+          "ok": 78,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 78,
+            "min_ms": 0.192,
+            "mean_ms": 0.45843589743589747,
+            "p50_ms": 0.295,
+            "p90_ms": 0.395,
+            "p95_ms": 0.497,
+            "p99_ms": 4.223,
+            "p999_ms": 4.733,
+            "max_ms": 4.733
+          }
+        }
+      },
+      "budget_measured_ms": 8.319,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217344,
+        "rss_max_kib": 217344,
+        "rss_end_kib": 217344,
+        "cpu_seconds": 2.2799999999999727,
+        "cpu_util": 0.15198796677829482
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 4,
+      "claim_replays_ok": 102,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "economy",
+      "description": "POST /rewards/bench_coin/claim (FULL); 2% replays of an earlier Idempotency-Key",
+      "budget": {
+        "prd": "§23 经济事务 FULL",
+        "target_rps": 50,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 379.6875,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:28:06.653299+08:00",
+      "scheduled": 5695,
+      "completed": 5695,
+      "achieved_rps": 379.6666666666667,
+      "ok": 5695,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 5695,
+        "min_ms": 0.153,
+        "mean_ms": 0.6851079894644425,
+        "p50_ms": 0.357,
+        "p90_ms": 0.851,
+        "p95_ms": 1.687,
+        "p99_ms": 8.063,
+        "p999_ms": 9.791,
+        "max_ms": 11.047
+      },
+      "latency_service": {
+        "count": 5695,
+        "min_ms": 0.151,
+        "mean_ms": 0.6744414398595259,
+        "p50_ms": 0.353,
+        "p90_ms": 0.823,
+        "p95_ms": 1.575,
+        "p99_ms": 8.063,
+        "p999_ms": 9.727,
+        "max_ms": 11.04
+      },
+      "client_schedule_lag": {
+        "count": 5695,
+        "min_ms": 0,
+        "mean_ms": 0.005647410008779631,
+        "p50_ms": 0,
+        "p90_ms": 0.004,
+        "p95_ms": 0.007,
+        "p99_ms": 0.068,
+        "p999_ms": 0.771,
+        "max_ms": 2.228
+      },
+      "ops": {
+        "claim": {
+          "count": 5584,
+          "ok": 5584,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 5584,
+            "min_ms": 0.256,
+            "mean_ms": 0.6926325214899713,
+            "p50_ms": 0.359,
+            "p90_ms": 0.859,
+            "p95_ms": 1.743,
+            "p99_ms": 8.063,
+            "p999_ms": 9.791,
+            "max_ms": 11.047
+          }
+        },
+        "claim_replay": {
+          "count": 111,
+          "ok": 111,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 111,
+            "min_ms": 0.153,
+            "mean_ms": 0.3065765765765766,
+            "p50_ms": 0.188,
+            "p90_ms": 0.535,
+            "p95_ms": 0.635,
+            "p99_ms": 2.143,
+            "p999_ms": 3.142,
+            "max_ms": 3.142
+          }
+        }
+      },
+      "budget_measured_ms": 8.063,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217344,
+        "rss_max_kib": 217344,
+        "rss_end_kib": 217344,
+        "cpu_seconds": 2.2800000000000296,
+        "cpu_util": 0.15198080946424736
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 5,
+      "claim_replays_ok": 140,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "economy",
+      "description": "POST /rewards/bench_coin/claim (FULL); 2% replays of an earlier Idempotency-Key",
+      "budget": {
+        "prd": "§23 经济事务 FULL",
+        "target_rps": 50,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 569.53125,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:28:26.721575+08:00",
+      "scheduled": 8543,
+      "completed": 8543,
+      "achieved_rps": 569.5333333333333,
+      "ok": 8543,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 8543,
+        "min_ms": 0.161,
+        "mean_ms": 1.0871292286082173,
+        "p50_ms": 0.543,
+        "p90_ms": 1.791,
+        "p95_ms": 4.607,
+        "p99_ms": 9.407,
+        "p999_ms": 10.495,
+        "max_ms": 10.988
+      },
+      "latency_service": {
+        "count": 8543,
+        "min_ms": 0.16,
+        "mean_ms": 1.0657870771391784,
+        "p50_ms": 0.531,
+        "p90_ms": 1.735,
+        "p95_ms": 4.607,
+        "p99_ms": 9.407,
+        "p999_ms": 10.495,
+        "max_ms": 10.805
+      },
+      "client_schedule_lag": {
+        "count": 8543,
+        "min_ms": 0,
+        "mean_ms": 0.018073744586210933,
+        "p50_ms": 0,
+        "p90_ms": 0.011,
+        "p95_ms": 0.04,
+        "p99_ms": 0.555,
+        "p999_ms": 1.103,
+        "max_ms": 1.822
+      },
+      "ops": {
+        "claim": {
+          "count": 8376,
+          "ok": 8376,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 8376,
+            "min_ms": 0.268,
+            "mean_ms": 1.0951214183381088,
+            "p50_ms": 0.547,
+            "p90_ms": 1.799,
+            "p95_ms": 4.703,
+            "p99_ms": 9.407,
+            "p999_ms": 10.559,
+            "max_ms": 10.988
+          }
+        },
+        "claim_replay": {
+          "count": 167,
+          "ok": 167,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 167,
+            "min_ms": 0.161,
+            "mean_ms": 0.6862754491017964,
+            "p50_ms": 0.285,
+            "p90_ms": 1.327,
+            "p95_ms": 2.623,
+            "p99_ms": 7.551,
+            "p999_ms": 9.569,
+            "max_ms": 9.569
+          }
+        }
+      },
+      "budget_measured_ms": 9.407,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217344,
+        "rss_max_kib": 217344,
+        "rss_end_kib": 217344,
+        "cpu_seconds": 4.07000000000005,
+        "cpu_util": 0.27128431752007653
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 7,
+      "claim_replays_ok": 242,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "economy",
+      "description": "POST /rewards/bench_coin/claim (FULL); 2% replays of an earlier Idempotency-Key",
+      "budget": {
+        "prd": "§23 经济事务 FULL",
+        "target_rps": 50,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 854.296875,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:28:46.791754+08:00",
+      "scheduled": 12814,
+      "completed": 12814,
+      "achieved_rps": 854.2666666666667,
+      "ok": 12814,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 12814,
+        "min_ms": 0.132,
+        "mean_ms": 0.9430350398002185,
+        "p50_ms": 0.343,
+        "p90_ms": 2.007,
+        "p95_ms": 5.599,
+        "p99_ms": 8.831,
+        "p999_ms": 10.943,
+        "max_ms": 12.371
+      },
+      "latency_service": {
+        "count": 12814,
+        "min_ms": 0.131,
+        "mean_ms": 0.9348567972530045,
+        "p50_ms": 0.339,
+        "p90_ms": 1.975,
+        "p95_ms": 5.599,
+        "p99_ms": 8.831,
+        "p999_ms": 10.879,
+        "max_ms": 12.367
+      },
+      "client_schedule_lag": {
+        "count": 12814,
+        "min_ms": 0,
+        "mean_ms": 0.0057850788200405805,
+        "p50_ms": 0,
+        "p90_ms": 0.004,
+        "p95_ms": 0.007,
+        "p99_ms": 0.073,
+        "p999_ms": 0.975,
+        "max_ms": 2.872
+      },
+      "ops": {
+        "claim": {
+          "count": 12560,
+          "ok": 12560,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 12560,
+            "min_ms": 0.245,
+            "mean_ms": 0.9492555732484077,
+            "p50_ms": 0.345,
+            "p90_ms": 2.023,
+            "p95_ms": 5.631,
+            "p99_ms": 8.895,
+            "p999_ms": 10.943,
+            "max_ms": 12.371
+          }
+        },
+        "claim_replay": {
+          "count": 254,
+          "ok": 254,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 254,
+            "min_ms": 0.132,
+            "mean_ms": 0.6354370078740158,
+            "p50_ms": 0.18,
+            "p90_ms": 1.103,
+            "p95_ms": 4.127,
+            "p99_ms": 6.495,
+            "p999_ms": 10.681,
+            "max_ms": 10.681
+          }
+        }
+      },
+      "budget_measured_ms": 8.831,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217344,
+        "rss_max_kib": 217344,
+        "rss_end_kib": 217344,
+        "cpu_seconds": 4.850000000000023,
+        "cpu_util": 0.3232839499211465
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 10,
+      "claim_replays_ok": 337,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "economy",
+      "description": "POST /rewards/bench_coin/claim (FULL); 2% replays of an earlier Idempotency-Key",
+      "budget": {
+        "prd": "§23 经济事务 FULL",
+        "target_rps": 50,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 1281.4453125,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:29:06.868581+08:00",
+      "scheduled": 19221,
+      "completed": 19221,
+      "achieved_rps": 1281.4,
+      "ok": 19221,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 19221,
+        "min_ms": 0.149,
+        "mean_ms": 1.8051233546641694,
+        "p50_ms": 0.559,
+        "p90_ms": 6.175,
+        "p95_ms": 9.087,
+        "p99_ms": 11.135,
+        "p999_ms": 13.247,
+        "max_ms": 16.453
+      },
+      "latency_service": {
+        "count": 19221,
+        "min_ms": 0.144,
+        "mean_ms": 1.783575984600177,
+        "p50_ms": 0.543,
+        "p90_ms": 6.143,
+        "p95_ms": 9.023,
+        "p99_ms": 11.135,
+        "p999_ms": 13.183,
+        "max_ms": 16.287
+      },
+      "client_schedule_lag": {
+        "count": 19221,
+        "min_ms": 0,
+        "mean_ms": 0.018921023880131106,
+        "p50_ms": 0,
+        "p90_ms": 0.013,
+        "p95_ms": 0.056,
+        "p99_ms": 0.535,
+        "p999_ms": 1.191,
+        "max_ms": 2.653
+      },
+      "ops": {
+        "claim": {
+          "count": 18865,
+          "ok": 18865,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 18865,
+            "min_ms": 0.28,
+            "mean_ms": 1.8131962364166445,
+            "p50_ms": 0.563,
+            "p90_ms": 6.207,
+            "p95_ms": 9.087,
+            "p99_ms": 11.135,
+            "p999_ms": 13.247,
+            "max_ms": 16.453
+          }
+        },
+        "claim_replay": {
+          "count": 356,
+          "ok": 356,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 356,
+            "min_ms": 0.149,
+            "mean_ms": 1.377328651685393,
+            "p50_ms": 0.307,
+            "p90_ms": 4.767,
+            "p95_ms": 7.391,
+            "p99_ms": 10.239,
+            "p999_ms": 11.78,
+            "max_ms": 11.78
+          }
+        }
+      },
+      "budget_measured_ms": 11.135,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217360,
+        "rss_max_kib": 217376,
+        "rss_end_kib": 217376,
+        "cpu_seconds": 8.019999999999982,
+        "cpu_util": 0.5342073611250787
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 16,
+      "claim_replays_ok": 492,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "economy",
+      "description": "POST /rewards/bench_coin/claim (FULL); 2% replays of an earlier Idempotency-Key",
+      "budget": {
+        "prd": "§23 经济事务 FULL",
+        "target_rps": 50,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 1922.16796875,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:29:26.951561+08:00",
+      "scheduled": 28833,
+      "completed": 28833,
+      "achieved_rps": 1922.2,
+      "ok": 28833,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 28833,
+        "min_ms": 0.123,
+        "mean_ms": 1.8658783685360525,
+        "p50_ms": 0.303,
+        "p90_ms": 6.431,
+        "p95_ms": 8.191,
+        "p99_ms": 13.311,
+        "p999_ms": 40.191,
+        "max_ms": 62.833
+      },
+      "latency_service": {
+        "count": 28833,
+        "min_ms": 0.122,
+        "mean_ms": 1.861712759685083,
+        "p50_ms": 0.301,
+        "p90_ms": 6.431,
+        "p95_ms": 8.191,
+        "p99_ms": 13.311,
+        "p999_ms": 40.191,
+        "max_ms": 62.832
+      },
+      "client_schedule_lag": {
+        "count": 28833,
+        "min_ms": 0,
+        "mean_ms": 0.0025745499947976277,
+        "p50_ms": 0,
+        "p90_ms": 0.003,
+        "p95_ms": 0.005,
+        "p99_ms": 0.012,
+        "p999_ms": 0.375,
+        "max_ms": 3.743
+      },
+      "ops": {
+        "claim": {
+          "count": 28232,
+          "ok": 28232,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 28232,
+            "min_ms": 0.236,
+            "mean_ms": 1.8729640833097194,
+            "p50_ms": 0.303,
+            "p90_ms": 6.431,
+            "p95_ms": 8.191,
+            "p99_ms": 13.439,
+            "p999_ms": 40.191,
+            "max_ms": 62.833
+          }
+        },
+        "claim_replay": {
+          "count": 601,
+          "ok": 601,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 601,
+            "min_ms": 0.123,
+            "mean_ms": 1.533026622296173,
+            "p50_ms": 0.157,
+            "p90_ms": 5.791,
+            "p95_ms": 7.583,
+            "p99_ms": 11.775,
+            "p999_ms": 19.455,
+            "max_ms": 49.568
+          }
+        }
+      },
+      "budget_measured_ms": 13.311,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217392,
+        "rss_max_kib": 217392,
+        "rss_end_kib": 217392,
+        "cpu_seconds": 8.569999999999936,
+        "cpu_util": 0.5710909290294115
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 71,
+      "claim_replays_ok": 781,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "economy",
+      "description": "POST /rewards/bench_coin/claim (FULL); 2% replays of an earlier Idempotency-Key",
+      "budget": {
+        "prd": "§23 经济事务 FULL",
+        "target_rps": 50,
+        "percentile": 0.99,
+        "limit_ms": 150,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 2883.251953125,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:29:47.021293+08:00",
+      "scheduled": 43249,
+      "completed": 43249,
+      "achieved_rps": 2883.266666666667,
+      "ok": 37540,
+      "expected_rejections": 0,
+      "errors": 5709,
+      "error_rate": 0.13200305209369004,
+      "error_kinds": {
+        "http_503:overloaded": 2382,
+        "transport": 3327
+      },
+      "latency_corrected": {
+        "count": 43249,
+        "min_ms": 0.054,
+        "mean_ms": 344.1436192050683,
+        "p50_ms": 3.247,
+        "p90_ms": 1007.615,
+        "p95_ms": 1662.975,
+        "p99_ms": 3129.343,
+        "p999_ms": 4554.751,
+        "max_ms": 4890.686
+      },
+      "latency_service": {
+        "count": 43249,
+        "min_ms": 0.044,
+        "mean_ms": 344.12093502739947,
+        "p50_ms": 3.215,
+        "p90_ms": 1007.615,
+        "p95_ms": 1662.975,
+        "p99_ms": 3129.343,
+        "p999_ms": 4554.751,
+        "max_ms": 4890.683
+      },
+      "client_schedule_lag": {
+        "count": 43249,
+        "min_ms": 0,
+        "mean_ms": 0.019045735161506625,
+        "p50_ms": 0,
+        "p90_ms": 0.018,
+        "p95_ms": 0.099,
+        "p99_ms": 0.407,
+        "p999_ms": 1.127,
+        "max_ms": 3.768
+      },
+      "ops": {
+        "claim": {
+          "count": 42423,
+          "ok": 36811,
+          "expected_rejections": 0,
+          "errors": 5612,
+          "latency": {
+            "count": 42423,
+            "min_ms": 0.054,
+            "mean_ms": 343.75452483322726,
+            "p50_ms": 3.199,
+            "p90_ms": 1007.615,
+            "p95_ms": 1662.975,
+            "p99_ms": 3129.343,
+            "p999_ms": 4554.751,
+            "max_ms": 4890.686
+          },
+          "kinds": {
+            "http_503:overloaded": 2335,
+            "transport": 3277
+          }
+        },
+        "claim_replay": {
+          "count": 826,
+          "ok": 729,
+          "expected_rejections": 0,
+          "errors": 97,
+          "latency": {
+            "count": 826,
+            "min_ms": 0.058,
+            "mean_ms": 364.12733656174333,
+            "p50_ms": 11.263,
+            "p90_ms": 937.983,
+            "p95_ms": 1744.895,
+            "p99_ms": 3489.791,
+            "p999_ms": 4620.287,
+            "max_ms": 4645.485
+          },
+          "kinds": {
+            "http_503:overloaded": 47,
+            "transport": 50
+          }
+        }
+      },
+      "budget_measured_ms": 3129.343,
+      "pass_local": false,
+      "fail_reasons": [
+        "p99 3129.3ms \u003e 150ms",
+        "error rate 0.1320 \u003e 0.0010"
+      ],
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217488,
+        "rss_max_kib": 217968,
+        "rss_end_kib": 217968,
+        "cpu_seconds": 12,
+        "cpu_util": 0.7768872838997246
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 1461,
+      "claim_replays_ok": 1004,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    }
+  ]
+}

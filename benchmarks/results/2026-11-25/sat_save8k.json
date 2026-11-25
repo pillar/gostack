@@ -1,0 +1,1017 @@
+{
+  "budget": {
+    "prd": "§23 8KiB 存档写入",
+    "target_rps": 50,
+    "percentile": 0.95,
+    "limit_ms": 50,
+    "max_error_rate": 0.001
+  },
+  "highest_passing_rps": 1922.16796875,
+  "label": "local, not acceptance",
+  "mode": "saturation",
+  "scenario": "save8k",
+  "step_factor": 1.5,
+  "step_steady_s": 15,
+  "step_warmup_s": 5,
+  "steps": [
+    {
+      "label": "local, not acceptance",
+      "scenario": "save8k",
+      "description": "PUT /saves/main with an 8 KiB payload (FULL, history 10, Idempotency-Key)",
+      "budget": {
+        "prd": "§23 8KiB 存档写入",
+        "target_rps": 50,
+        "percentile": 0.95,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 50,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:22:45.043345+08:00",
+      "scheduled": 750,
+      "completed": 750,
+      "achieved_rps": 50,
+      "ok": 750,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 750,
+        "min_ms": 0.611,
+        "mean_ms": 1.3115466666666666,
+        "p50_ms": 1.047,
+        "p90_ms": 2.111,
+        "p95_ms": 2.751,
+        "p99_ms": 4.575,
+        "p999_ms": 6.271,
+        "max_ms": 6.763
+      },
+      "latency_service": {
+        "count": 750,
+        "min_ms": 0.606,
+        "mean_ms": 1.1815626666666668,
+        "p50_ms": 0.983,
+        "p90_ms": 1.799,
+        "p95_ms": 2.383,
+        "p99_ms": 4.095,
+        "p999_ms": 5.983,
+        "max_ms": 6.62
+      },
+      "client_schedule_lag": {
+        "count": 750,
+        "min_ms": 0,
+        "mean_ms": 0.11460666666666666,
+        "p50_ms": 0.033,
+        "p90_ms": 0.281,
+        "p95_ms": 0.611,
+        "p99_ms": 1.439,
+        "p999_ms": 3.407,
+        "max_ms": 3.893
+      },
+      "ops": {
+        "save_put_8k": {
+          "count": 750,
+          "ok": 750,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 750,
+            "min_ms": 0.611,
+            "mean_ms": 1.3115466666666666,
+            "p50_ms": 1.047,
+            "p90_ms": 2.111,
+            "p95_ms": 2.751,
+            "p99_ms": 4.575,
+            "p999_ms": 6.271,
+            "max_ms": 6.763
+          }
+        }
+      },
+      "budget_measured_ms": 2.751,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217232,
+        "rss_max_kib": 217232,
+        "rss_end_kib": 217232,
+        "cpu_seconds": 0.660000000000025,
+        "cpu_util": 0.0440458017610596
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 1,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "save8k",
+      "description": "PUT /saves/main with an 8 KiB payload (FULL, history 10, Idempotency-Key)",
+      "budget": {
+        "prd": "§23 8KiB 存档写入",
+        "target_rps": 50,
+        "percentile": 0.95,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 75,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:23:05.072762+08:00",
+      "scheduled": 1125,
+      "completed": 1125,
+      "achieved_rps": 75,
+      "ok": 1125,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 1125,
+        "min_ms": 0.649,
+        "mean_ms": 1.3313662222222222,
+        "p50_ms": 1.011,
+        "p90_ms": 2.175,
+        "p95_ms": 2.959,
+        "p99_ms": 5.023,
+        "p999_ms": 8.063,
+        "max_ms": 9.256
+      },
+      "latency_service": {
+        "count": 1125,
+        "min_ms": 0.612,
+        "mean_ms": 1.173641777777778,
+        "p50_ms": 0.947,
+        "p90_ms": 1.863,
+        "p95_ms": 2.351,
+        "p99_ms": 4.079,
+        "p999_ms": 5.631,
+        "max_ms": 6.101
+      },
+      "client_schedule_lag": {
+        "count": 1125,
+        "min_ms": 0,
+        "mean_ms": 0.14571555555555557,
+        "p50_ms": 0.03,
+        "p90_ms": 0.317,
+        "p95_ms": 0.627,
+        "p99_ms": 2.511,
+        "p999_ms": 6.335,
+        "max_ms": 8.014
+      },
+      "ops": {
+        "save_put_8k": {
+          "count": 1125,
+          "ok": 1125,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 1125,
+            "min_ms": 0.649,
+            "mean_ms": 1.3313662222222222,
+            "p50_ms": 1.011,
+            "p90_ms": 2.175,
+            "p95_ms": 2.959,
+            "p99_ms": 5.023,
+            "p999_ms": 8.063,
+            "max_ms": 9.256
+          }
+        }
+      },
+      "budget_measured_ms": 2.959,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217232,
+        "rss_max_kib": 217232,
+        "rss_end_kib": 217232,
+        "cpu_seconds": 0.9499999999999886,
+        "cpu_util": 0.06336147092913558
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 1,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "save8k",
+      "description": "PUT /saves/main with an 8 KiB payload (FULL, history 10, Idempotency-Key)",
+      "budget": {
+        "prd": "§23 8KiB 存档写入",
+        "target_rps": 50,
+        "percentile": 0.95,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 112.5,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:23:25.11234+08:00",
+      "scheduled": 1687,
+      "completed": 1687,
+      "achieved_rps": 112.46666666666667,
+      "ok": 1687,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 1687,
+        "min_ms": 0.467,
+        "mean_ms": 1.0446816834617665,
+        "p50_ms": 0.843,
+        "p90_ms": 1.687,
+        "p95_ms": 2.303,
+        "p99_ms": 4.095,
+        "p999_ms": 5.727,
+        "max_ms": 6.026
+      },
+      "latency_service": {
+        "count": 1687,
+        "min_ms": 0.459,
+        "mean_ms": 0.9852382928275044,
+        "p50_ms": 0.819,
+        "p90_ms": 1.551,
+        "p95_ms": 2.111,
+        "p99_ms": 3.807,
+        "p999_ms": 5.599,
+        "max_ms": 6.019
+      },
+      "client_schedule_lag": {
+        "count": 1687,
+        "min_ms": 0,
+        "mean_ms": 0.048248962655601656,
+        "p50_ms": 0,
+        "p90_ms": 0.048,
+        "p95_ms": 0.281,
+        "p99_ms": 0.991,
+        "p999_ms": 2.271,
+        "max_ms": 2.981
+      },
+      "ops": {
+        "save_put_8k": {
+          "count": 1687,
+          "ok": 1687,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 1687,
+            "min_ms": 0.467,
+            "mean_ms": 1.0446816834617665,
+            "p50_ms": 0.843,
+            "p90_ms": 1.687,
+            "p95_ms": 2.303,
+            "p99_ms": 4.095,
+            "p999_ms": 5.727,
+            "max_ms": 6.026
+          }
+        }
+      },
+      "budget_measured_ms": 2.303,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217232,
+        "rss_max_kib": 217232,
+        "rss_end_kib": 217232,
+        "cpu_seconds": 1.2100000000000364,
+        "cpu_util": 0.0807129400678178
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 1,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "save8k",
+      "description": "PUT /saves/main with an 8 KiB payload (FULL, history 10, Idempotency-Key)",
+      "budget": {
+        "prd": "§23 8KiB 存档写入",
+        "target_rps": 50,
+        "percentile": 0.95,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 168.75,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:23:45.156082+08:00",
+      "scheduled": 2531,
+      "completed": 2531,
+      "achieved_rps": 168.73333333333332,
+      "ok": 2531,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 2531,
+        "min_ms": 0.424,
+        "mean_ms": 1.1342986961675225,
+        "p50_ms": 0.815,
+        "p90_ms": 1.831,
+        "p95_ms": 2.463,
+        "p99_ms": 4.511,
+        "p999_ms": 25.471,
+        "max_ms": 42.024
+      },
+      "latency_service": {
+        "count": 2531,
+        "min_ms": 0.421,
+        "mean_ms": 1.0848071908336627,
+        "p50_ms": 0.799,
+        "p90_ms": 1.743,
+        "p95_ms": 2.223,
+        "p99_ms": 4.223,
+        "p999_ms": 25.471,
+        "max_ms": 42.017
+      },
+      "client_schedule_lag": {
+        "count": 2531,
+        "min_ms": 0,
+        "mean_ms": 0.040111418411694987,
+        "p50_ms": 0,
+        "p90_ms": 0.032,
+        "p95_ms": 0.194,
+        "p99_ms": 0.935,
+        "p999_ms": 2.039,
+        "max_ms": 4.667
+      },
+      "ops": {
+        "save_put_8k": {
+          "count": 2531,
+          "ok": 2531,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 2531,
+            "min_ms": 0.424,
+            "mean_ms": 1.1342986961675225,
+            "p50_ms": 0.815,
+            "p90_ms": 1.831,
+            "p95_ms": 2.463,
+            "p99_ms": 4.511,
+            "p999_ms": 25.471,
+            "max_ms": 42.024
+          }
+        }
+      },
+      "budget_measured_ms": 2.463,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217232,
+        "rss_max_kib": 217264,
+        "rss_end_kib": 217264,
+        "cpu_seconds": 1.8100000000000023,
+        "cpu_util": 0.12066095471381975
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 7,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "save8k",
+      "description": "PUT /saves/main with an 8 KiB payload (FULL, history 10, Idempotency-Key)",
+      "budget": {
+        "prd": "§23 8KiB 存档写入",
+        "target_rps": 50,
+        "percentile": 0.95,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 253.125,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:24:05.208128+08:00",
+      "scheduled": 3797,
+      "completed": 3797,
+      "achieved_rps": 253.13333333333333,
+      "ok": 3797,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 3797,
+        "min_ms": 0.422,
+        "mean_ms": 1.1222228074795892,
+        "p50_ms": 0.791,
+        "p90_ms": 2.127,
+        "p95_ms": 2.863,
+        "p99_ms": 4.447,
+        "p999_ms": 6.655,
+        "max_ms": 7.666
+      },
+      "latency_service": {
+        "count": 3797,
+        "min_ms": 0.419,
+        "mean_ms": 1.0675375296286542,
+        "p50_ms": 0.767,
+        "p90_ms": 1.967,
+        "p95_ms": 2.735,
+        "p99_ms": 4.319,
+        "p999_ms": 6.047,
+        "max_ms": 6.745
+      },
+      "client_schedule_lag": {
+        "count": 3797,
+        "min_ms": 0,
+        "mean_ms": 0.046613378983407956,
+        "p50_ms": 0,
+        "p90_ms": 0.027,
+        "p95_ms": 0.275,
+        "p99_ms": 1.119,
+        "p999_ms": 2.399,
+        "max_ms": 3.396
+      },
+      "ops": {
+        "save_put_8k": {
+          "count": 3797,
+          "ok": 3797,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 3797,
+            "min_ms": 0.422,
+            "mean_ms": 1.1222228074795892,
+            "p50_ms": 0.791,
+            "p90_ms": 2.127,
+            "p95_ms": 2.863,
+            "p99_ms": 4.447,
+            "p999_ms": 6.655,
+            "max_ms": 7.666
+          }
+        }
+      },
+      "budget_measured_ms": 2.863,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217264,
+        "rss_max_kib": 217264,
+        "rss_end_kib": 217264,
+        "cpu_seconds": 2.3999999999999773,
+        "cpu_util": 0.15998784492348042
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 3,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "save8k",
+      "description": "PUT /saves/main with an 8 KiB payload (FULL, history 10, Idempotency-Key)",
+      "budget": {
+        "prd": "§23 8KiB 存档写入",
+        "target_rps": 50,
+        "percentile": 0.95,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 379.6875,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:24:25.264003+08:00",
+      "scheduled": 5695,
+      "completed": 5695,
+      "achieved_rps": 379.6666666666667,
+      "ok": 5695,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 5695,
+        "min_ms": 0.362,
+        "mean_ms": 0.9026793678665496,
+        "p50_ms": 0.675,
+        "p90_ms": 1.575,
+        "p95_ms": 2.239,
+        "p99_ms": 4.223,
+        "p999_ms": 6.911,
+        "max_ms": 9.527
+      },
+      "latency_service": {
+        "count": 5695,
+        "min_ms": 0.356,
+        "mean_ms": 0.862060755048288,
+        "p50_ms": 0.655,
+        "p90_ms": 1.495,
+        "p95_ms": 2.063,
+        "p99_ms": 3.871,
+        "p999_ms": 6.783,
+        "max_ms": 9.515
+      },
+      "client_schedule_lag": {
+        "count": 5695,
+        "min_ms": 0,
+        "mean_ms": 0.03317945566286216,
+        "p50_ms": 0,
+        "p90_ms": 0.024,
+        "p95_ms": 0.111,
+        "p99_ms": 0.979,
+        "p999_ms": 2.255,
+        "max_ms": 4.483
+      },
+      "ops": {
+        "save_put_8k": {
+          "count": 5695,
+          "ok": 5695,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 5695,
+            "min_ms": 0.362,
+            "mean_ms": 0.9026793678665496,
+            "p50_ms": 0.675,
+            "p90_ms": 1.575,
+            "p95_ms": 2.239,
+            "p99_ms": 4.223,
+            "p999_ms": 6.911,
+            "max_ms": 9.527
+          }
+        }
+      },
+      "budget_measured_ms": 2.239,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217264,
+        "rss_max_kib": 217264,
+        "rss_end_kib": 217264,
+        "cpu_seconds": 3.230000000000018,
+        "cpu_util": 0.21527503266380188
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 4,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "save8k",
+      "description": "PUT /saves/main with an 8 KiB payload (FULL, history 10, Idempotency-Key)",
+      "budget": {
+        "prd": "§23 8KiB 存档写入",
+        "target_rps": 50,
+        "percentile": 0.95,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 569.53125,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:24:45.323411+08:00",
+      "scheduled": 8543,
+      "completed": 8543,
+      "achieved_rps": 569.5333333333333,
+      "ok": 8543,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 8543,
+        "min_ms": 0.339,
+        "mean_ms": 0.8366960084279528,
+        "p50_ms": 0.603,
+        "p90_ms": 1.439,
+        "p95_ms": 2.175,
+        "p99_ms": 4.223,
+        "p999_ms": 7.583,
+        "max_ms": 10.71
+      },
+      "latency_service": {
+        "count": 8543,
+        "min_ms": 0.337,
+        "mean_ms": 0.8148348355378672,
+        "p50_ms": 0.591,
+        "p90_ms": 1.391,
+        "p95_ms": 2.079,
+        "p99_ms": 4.159,
+        "p999_ms": 7.103,
+        "max_ms": 10.708
+      },
+      "client_schedule_lag": {
+        "count": 8543,
+        "min_ms": 0,
+        "mean_ms": 0.01826817277303055,
+        "p50_ms": 0,
+        "p90_ms": 0.014,
+        "p95_ms": 0.058,
+        "p99_ms": 0.455,
+        "p999_ms": 1.343,
+        "max_ms": 4.844
+      },
+      "ops": {
+        "save_put_8k": {
+          "count": 8543,
+          "ok": 8543,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 8543,
+            "min_ms": 0.339,
+            "mean_ms": 0.8366960084279528,
+            "p50_ms": 0.603,
+            "p90_ms": 1.439,
+            "p95_ms": 2.175,
+            "p99_ms": 4.223,
+            "p999_ms": 7.583,
+            "max_ms": 10.71
+          }
+        }
+      },
+      "budget_measured_ms": 2.175,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217264,
+        "rss_max_kib": 217264,
+        "rss_end_kib": 217264,
+        "cpu_seconds": 4.520000000000039,
+        "cpu_util": 0.3012718353763786
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 6,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "save8k",
+      "description": "PUT /saves/main with an 8 KiB payload (FULL, history 10, Idempotency-Key)",
+      "budget": {
+        "prd": "§23 8KiB 存档写入",
+        "target_rps": 50,
+        "percentile": 0.95,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 854.296875,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:25:05.377046+08:00",
+      "scheduled": 12814,
+      "completed": 12814,
+      "achieved_rps": 854.2666666666667,
+      "ok": 12814,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 12814,
+        "min_ms": 0.359,
+        "mean_ms": 1.1997980334009677,
+        "p50_ms": 0.723,
+        "p90_ms": 2.527,
+        "p95_ms": 3.775,
+        "p99_ms": 6.271,
+        "p999_ms": 12.415,
+        "max_ms": 22.56
+      },
+      "latency_service": {
+        "count": 12814,
+        "min_ms": 0.358,
+        "mean_ms": 1.1521886218198845,
+        "p50_ms": 0.707,
+        "p90_ms": 2.383,
+        "p95_ms": 3.631,
+        "p99_ms": 6.015,
+        "p999_ms": 12.415,
+        "max_ms": 22.116
+      },
+      "client_schedule_lag": {
+        "count": 12814,
+        "min_ms": 0,
+        "mean_ms": 0.042439987513656935,
+        "p50_ms": 0,
+        "p90_ms": 0.042,
+        "p95_ms": 0.184,
+        "p99_ms": 0.947,
+        "p999_ms": 2.911,
+        "max_ms": 8.182
+      },
+      "ops": {
+        "save_put_8k": {
+          "count": 12814,
+          "ok": 12814,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 12814,
+            "min_ms": 0.359,
+            "mean_ms": 1.1997980334009677,
+            "p50_ms": 0.723,
+            "p90_ms": 2.527,
+            "p95_ms": 3.775,
+            "p99_ms": 6.271,
+            "p999_ms": 12.415,
+            "max_ms": 22.56
+          }
+        }
+      },
+      "budget_measured_ms": 3.775,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217264,
+        "rss_max_kib": 217280,
+        "rss_end_kib": 217280,
+        "cpu_seconds": 6.759999999999991,
+        "cpu_util": 0.4505269207246393
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 15,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "save8k",
+      "description": "PUT /saves/main with an 8 KiB payload (FULL, history 10, Idempotency-Key)",
+      "budget": {
+        "prd": "§23 8KiB 存档写入",
+        "target_rps": 50,
+        "percentile": 0.95,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 1281.4453125,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:25:25.443489+08:00",
+      "scheduled": 19221,
+      "completed": 19221,
+      "achieved_rps": 1281.4,
+      "ok": 19221,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 19221,
+        "min_ms": 0.323,
+        "mean_ms": 1.3455386816502783,
+        "p50_ms": 0.743,
+        "p90_ms": 3.167,
+        "p95_ms": 4.191,
+        "p99_ms": 6.719,
+        "p999_ms": 12.543,
+        "max_ms": 22.347
+      },
+      "latency_service": {
+        "count": 19221,
+        "min_ms": 0.322,
+        "mean_ms": 1.2920670620675303,
+        "p50_ms": 0.715,
+        "p90_ms": 3.071,
+        "p95_ms": 4.063,
+        "p99_ms": 6.527,
+        "p999_ms": 12.159,
+        "max_ms": 22.346
+      },
+      "client_schedule_lag": {
+        "count": 19221,
+        "min_ms": 0,
+        "mean_ms": 0.04788850736173976,
+        "p50_ms": 0,
+        "p90_ms": 0.067,
+        "p95_ms": 0.244,
+        "p99_ms": 1.063,
+        "p999_ms": 2.335,
+        "max_ms": 5.141
+      },
+      "ops": {
+        "save_put_8k": {
+          "count": 19221,
+          "ok": 19221,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 19221,
+            "min_ms": 0.323,
+            "mean_ms": 1.3455386816502783,
+            "p50_ms": 0.743,
+            "p90_ms": 3.167,
+            "p95_ms": 4.191,
+            "p99_ms": 6.719,
+            "p999_ms": 12.543,
+            "max_ms": 22.347
+          }
+        }
+      },
+      "budget_measured_ms": 4.191,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217280,
+        "rss_max_kib": 217280,
+        "rss_end_kib": 217280,
+        "cpu_seconds": 8.670000000000016,
+        "cpu_util": 0.5778905892460984
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 22,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "save8k",
+      "description": "PUT /saves/main with an 8 KiB payload (FULL, history 10, Idempotency-Key)",
+      "budget": {
+        "prd": "§23 8KiB 存档写入",
+        "target_rps": 50,
+        "percentile": 0.95,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 1922.16796875,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:25:45.509327+08:00",
+      "scheduled": 28833,
+      "completed": 28833,
+      "achieved_rps": 1922.2,
+      "ok": 28833,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 28833,
+        "min_ms": 0.318,
+        "mean_ms": 1.126856518572469,
+        "p50_ms": 0.599,
+        "p90_ms": 2.703,
+        "p95_ms": 3.887,
+        "p99_ms": 5.887,
+        "p999_ms": 17.663,
+        "max_ms": 34.191
+      },
+      "latency_service": {
+        "count": 28833,
+        "min_ms": 0.317,
+        "mean_ms": 1.1120823362119794,
+        "p50_ms": 0.591,
+        "p90_ms": 2.671,
+        "p95_ms": 3.871,
+        "p99_ms": 5.855,
+        "p999_ms": 17.663,
+        "max_ms": 34.19
+      },
+      "client_schedule_lag": {
+        "count": 28833,
+        "min_ms": 0,
+        "mean_ms": 0.012067422744771615,
+        "p50_ms": 0,
+        "p90_ms": 0.016,
+        "p95_ms": 0.045,
+        "p99_ms": 0.221,
+        "p999_ms": 1.047,
+        "max_ms": 3.366
+      },
+      "ops": {
+        "save_put_8k": {
+          "count": 28833,
+          "ok": 28833,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 28833,
+            "min_ms": 0.318,
+            "mean_ms": 1.126856518572469,
+            "p50_ms": 0.599,
+            "p90_ms": 2.703,
+            "p95_ms": 3.887,
+            "p99_ms": 5.887,
+            "p999_ms": 17.663,
+            "max_ms": 34.191
+          }
+        }
+      },
+      "budget_measured_ms": 3.887,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217280,
+        "rss_max_kib": 217296,
+        "rss_end_kib": 217296,
+        "cpu_seconds": 11.54000000000002,
+        "cpu_util": 0.7691541567188954
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 33,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "save8k",
+      "description": "PUT /saves/main with an 8 KiB payload (FULL, history 10, Idempotency-Key)",
+      "budget": {
+        "prd": "§23 8KiB 存档写入",
+        "target_rps": 50,
+        "percentile": 0.95,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 2883.251953125,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:26:05.577895+08:00",
+      "scheduled": 43249,
+      "completed": 43249,
+      "achieved_rps": 2883.266666666667,
+      "ok": 30649,
+      "expected_rejections": 0,
+      "errors": 12600,
+      "error_rate": 0.2913362158662628,
+      "error_kinds": {
+        "transport": 12600
+      },
+      "latency_corrected": {
+        "count": 43249,
+        "min_ms": 0.064,
+        "mean_ms": 322.1406787440172,
+        "p50_ms": 2.639,
+        "p90_ms": 1114.111,
+        "p95_ms": 1966.079,
+        "p99_ms": 7372.799,
+        "p999_ms": 10944.511,
+        "max_ms": 13686.483
+      },
+      "latency_service": {
+        "count": 43249,
+        "min_ms": 0.061,
+        "mean_ms": 322.0694728201808,
+        "p50_ms": 2.591,
+        "p90_ms": 1114.111,
+        "p95_ms": 1966.079,
+        "p99_ms": 7372.799,
+        "p999_ms": 10944.511,
+        "max_ms": 13685.912
+      },
+      "client_schedule_lag": {
+        "count": 43249,
+        "min_ms": 0,
+        "mean_ms": 0.061112002589655254,
+        "p50_ms": 0,
+        "p90_ms": 0.102,
+        "p95_ms": 0.317,
+        "p99_ms": 1.327,
+        "p999_ms": 3.087,
+        "max_ms": 6.258
+      },
+      "ops": {
+        "save_put_8k": {
+          "count": 43249,
+          "ok": 30649,
+          "expected_rejections": 0,
+          "errors": 12600,
+          "latency": {
+            "count": 43249,
+            "min_ms": 0.064,
+            "mean_ms": 322.1406787440172,
+            "p50_ms": 2.639,
+            "p90_ms": 1114.111,
+            "p95_ms": 1966.079,
+            "p99_ms": 7372.799,
+            "p999_ms": 10944.511,
+            "max_ms": 13686.483
+          },
+          "kinds": {
+            "transport": 12600
+          }
+        }
+      },
+      "budget_measured_ms": 1966.079,
+      "pass_local": false,
+      "fail_reasons": [
+        "p95 1966.1ms \u003e 50ms",
+        "error rate 0.2913 \u003e 0.0010"
+      ],
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217296,
+        "rss_max_kib": 217312,
+        "rss_end_kib": 217312,
+        "cpu_seconds": 12.829999999999984,
+        "cpu_util": 0.8200421628225342
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 1132,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "label": "local, not acceptance",
+  "scenario": "ws",
+  "description": "idle authenticated WebSocket connections (realtime module); client answers server pings",
+  "target_connections": 3000,
+  "opened": 3000,
+  "open_errors": {},
+  "hold_s": 120,
+  "alive_at_end": 3000,
+  "dropped_during_hold": 0,
+  "connect_latency": {
+    "count": 3000,
+    "min_ms": 0.185,
+    "mean_ms": 0.6630280000000001,
+    "p50_ms": 0.451,
+    "p90_ms": 1.215,
+    "p95_ms": 1.783,
+    "p99_ms": 3.695,
+    "p999_ms": 7.135,
+    "max_ms": 7.502
+  },
+  "server": {
+    "pid": 44067,
+    "rss_start_kib": 116080,
+    "rss_max_kib": 144384,
+    "rss_end_kib": 144384,
+    "cpu_seconds": 1.1400000000000001,
+    "cpu_util": 0.009498888653141547
+  },
+  "client_go": "go1.27.1"
+}

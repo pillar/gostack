@@ -1,0 +1,1207 @@
+{
+  "budget": {
+    "prd": "§23 配置与玩家读取",
+    "target_rps": 300,
+    "percentile": 0.95,
+    "limit_ms": 30,
+    "max_error_rate": 0.001
+  },
+  "highest_passing_rps": 11533.0078125,
+  "label": "local, not acceptance",
+  "mode": "saturation",
+  "scenario": "config_player",
+  "step_factor": 1.5,
+  "step_steady_s": 15,
+  "step_warmup_s": 5,
+  "steps": [
+    {
+      "label": "local, not acceptance",
+      "scenario": "config_player",
+      "description": "GET /config (cached doc + game row read) 50% / GET /me (session + player point reads) 50%",
+      "budget": {
+        "prd": "§23 配置与玩家读取",
+        "target_rps": 300,
+        "percentile": 0.95,
+        "limit_ms": 30,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 300,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:06:41.538341+08:00",
+      "scheduled": 4500,
+      "completed": 4500,
+      "achieved_rps": 300,
+      "ok": 4500,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 4500,
+        "min_ms": 0.126,
+        "mean_ms": 0.5458357777777778,
+        "p50_ms": 0.337,
+        "p90_ms": 1.071,
+        "p95_ms": 1.663,
+        "p99_ms": 3.423,
+        "p999_ms": 6.559,
+        "max_ms": 9.472
+      },
+      "latency_service": {
+        "count": 4500,
+        "min_ms": 0.122,
+        "mean_ms": 0.5015824444444444,
+        "p50_ms": 0.321,
+        "p90_ms": 0.951,
+        "p95_ms": 1.519,
+        "p99_ms": 3.311,
+        "p999_ms": 6.079,
+        "max_ms": 7.811
+      },
+      "client_schedule_lag": {
+        "count": 4500,
+        "min_ms": 0,
+        "mean_ms": 0.03603066666666667,
+        "p50_ms": 0,
+        "p90_ms": 0.026,
+        "p95_ms": 0.119,
+        "p99_ms": 0.971,
+        "p999_ms": 2.815,
+        "max_ms": 5.746
+      },
+      "ops": {
+        "config": {
+          "count": 2244,
+          "ok": 2244,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 2244,
+            "min_ms": 0.126,
+            "mean_ms": 0.5242633689839572,
+            "p50_ms": 0.311,
+            "p90_ms": 1.039,
+            "p95_ms": 1.623,
+            "p99_ms": 3.423,
+            "p999_ms": 6.559,
+            "max_ms": 6.795
+          }
+        },
+        "me": {
+          "count": 2256,
+          "ok": 2256,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 2256,
+            "min_ms": 0.154,
+            "mean_ms": 0.5672934397163121,
+            "p50_ms": 0.355,
+            "p90_ms": 1.103,
+            "p95_ms": 1.759,
+            "p99_ms": 3.423,
+            "p999_ms": 6.143,
+            "max_ms": 9.472
+          }
+        }
+      },
+      "budget_measured_ms": 1.663,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 46848,
+        "rss_max_kib": 46960,
+        "rss_end_kib": 46960,
+        "cpu_seconds": 1.0200000000000031,
+        "cpu_util": 0.06799813250382233
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 3,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "config_player",
+      "description": "GET /config (cached doc + game row read) 50% / GET /me (session + player point reads) 50%",
+      "budget": {
+        "prd": "§23 配置与玩家读取",
+        "target_rps": 300,
+        "percentile": 0.95,
+        "limit_ms": 30,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 450,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:07:01.563754+08:00",
+      "scheduled": 6750,
+      "completed": 6750,
+      "achieved_rps": 450,
+      "ok": 6750,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 6750,
+        "min_ms": 0.109,
+        "mean_ms": 0.6080971851851852,
+        "p50_ms": 0.303,
+        "p90_ms": 1.455,
+        "p95_ms": 2.255,
+        "p99_ms": 4.159,
+        "p999_ms": 6.655,
+        "max_ms": 9.609
+      },
+      "latency_service": {
+        "count": 6750,
+        "min_ms": 0.105,
+        "mean_ms": 0.5493234074074075,
+        "p50_ms": 0.289,
+        "p90_ms": 1.255,
+        "p95_ms": 1.967,
+        "p99_ms": 3.743,
+        "p999_ms": 5.855,
+        "max_ms": 9.601
+      },
+      "client_schedule_lag": {
+        "count": 6750,
+        "min_ms": 0,
+        "mean_ms": 0.052342370370370365,
+        "p50_ms": 0,
+        "p90_ms": 0.037,
+        "p95_ms": 0.23,
+        "p99_ms": 1.279,
+        "p999_ms": 3.247,
+        "max_ms": 5.496
+      },
+      "ops": {
+        "config": {
+          "count": 3338,
+          "ok": 3338,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 3338,
+            "min_ms": 0.109,
+            "mean_ms": 0.5802483523067705,
+            "p50_ms": 0.279,
+            "p90_ms": 1.415,
+            "p95_ms": 2.207,
+            "p99_ms": 3.887,
+            "p999_ms": 6.687,
+            "max_ms": 8.257
+          }
+        },
+        "me": {
+          "count": 3412,
+          "ok": 3412,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 3412,
+            "min_ms": 0.135,
+            "mean_ms": 0.6353420281359906,
+            "p50_ms": 0.323,
+            "p90_ms": 1.495,
+            "p95_ms": 2.271,
+            "p99_ms": 4.287,
+            "p999_ms": 6.111,
+            "max_ms": 9.609
+          }
+        }
+      },
+      "budget_measured_ms": 2.255,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 46976,
+        "rss_max_kib": 56576,
+        "rss_end_kib": 56576,
+        "cpu_seconds": 1.2899999999999991,
+        "cpu_util": 0.08598796693562748
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 4,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "config_player",
+      "description": "GET /config (cached doc + game row read) 50% / GET /me (session + player point reads) 50%",
+      "budget": {
+        "prd": "§23 配置与玩家读取",
+        "target_rps": 300,
+        "percentile": 0.95,
+        "limit_ms": 30,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 675,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:07:21.59019+08:00",
+      "scheduled": 10125,
+      "completed": 10125,
+      "achieved_rps": 675,
+      "ok": 10125,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 10125,
+        "min_ms": 0.107,
+        "mean_ms": 0.564534024691358,
+        "p50_ms": 0.295,
+        "p90_ms": 1.335,
+        "p95_ms": 1.895,
+        "p99_ms": 3.375,
+        "p999_ms": 5.183,
+        "max_ms": 7.783
+      },
+      "latency_service": {
+        "count": 10125,
+        "min_ms": 0.106,
+        "mean_ms": 0.5262461234567901,
+        "p50_ms": 0.283,
+        "p90_ms": 1.239,
+        "p95_ms": 1.759,
+        "p99_ms": 3.199,
+        "p999_ms": 4.959,
+        "max_ms": 7.78
+      },
+      "client_schedule_lag": {
+        "count": 10125,
+        "min_ms": 0,
+        "mean_ms": 0.03498291358024692,
+        "p50_ms": 0,
+        "p90_ms": 0.027,
+        "p95_ms": 0.151,
+        "p99_ms": 0.863,
+        "p999_ms": 2.191,
+        "max_ms": 4.292
+      },
+      "ops": {
+        "config": {
+          "count": 5149,
+          "ok": 5149,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 5149,
+            "min_ms": 0.107,
+            "mean_ms": 0.5551887745193241,
+            "p50_ms": 0.275,
+            "p90_ms": 1.335,
+            "p95_ms": 1.911,
+            "p99_ms": 3.471,
+            "p999_ms": 5.343,
+            "max_ms": 7.008
+          }
+        },
+        "me": {
+          "count": 4976,
+          "ok": 4976,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 4976,
+            "min_ms": 0.135,
+            "mean_ms": 0.5742041800643087,
+            "p50_ms": 0.317,
+            "p90_ms": 1.335,
+            "p95_ms": 1.887,
+            "p99_ms": 3.295,
+            "p999_ms": 4.895,
+            "max_ms": 7.783
+          }
+        }
+      },
+      "budget_measured_ms": 1.895,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 56576,
+        "rss_max_kib": 56576,
+        "rss_end_kib": 56576,
+        "cpu_seconds": 1.7899999999999991,
+        "cpu_util": 0.11930057604362448
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 6,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "config_player",
+      "description": "GET /config (cached doc + game row read) 50% / GET /me (session + player point reads) 50%",
+      "budget": {
+        "prd": "§23 配置与玩家读取",
+        "target_rps": 300,
+        "percentile": 0.95,
+        "limit_ms": 30,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 1012.5,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:07:41.618255+08:00",
+      "scheduled": 15187,
+      "completed": 15187,
+      "achieved_rps": 1012.4666666666667,
+      "ok": 15187,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 15187,
+        "min_ms": 0.102,
+        "mean_ms": 0.6551752156449595,
+        "p50_ms": 0.283,
+        "p90_ms": 1.655,
+        "p95_ms": 2.495,
+        "p99_ms": 4.447,
+        "p999_ms": 7.391,
+        "max_ms": 13.974
+      },
+      "latency_service": {
+        "count": 15187,
+        "min_ms": 0.099,
+        "mean_ms": 0.605263712385593,
+        "p50_ms": 0.269,
+        "p90_ms": 1.495,
+        "p95_ms": 2.287,
+        "p99_ms": 4.159,
+        "p999_ms": 7.135,
+        "max_ms": 9.668
+      },
+      "client_schedule_lag": {
+        "count": 15187,
+        "min_ms": 0,
+        "mean_ms": 0.0466890103377889,
+        "p50_ms": 0,
+        "p90_ms": 0.035,
+        "p95_ms": 0.204,
+        "p99_ms": 1.175,
+        "p999_ms": 3.087,
+        "max_ms": 4.862
+      },
+      "ops": {
+        "config": {
+          "count": 7568,
+          "ok": 7568,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 7568,
+            "min_ms": 0.102,
+            "mean_ms": 0.6371479915433403,
+            "p50_ms": 0.263,
+            "p90_ms": 1.647,
+            "p95_ms": 2.431,
+            "p99_ms": 4.511,
+            "p999_ms": 7.583,
+            "max_ms": 9.67
+          }
+        },
+        "me": {
+          "count": 7619,
+          "ok": 7619,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 7619,
+            "min_ms": 0.123,
+            "mean_ms": 0.6730817692610579,
+            "p50_ms": 0.299,
+            "p90_ms": 1.671,
+            "p95_ms": 2.559,
+            "p99_ms": 4.415,
+            "p999_ms": 7.103,
+            "max_ms": 13.974
+          }
+        }
+      },
+      "budget_measured_ms": 2.495,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 56624,
+        "rss_max_kib": 56672,
+        "rss_end_kib": 56672,
+        "cpu_seconds": 2.4499999999999957,
+        "cpu_util": 0.1633089195535025
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 14,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "config_player",
+      "description": "GET /config (cached doc + game row read) 50% / GET /me (session + player point reads) 50%",
+      "budget": {
+        "prd": "§23 配置与玩家读取",
+        "target_rps": 300,
+        "percentile": 0.95,
+        "limit_ms": 30,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 1518.75,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:08:01.644809+08:00",
+      "scheduled": 22781,
+      "completed": 22781,
+      "achieved_rps": 1518.7333333333333,
+      "ok": 22781,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 22781,
+        "min_ms": 0.095,
+        "mean_ms": 0.5396066897853474,
+        "p50_ms": 0.248,
+        "p90_ms": 1.367,
+        "p95_ms": 2.031,
+        "p99_ms": 3.615,
+        "p999_ms": 5.247,
+        "max_ms": 7.618
+      },
+      "latency_service": {
+        "count": 22781,
+        "min_ms": 0.094,
+        "mean_ms": 0.4950251086431675,
+        "p50_ms": 0.236,
+        "p90_ms": 1.231,
+        "p95_ms": 1.831,
+        "p99_ms": 3.407,
+        "p999_ms": 5.023,
+        "max_ms": 6.93
+      },
+      "client_schedule_lag": {
+        "count": 22781,
+        "min_ms": 0,
+        "mean_ms": 0.04120578552302357,
+        "p50_ms": 0,
+        "p90_ms": 0.031,
+        "p95_ms": 0.174,
+        "p99_ms": 1.047,
+        "p999_ms": 2.623,
+        "max_ms": 5.898
+      },
+      "ops": {
+        "config": {
+          "count": 11429,
+          "ok": 11429,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 11429,
+            "min_ms": 0.095,
+            "mean_ms": 0.5217445970776096,
+            "p50_ms": 0.227,
+            "p90_ms": 1.351,
+            "p95_ms": 1.999,
+            "p99_ms": 3.631,
+            "p999_ms": 5.023,
+            "max_ms": 6.553
+          }
+        },
+        "me": {
+          "count": 11352,
+          "ok": 11352,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 11352,
+            "min_ms": 0.111,
+            "mean_ms": 0.557589940098661,
+            "p50_ms": 0.265,
+            "p90_ms": 1.407,
+            "p95_ms": 2.063,
+            "p99_ms": 3.535,
+            "p999_ms": 5.407,
+            "max_ms": 7.618
+          }
+        }
+      },
+      "budget_measured_ms": 2.031,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 56688,
+        "rss_max_kib": 65824,
+        "rss_end_kib": 65824,
+        "cpu_seconds": 3.229999999999997,
+        "cpu_util": 0.2152799325576304
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 13,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "config_player",
+      "description": "GET /config (cached doc + game row read) 50% / GET /me (session + player point reads) 50%",
+      "budget": {
+        "prd": "§23 配置与玩家读取",
+        "target_rps": 300,
+        "percentile": 0.95,
+        "limit_ms": 30,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 2278.125,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:08:21.672734+08:00",
+      "scheduled": 34172,
+      "completed": 34172,
+      "achieved_rps": 2278.133333333333,
+      "ok": 34172,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 34172,
+        "min_ms": 0.084,
+        "mean_ms": 0.561562331733583,
+        "p50_ms": 0.229,
+        "p90_ms": 1.439,
+        "p95_ms": 2.223,
+        "p99_ms": 4.015,
+        "p999_ms": 6.367,
+        "max_ms": 9.748
+      },
+      "latency_service": {
+        "count": 34172,
+        "min_ms": 0.083,
+        "mean_ms": 0.5125844551094464,
+        "p50_ms": 0.218,
+        "p90_ms": 1.287,
+        "p95_ms": 2.007,
+        "p99_ms": 3.711,
+        "p999_ms": 6.111,
+        "max_ms": 9.747
+      },
+      "client_schedule_lag": {
+        "count": 34172,
+        "min_ms": 0,
+        "mean_ms": 0.044699520074915136,
+        "p50_ms": 0,
+        "p90_ms": 0.039,
+        "p95_ms": 0.215,
+        "p99_ms": 1.071,
+        "p999_ms": 2.639,
+        "max_ms": 4.02
+      },
+      "ops": {
+        "config": {
+          "count": 16993,
+          "ok": 16993,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 16993,
+            "min_ms": 0.084,
+            "mean_ms": 0.5445173306655682,
+            "p50_ms": 0.208,
+            "p90_ms": 1.415,
+            "p95_ms": 2.207,
+            "p99_ms": 4.063,
+            "p999_ms": 6.271,
+            "max_ms": 9.748
+          }
+        },
+        "me": {
+          "count": 17179,
+          "ok": 17179,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 17179,
+            "min_ms": 0.098,
+            "mean_ms": 0.5784227836311776,
+            "p50_ms": 0.246,
+            "p90_ms": 1.479,
+            "p95_ms": 2.239,
+            "p99_ms": 3.951,
+            "p999_ms": 6.495,
+            "max_ms": 9.351
+          }
+        }
+      },
+      "budget_measured_ms": 2.223,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 66000,
+        "rss_max_kib": 83632,
+        "rss_end_kib": 83632,
+        "cpu_seconds": 4.420000000000002,
+        "cpu_util": 0.29455541636528926
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 20,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "config_player",
+      "description": "GET /config (cached doc + game row read) 50% / GET /me (session + player point reads) 50%",
+      "budget": {
+        "prd": "§23 配置与玩家读取",
+        "target_rps": 300,
+        "percentile": 0.95,
+        "limit_ms": 30,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 3417.1875,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:08:41.702524+08:00",
+      "scheduled": 51258,
+      "completed": 51258,
+      "achieved_rps": 3417.2,
+      "ok": 51258,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 51258,
+        "min_ms": 0.077,
+        "mean_ms": 0.6980649264505052,
+        "p50_ms": 0.231,
+        "p90_ms": 1.919,
+        "p95_ms": 2.927,
+        "p99_ms": 5.183,
+        "p999_ms": 7.711,
+        "max_ms": 11.248
+      },
+      "latency_service": {
+        "count": 51258,
+        "min_ms": 0.072,
+        "mean_ms": 0.6263211986421632,
+        "p50_ms": 0.219,
+        "p90_ms": 1.703,
+        "p95_ms": 2.623,
+        "p99_ms": 4.639,
+        "p999_ms": 6.879,
+        "max_ms": 9.544
+      },
+      "client_schedule_lag": {
+        "count": 51258,
+        "min_ms": 0,
+        "mean_ms": 0.06469011666471575,
+        "p50_ms": 0,
+        "p90_ms": 0.062,
+        "p95_ms": 0.329,
+        "p99_ms": 1.535,
+        "p999_ms": 3.583,
+        "max_ms": 6.38
+      },
+      "ops": {
+        "config": {
+          "count": 25645,
+          "ok": 25645,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 25645,
+            "min_ms": 0.077,
+            "mean_ms": 0.6820927276272177,
+            "p50_ms": 0.209,
+            "p90_ms": 1.919,
+            "p95_ms": 2.927,
+            "p99_ms": 5.183,
+            "p999_ms": 7.615,
+            "max_ms": 10.824
+          }
+        },
+        "me": {
+          "count": 25613,
+          "ok": 25613,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 25613,
+            "min_ms": 0.099,
+            "mean_ms": 0.7140570803888651,
+            "p50_ms": 0.247,
+            "p90_ms": 1.919,
+            "p95_ms": 2.943,
+            "p99_ms": 5.183,
+            "p999_ms": 7.935,
+            "max_ms": 11.248
+          }
+        }
+      },
+      "budget_measured_ms": 2.927,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 83712,
+        "rss_max_kib": 83728,
+        "rss_end_kib": 83728,
+        "cpu_seconds": 5.989999999999995,
+        "cpu_util": 0.39901959973062656
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 31,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "config_player",
+      "description": "GET /config (cached doc + game row read) 50% / GET /me (session + player point reads) 50%",
+      "budget": {
+        "prd": "§23 配置与玩家读取",
+        "target_rps": 300,
+        "percentile": 0.95,
+        "limit_ms": 30,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 5125.78125,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:09:01.738579+08:00",
+      "scheduled": 76887,
+      "completed": 76887,
+      "achieved_rps": 5125.8,
+      "ok": 76887,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 76887,
+        "min_ms": 0.061,
+        "mean_ms": 0.41576201438474647,
+        "p50_ms": 0.187,
+        "p90_ms": 0.959,
+        "p95_ms": 1.575,
+        "p99_ms": 3.391,
+        "p999_ms": 7.455,
+        "max_ms": 10.163
+      },
+      "latency_service": {
+        "count": 76887,
+        "min_ms": 0.06,
+        "mean_ms": 0.36645002406128474,
+        "p50_ms": 0.178,
+        "p90_ms": 0.815,
+        "p95_ms": 1.351,
+        "p99_ms": 2.863,
+        "p999_ms": 6.175,
+        "max_ms": 10.162
+      },
+      "client_schedule_lag": {
+        "count": 76887,
+        "min_ms": 0,
+        "mean_ms": 0.041849610467309166,
+        "p50_ms": 0,
+        "p90_ms": 0.039,
+        "p95_ms": 0.172,
+        "p99_ms": 1.011,
+        "p999_ms": 2.991,
+        "max_ms": 6.114
+      },
+      "ops": {
+        "config": {
+          "count": 38408,
+          "ok": 38408,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 38408,
+            "min_ms": 0.061,
+            "mean_ms": 0.3952705686315351,
+            "p50_ms": 0.168,
+            "p90_ms": 0.931,
+            "p95_ms": 1.535,
+            "p99_ms": 3.295,
+            "p999_ms": 7.359,
+            "max_ms": 9.963
+          }
+        },
+        "me": {
+          "count": 38479,
+          "ok": 38479,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 38479,
+            "min_ms": 0.082,
+            "mean_ms": 0.4362156500948569,
+            "p50_ms": 0.203,
+            "p90_ms": 0.991,
+            "p95_ms": 1.615,
+            "p99_ms": 3.503,
+            "p999_ms": 7.551,
+            "max_ms": 10.163
+          }
+        }
+      },
+      "budget_measured_ms": 1.575,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 83744,
+        "rss_max_kib": 83776,
+        "rss_end_kib": 83776,
+        "cpu_seconds": 8.349999999999994,
+        "cpu_util": 0.5565212831985258
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 54,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "config_player",
+      "description": "GET /config (cached doc + game row read) 50% / GET /me (session + player point reads) 50%",
+      "budget": {
+        "prd": "§23 配置与玩家读取",
+        "target_rps": 300,
+        "percentile": 0.95,
+        "limit_ms": 30,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 7688.671875,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:09:21.767425+08:00",
+      "scheduled": 115330,
+      "completed": 115330,
+      "achieved_rps": 7688.666666666667,
+      "ok": 115330,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 115330,
+        "min_ms": 0.061,
+        "mean_ms": 0.5394559178010925,
+        "p50_ms": 0.203,
+        "p90_ms": 1.295,
+        "p95_ms": 2.079,
+        "p99_ms": 4.543,
+        "p999_ms": 11.071,
+        "max_ms": 23.744
+      },
+      "latency_service": {
+        "count": 115330,
+        "min_ms": 0.06,
+        "mean_ms": 0.467901491372583,
+        "p50_ms": 0.193,
+        "p90_ms": 1.119,
+        "p95_ms": 1.735,
+        "p99_ms": 3.743,
+        "p999_ms": 8.063,
+        "max_ms": 20.936
+      },
+      "client_schedule_lag": {
+        "count": 115330,
+        "min_ms": 0,
+        "mean_ms": 0.05751627503685078,
+        "p50_ms": 0,
+        "p90_ms": 0.059,
+        "p95_ms": 0.267,
+        "p99_ms": 1.287,
+        "p999_ms": 3.759,
+        "max_ms": 10.613
+      },
+      "ops": {
+        "config": {
+          "count": 57710,
+          "ok": 57710,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 57710,
+            "min_ms": 0.061,
+            "mean_ms": 0.522340322301161,
+            "p50_ms": 0.182,
+            "p90_ms": 1.279,
+            "p95_ms": 2.063,
+            "p99_ms": 4.543,
+            "p999_ms": 11.071,
+            "max_ms": 23.744
+          }
+        },
+        "me": {
+          "count": 57620,
+          "ok": 57620,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 57620,
+            "min_ms": 0.078,
+            "mean_ms": 0.5565982471364109,
+            "p50_ms": 0.222,
+            "p90_ms": 1.319,
+            "p95_ms": 2.079,
+            "p99_ms": 4.575,
+            "p999_ms": 11.071,
+            "max_ms": 18.788
+          }
+        }
+      },
+      "budget_measured_ms": 2.079,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 83792,
+        "rss_max_kib": 84304,
+        "rss_end_kib": 84304,
+        "cpu_seconds": 9.670000000000002,
+        "cpu_util": 0.6444718929103884
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 210,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "config_player",
+      "description": "GET /config (cached doc + game row read) 50% / GET /me (session + player point reads) 50%",
+      "budget": {
+        "prd": "§23 配置与玩家读取",
+        "target_rps": 300,
+        "percentile": 0.95,
+        "limit_ms": 30,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 11533.0078125,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:09:41.796059+08:00",
+      "scheduled": 172995,
+      "completed": 172995,
+      "achieved_rps": 11533,
+      "ok": 172995,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 172995,
+        "min_ms": 0.059,
+        "mean_ms": 1.5641397959478598,
+        "p50_ms": 0.399,
+        "p90_ms": 2.495,
+        "p95_ms": 4.543,
+        "p99_ms": 26.111,
+        "p999_ms": 76.799,
+        "max_ms": 167.256
+      },
+      "latency_service": {
+        "count": 172995,
+        "min_ms": 0.058,
+        "mean_ms": 1.49850086996734,
+        "p50_ms": 0.379,
+        "p90_ms": 2.287,
+        "p95_ms": 4.159,
+        "p99_ms": 25.855,
+        "p999_ms": 76.799,
+        "max_ms": 167.256
+      },
+      "client_schedule_lag": {
+        "count": 172995,
+        "min_ms": 0,
+        "mean_ms": 0.05313451833868031,
+        "p50_ms": 0,
+        "p90_ms": 0.065,
+        "p95_ms": 0.238,
+        "p99_ms": 1.191,
+        "p999_ms": 3.199,
+        "max_ms": 10.062
+      },
+      "ops": {
+        "config": {
+          "count": 86081,
+          "ok": 86081,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 86081,
+            "min_ms": 0.059,
+            "mean_ms": 1.5525799189135814,
+            "p50_ms": 0.383,
+            "p90_ms": 2.463,
+            "p95_ms": 4.511,
+            "p99_ms": 26.367,
+            "p999_ms": 77.311,
+            "max_ms": 147.224
+          }
+        },
+        "me": {
+          "count": 86914,
+          "ok": 86914,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 86914,
+            "min_ms": 0.076,
+            "mean_ms": 1.575588880962791,
+            "p50_ms": 0.415,
+            "p90_ms": 2.527,
+            "p95_ms": 4.543,
+            "p99_ms": 25.599,
+            "p999_ms": 75.263,
+            "max_ms": 167.256
+          }
+        }
+      },
+      "budget_measured_ms": 4.543,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 84320,
+        "rss_max_kib": 90656,
+        "rss_end_kib": 90656,
+        "cpu_seconds": 12.219999999999999,
+        "cpu_util": 0.8143248809420539
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 337,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "config_player",
+      "description": "GET /config (cached doc + game row read) 50% / GET /me (session + player point reads) 50%",
+      "budget": {
+        "prd": "§23 配置与玩家读取",
+        "target_rps": 300,
+        "percentile": 0.95,
+        "limit_ms": 30,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 17299.51171875,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:10:01.829504+08:00",
+      "scheduled": 259493,
+      "completed": 259493,
+      "achieved_rps": 17299.533333333333,
+      "ok": 197137,
+      "expected_rejections": 0,
+      "errors": 62356,
+      "error_rate": 0.24029935296905888,
+      "error_kinds": {
+        "transport": 62356
+      },
+      "latency_corrected": {
+        "count": 259493,
+        "min_ms": 0.03,
+        "mean_ms": 130.75324533224403,
+        "p50_ms": 1.735,
+        "p90_ms": 5.183,
+        "p95_ms": 1220.607,
+        "p99_ms": 2490.367,
+        "p999_ms": 6291.455,
+        "max_ms": 10072.852
+      },
+      "latency_service": {
+        "count": 259493,
+        "min_ms": 0.029,
+        "mean_ms": 130.63057730651693,
+        "p50_ms": 1.679,
+        "p90_ms": 4.831,
+        "p95_ms": 1220.607,
+        "p99_ms": 2490.367,
+        "p999_ms": 6291.455,
+        "max_ms": 10072.851
+      },
+      "client_schedule_lag": {
+        "count": 259493,
+        "min_ms": 0,
+        "mean_ms": 0.0835431129163407,
+        "p50_ms": 0,
+        "p90_ms": 0.097,
+        "p95_ms": 0.313,
+        "p99_ms": 1.887,
+        "p999_ms": 6.303,
+        "max_ms": 11.459
+      },
+      "ops": {
+        "config": {
+          "count": 129884,
+          "ok": 98648,
+          "expected_rejections": 0,
+          "errors": 31236,
+          "latency": {
+            "count": 129884,
+            "min_ms": 0.03,
+            "mean_ms": 130.6304020664593,
+            "p50_ms": 1.719,
+            "p90_ms": 5.215,
+            "p95_ms": 1228.799,
+            "p99_ms": 2424.831,
+            "p999_ms": 6291.455,
+            "max_ms": 10072.852
+          },
+          "kinds": {
+            "transport": 31236
+          }
+        },
+        "me": {
+          "count": 129609,
+          "ok": 98489,
+          "expected_rejections": 0,
+          "errors": 31120,
+          "latency": {
+            "count": 129609,
+            "min_ms": 0.031,
+            "mean_ms": 130.87634924272234,
+            "p50_ms": 1.751,
+            "p90_ms": 5.183,
+            "p95_ms": 1212.415,
+            "p99_ms": 2637.823,
+            "p999_ms": 6291.455,
+            "max_ms": 10072.797
+          },
+          "kinds": {
+            "transport": 31120
+          }
+        }
+      },
+      "budget_measured_ms": 1220.607,
+      "pass_local": false,
+      "fail_reasons": [
+        "p95 1220.6ms \u003e 30ms",
+        "error rate 0.2403 \u003e 0.0010"
+      ],
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 137328,
+        "rss_max_kib": 201488,
+        "rss_end_kib": 201488,
+        "cpu_seconds": 13.959999999999994,
+        "cpu_util": 0.9168472848100722
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 2974,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    }
+  ]
+}

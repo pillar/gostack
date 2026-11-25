@@ -1,0 +1,125 @@
+{
+  "label": "local, not acceptance",
+  "scenario": "fullwrite",
+  "description": "50% PUT /saves/profile (1 KiB) + 50% POST /rewards/{id}/claim, FULL sync, Idempotency-Key",
+  "budget": {
+    "prd": "§13 FULL 同步写",
+    "target_rps": 100,
+    "percentile": 0.99,
+    "limit_ms": 150,
+    "max_error_rate": 0.001
+  },
+  "offered_rps": 100,
+  "warmup_s": 30,
+  "steady_s": 90,
+  "started_at": "2026-11-25T09:48:27.860979+08:00",
+  "scheduled": 9000,
+  "completed": 9000,
+  "achieved_rps": 100,
+  "ok": 9000,
+  "expected_rejections": 0,
+  "errors": 0,
+  "error_rate": 0,
+  "error_kinds": {},
+  "latency_corrected": {
+    "count": 9000,
+    "min_ms": 0.32,
+    "mean_ms": 0.9560666666666667,
+    "p50_ms": 0.827,
+    "p90_ms": 1.239,
+    "p95_ms": 1.431,
+    "p99_ms": 4.511,
+    "p999_ms": 8.319,
+    "max_ms": 13.673
+  },
+  "latency_service": {
+    "count": 9000,
+    "min_ms": 0.31,
+    "mean_ms": 0.9392834444444444,
+    "p50_ms": 0.819,
+    "p90_ms": 1.223,
+    "p95_ms": 1.415,
+    "p99_ms": 4.319,
+    "p999_ms": 8.191,
+    "max_ms": 9.696
+  },
+  "client_schedule_lag": {
+    "count": 9000,
+    "min_ms": 0,
+    "mean_ms": 0.006098666666666666,
+    "p50_ms": 0,
+    "p90_ms": 0.001,
+    "p95_ms": 0.003,
+    "p99_ms": 0.014,
+    "p999_ms": 1.567,
+    "max_ms": 10.681
+  },
+  "ops": {
+    "claim": {
+      "count": 4420,
+      "ok": 4420,
+      "expected_rejections": 0,
+      "errors": 0,
+      "latency": {
+        "count": 4420,
+        "min_ms": 0.361,
+        "mean_ms": 0.9551549773755657,
+        "p50_ms": 0.827,
+        "p90_ms": 1.223,
+        "p95_ms": 1.423,
+        "p99_ms": 4.287,
+        "p999_ms": 8.895,
+        "max_ms": 13.673
+      }
+    },
+    "claim_replay": {
+      "count": 97,
+      "ok": 97,
+      "expected_rejections": 0,
+      "errors": 0,
+      "latency": {
+        "count": 97,
+        "min_ms": 0.32,
+        "mean_ms": 0.4844432989690721,
+        "p50_ms": 0.471,
+        "p90_ms": 0.587,
+        "p95_ms": 0.663,
+        "p99_ms": 0.735,
+        "p999_ms": 0.793,
+        "max_ms": 0.793
+      }
+    },
+    "save_put_1k": {
+      "count": 4483,
+      "ok": 4483,
+      "expected_rejections": 0,
+      "errors": 0,
+      "latency": {
+        "count": 4483,
+        "min_ms": 0.353,
+        "mean_ms": 0.9671701985277716,
+        "p50_ms": 0.835,
+        "p90_ms": 1.255,
+        "p95_ms": 1.455,
+        "p99_ms": 4.607,
+        "p999_ms": 8.319,
+        "max_ms": 13.328
+      }
+    }
+  },
+  "budget_measured_ms": 4.511,
+  "pass_local": true,
+  "server": {
+    "pid": 16361,
+    "rss_start_kib": 51232,
+    "rss_max_kib": 51424,
+    "rss_end_kib": 51424,
+    "cpu_seconds": 7.600000000000001,
+    "cpu_util": 0.0844493245203755
+  },
+  "client_dropped": 0,
+  "client_max_inflight": 2,
+  "claim_replays_ok": 114,
+  "client_go": "go1.27.1",
+  "client_gomaxprocs": 15
+}

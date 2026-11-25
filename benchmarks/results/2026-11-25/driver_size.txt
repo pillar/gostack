@@ -1,0 +1,6 @@
+modernc darwin/arm64 bytes=9937250 stripped=6453522 run="sqlite 3.54.1"
+mattn darwin/arm64 bytes=7048898 stripped=3771938 run="sqlite3 3.54.1"
+modernc linux/amd64 CGO_ENABLED=0 stripped bytes=6652064
+mattn linux/amd64 CGO cross-build: FAILED (# runtime/cgo gcc_clearenv.c:16:2: error: implicit declaration of function 'clearenv' [-Werror,-Wimplicit-function-declaration] gcc_clearenv.c:16:2: note: did you mean 'clearerr'? /Library/Developer/C)
+modernc linux/arm64 CGO_ENABLED=0 stripped bytes=6488224
+mattn linux/arm64 CGO cross-build: FAILED (# runtime/cgo gcc_clearenv.c:16:2: error: implicit declaration of function 'clearenv' [-Werror,-Wimplicit-function-declaration] gcc_clearenv.c:16:2: note: did you mean 'clearerr'? /Library/Developer/C)

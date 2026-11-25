@@ -1,0 +1,4 @@
+bytes file (after all runs, before VACUUM)
+233349120 analytics.db
+6805639168 app.db
+0 app.db-wal

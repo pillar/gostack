@@ -1,0 +1,273 @@
+{
+  "label": "local, not acceptance",
+  "scenario": "gamemix",
+  "description": "read 70% (config 20, me 15, save8k get 15, board 10, wallet 10) / save 10% / economy 5% / analytics 15% (20 events)",
+  "budget": {
+    "prd": "§23 混合负载",
+    "target_rps": 200,
+    "percentile": 0.99,
+    "limit_ms": 150,
+    "max_error_rate": 0.001
+  },
+  "offered_rps": 5126,
+  "warmup_s": 5,
+  "steady_s": 20,
+  "started_at": "2026-11-25T10:42:17.427092+08:00",
+  "scheduled": 102520,
+  "completed": 102520,
+  "achieved_rps": 5126,
+  "ok": 100810,
+  "expected_rejections": 0,
+  "errors": 1710,
+  "error_rate": 0.0166796722590714,
+  "error_kinds": {
+    "http_503:overloaded": 937,
+    "transport": 773
+  },
+  "error_samples": {
+    "transport": "Post \"http://127.0.0.1:18080/v1/games/bench/rewards/bench_coin/claim\": dial tcp 127.0.0.1:18080: connect: connection reset by peer"
+  },
+  "latency_corrected": {
+    "count": 102520,
+    "min_ms": 0.04,
+    "mean_ms": 114.08909825399923,
+    "p50_ms": 11.583,
+    "p90_ms": 323.583,
+    "p95_ms": 458.751,
+    "p99_ms": 831.487,
+    "p999_ms": 1441.791,
+    "max_ms": 2083.706
+  },
+  "latency_service": {
+    "count": 102520,
+    "min_ms": 0.038,
+    "mean_ms": 114.07869378657823,
+    "p50_ms": 11.583,
+    "p90_ms": 323.583,
+    "p95_ms": 458.751,
+    "p99_ms": 831.487,
+    "p999_ms": 1441.791,
+    "max_ms": 2083.702
+  },
+  "client_schedule_lag": {
+    "count": 102520,
+    "min_ms": 0,
+    "mean_ms": 0.007005891533359345,
+    "p50_ms": 0,
+    "p90_ms": 0.012,
+    "p95_ms": 0.017,
+    "p99_ms": 0.107,
+    "p999_ms": 0.699,
+    "max_ms": 4.045
+  },
+  "ops": {
+    "board_top100": {
+      "count": 10090,
+      "ok": 9924,
+      "expected_rejections": 0,
+      "errors": 166,
+      "latency": {
+        "count": 10090,
+        "min_ms": 0.045,
+        "mean_ms": 110.43443538156592,
+        "p50_ms": 9.471,
+        "p90_ms": 317.439,
+        "p95_ms": 442.367,
+        "p99_ms": 811.007,
+        "p999_ms": 1409.023,
+        "max_ms": 1969.206
+      },
+      "kinds": {
+        "http_503:overloaded": 81,
+        "transport": 85
+      }
+    },
+    "claim": {
+      "count": 4937,
+      "ok": 4855,
+      "expected_rejections": 0,
+      "errors": 82,
+      "latency": {
+        "count": 4937,
+        "min_ms": 0.047,
+        "mean_ms": 143.69213550739317,
+        "p50_ms": 74.239,
+        "p90_ms": 397.311,
+        "p95_ms": 565.247,
+        "p99_ms": 888.831,
+        "p999_ms": 1490.943,
+        "max_ms": 1692.054
+      },
+      "kinds": {
+        "http_503:overloaded": 43,
+        "transport": 39
+      }
+    },
+    "claim_replay": {
+      "count": 90,
+      "ok": 86,
+      "expected_rejections": 0,
+      "errors": 4,
+      "latency": {
+        "count": 90,
+        "min_ms": 0.081,
+        "mean_ms": 127.22327777777778,
+        "p50_ms": 79.871,
+        "p90_ms": 333.823,
+        "p95_ms": 479.231,
+        "p99_ms": 688.127,
+        "p999_ms": 762.309,
+        "max_ms": 762.309
+      },
+      "kinds": {
+        "http_503:overloaded": 2,
+        "transport": 2
+      }
+    },
+    "config": {
+      "count": 20470,
+      "ok": 20130,
+      "expected_rejections": 0,
+      "errors": 340,
+      "latency": {
+        "count": 20470,
+        "min_ms": 0.044,
+        "mean_ms": 108.78550806057645,
+        "p50_ms": 8.959,
+        "p90_ms": 313.343,
+        "p95_ms": 438.271,
+        "p99_ms": 823.295,
+        "p999_ms": 1433.599,
+        "max_ms": 1969.44
+      },
+      "kinds": {
+        "http_503:overloaded": 198,
+        "transport": 142
+      }
+    },
+    "events20": {
+      "count": 15539,
+      "ok": 15278,
+      "expected_rejections": 0,
+      "errors": 261,
+      "latency": {
+        "count": 15539,
+        "min_ms": 0.052,
+        "mean_ms": 107.19498127292619,
+        "p50_ms": 7.935,
+        "p90_ms": 305.151,
+        "p95_ms": 430.079,
+        "p99_ms": 806.911,
+        "p999_ms": 1286.143,
+        "max_ms": 2083.706
+      },
+      "kinds": {
+        "http_503:overloaded": 144,
+        "transport": 117
+      }
+    },
+    "me": {
+      "count": 15503,
+      "ok": 15256,
+      "expected_rejections": 0,
+      "errors": 247,
+      "latency": {
+        "count": 15503,
+        "min_ms": 0.04,
+        "mean_ms": 110.82889614913243,
+        "p50_ms": 10.175,
+        "p90_ms": 315.391,
+        "p95_ms": 444.415,
+        "p99_ms": 831.487,
+        "p999_ms": 1433.599,
+        "max_ms": 1684.386
+      },
+      "kinds": {
+        "http_503:overloaded": 129,
+        "transport": 118
+      }
+    },
+    "save_get_8k": {
+      "count": 15236,
+      "ok": 14998,
+      "expected_rejections": 0,
+      "errors": 238,
+      "latency": {
+        "count": 15236,
+        "min_ms": 0.045,
+        "mean_ms": 109.34186138093987,
+        "p50_ms": 8.767,
+        "p90_ms": 315.391,
+        "p95_ms": 438.271,
+        "p99_ms": 823.295,
+        "p999_ms": 1482.751,
+        "max_ms": 1666.313
+      },
+      "kinds": {
+        "http_503:overloaded": 122,
+        "transport": 116
+      }
+    },
+    "save_put_8k": {
+      "count": 10255,
+      "ok": 10065,
+      "expected_rejections": 0,
+      "errors": 190,
+      "latency": {
+        "count": 10255,
+        "min_ms": 0.068,
+        "mean_ms": 137.70759941491957,
+        "p50_ms": 62.719,
+        "p90_ms": 378.879,
+        "p95_ms": 565.247,
+        "p99_ms": 872.447,
+        "p999_ms": 1515.519,
+        "max_ms": 1970.226
+      },
+      "kinds": {
+        "http_503:overloaded": 112,
+        "transport": 78
+      }
+    },
+    "wallet": {
+      "count": 10400,
+      "ok": 10218,
+      "expected_rejections": 0,
+      "errors": 182,
+      "latency": {
+        "count": 10400,
+        "min_ms": 0.045,
+        "mean_ms": 112.73328451923078,
+        "p50_ms": 9.983,
+        "p90_ms": 323.583,
+        "p95_ms": 452.607,
+        "p99_ms": 839.679,
+        "p999_ms": 1482.751,
+        "max_ms": 1765.22
+      },
+      "kinds": {
+        "http_503:overloaded": 106,
+        "transport": 76
+      }
+    }
+  },
+  "budget_measured_ms": 831.487,
+  "pass_local": false,
+  "fail_reasons": [
+    "p99 831.5ms \u003e 150ms",
+    "error rate 0.0167 \u003e 0.0010"
+  ],
+  "server": {
+    "pid": 77003,
+    "rss_start_kib": 94256,
+    "rss_max_kib": 162000,
+    "rss_end_kib": 162000,
+    "cpu_seconds": 18.34,
+    "cpu_util": 0.902337963089184
+  },
+  "client_dropped": 0,
+  "client_max_inflight": 1326,
+  "claim_replays_ok": 115,
+  "client_go": "go1.27.1",
+  "client_gomaxprocs": 15
+}

@@ -1,0 +1,836 @@
+{
+  "budget": {
+    "prd": "§23 Top 100 榜单",
+    "target_rps": 200,
+    "percentile": 0.95,
+    "limit_ms": 20,
+    "max_error_rate": 0.001
+  },
+  "highest_passing_rps": 3417.1875,
+  "label": "local, not acceptance",
+  "mode": "saturation",
+  "scenario": "board",
+  "step_factor": 1.5,
+  "step_steady_s": 15,
+  "step_warmup_s": 5,
+  "steps": [
+    {
+      "label": "local, not acceptance",
+      "scenario": "board",
+      "description": "GET /boards/main?limit=100 (anonymous Top-100, 100k-row current season, 1M-row table)",
+      "budget": {
+        "prd": "§23 Top 100 榜单",
+        "target_rps": 200,
+        "percentile": 0.95,
+        "limit_ms": 20,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 200,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:19:44.542631+08:00",
+      "scheduled": 3000,
+      "completed": 3000,
+      "achieved_rps": 200,
+      "ok": 3000,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 3000,
+        "min_ms": 0.189,
+        "mean_ms": 0.5213223333333333,
+        "p50_ms": 0.381,
+        "p90_ms": 0.875,
+        "p95_ms": 1.391,
+        "p99_ms": 2.927,
+        "p999_ms": 5.439,
+        "max_ms": 10.305
+      },
+      "latency_service": {
+        "count": 3000,
+        "min_ms": 0.187,
+        "mean_ms": 0.485815,
+        "p50_ms": 0.367,
+        "p90_ms": 0.775,
+        "p95_ms": 1.279,
+        "p99_ms": 2.591,
+        "p999_ms": 4.831,
+        "max_ms": 9.576
+      },
+      "client_schedule_lag": {
+        "count": 3000,
+        "min_ms": 0,
+        "mean_ms": 0.027629333333333336,
+        "p50_ms": 0,
+        "p90_ms": 0.016,
+        "p95_ms": 0.086,
+        "p99_ms": 0.775,
+        "p999_ms": 1.991,
+        "max_ms": 4.492
+      },
+      "ops": {
+        "board_top100": {
+          "count": 3000,
+          "ok": 3000,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 3000,
+            "min_ms": 0.189,
+            "mean_ms": 0.5213223333333333,
+            "p50_ms": 0.381,
+            "p90_ms": 0.875,
+            "p95_ms": 1.391,
+            "p99_ms": 2.927,
+            "p999_ms": 5.439,
+            "max_ms": 10.305
+          }
+        }
+      },
+      "budget_measured_ms": 1.391,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217104,
+        "rss_max_kib": 217120,
+        "rss_end_kib": 217120,
+        "cpu_seconds": 0.8999999999999773,
+        "cpu_util": 0.059981901460931006
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 3,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "board",
+      "description": "GET /boards/main?limit=100 (anonymous Top-100, 100k-row current season, 1M-row table)",
+      "budget": {
+        "prd": "§23 Top 100 榜单",
+        "target_rps": 200,
+        "percentile": 0.95,
+        "limit_ms": 20,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 300,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:20:04.598106+08:00",
+      "scheduled": 4500,
+      "completed": 4500,
+      "achieved_rps": 300,
+      "ok": 4500,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 4500,
+        "min_ms": 0.178,
+        "mean_ms": 0.6120957777777778,
+        "p50_ms": 0.379,
+        "p90_ms": 1.287,
+        "p95_ms": 1.839,
+        "p99_ms": 3.407,
+        "p999_ms": 5.631,
+        "max_ms": 9.105
+      },
+      "latency_service": {
+        "count": 4500,
+        "min_ms": 0.176,
+        "mean_ms": 0.563371111111111,
+        "p50_ms": 0.365,
+        "p90_ms": 1.175,
+        "p95_ms": 1.623,
+        "p99_ms": 3.183,
+        "p999_ms": 4.543,
+        "max_ms": 6.207
+      },
+      "client_schedule_lag": {
+        "count": 4500,
+        "min_ms": 0,
+        "mean_ms": 0.040481111111111114,
+        "p50_ms": 0,
+        "p90_ms": 0.018,
+        "p95_ms": 0.144,
+        "p99_ms": 1.111,
+        "p999_ms": 2.895,
+        "max_ms": 4.766
+      },
+      "ops": {
+        "board_top100": {
+          "count": 4500,
+          "ok": 4500,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 4500,
+            "min_ms": 0.178,
+            "mean_ms": 0.6120957777777778,
+            "p50_ms": 0.379,
+            "p90_ms": 1.287,
+            "p95_ms": 1.839,
+            "p99_ms": 3.407,
+            "p999_ms": 5.631,
+            "max_ms": 9.105
+          }
+        }
+      },
+      "budget_measured_ms": 1.839,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217120,
+        "rss_max_kib": 217120,
+        "rss_end_kib": 217120,
+        "cpu_seconds": 1.3600000000000136,
+        "cpu_util": 0.09066245514781525
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 3,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "board",
+      "description": "GET /boards/main?limit=100 (anonymous Top-100, 100k-row current season, 1M-row table)",
+      "budget": {
+        "prd": "§23 Top 100 榜单",
+        "target_rps": 200,
+        "percentile": 0.95,
+        "limit_ms": 20,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 450,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:20:24.644857+08:00",
+      "scheduled": 6750,
+      "completed": 6750,
+      "achieved_rps": 450,
+      "ok": 6750,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 6750,
+        "min_ms": 0.148,
+        "mean_ms": 0.2918408888888889,
+        "p50_ms": 0.194,
+        "p90_ms": 0.415,
+        "p95_ms": 0.619,
+        "p99_ms": 1.855,
+        "p999_ms": 5.535,
+        "max_ms": 9.118
+      },
+      "latency_service": {
+        "count": 6750,
+        "min_ms": 0.146,
+        "mean_ms": 0.27854962962962965,
+        "p50_ms": 0.19,
+        "p90_ms": 0.397,
+        "p95_ms": 0.587,
+        "p99_ms": 1.663,
+        "p999_ms": 5.119,
+        "max_ms": 9.109
+      },
+      "client_schedule_lag": {
+        "count": 6750,
+        "min_ms": 0,
+        "mean_ms": 0.008817777777777779,
+        "p50_ms": 0,
+        "p90_ms": 0.004,
+        "p95_ms": 0.006,
+        "p99_ms": 0.115,
+        "p999_ms": 1.799,
+        "max_ms": 4.447
+      },
+      "ops": {
+        "board_top100": {
+          "count": 6750,
+          "ok": 6750,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 6750,
+            "min_ms": 0.148,
+            "mean_ms": 0.2918408888888889,
+            "p50_ms": 0.194,
+            "p90_ms": 0.415,
+            "p95_ms": 0.619,
+            "p99_ms": 1.855,
+            "p999_ms": 5.535,
+            "max_ms": 9.118
+          }
+        }
+      },
+      "budget_measured_ms": 0.619,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217120,
+        "rss_max_kib": 217136,
+        "rss_end_kib": 217136,
+        "cpu_seconds": 1.329999999999984,
+        "cpu_util": 0.08864751461343658
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 4,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "board",
+      "description": "GET /boards/main?limit=100 (anonymous Top-100, 100k-row current season, 1M-row table)",
+      "budget": {
+        "prd": "§23 Top 100 榜单",
+        "target_rps": 200,
+        "percentile": 0.95,
+        "limit_ms": 20,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 675,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:20:44.698078+08:00",
+      "scheduled": 10125,
+      "completed": 10125,
+      "achieved_rps": 675,
+      "ok": 10125,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 10125,
+        "min_ms": 0.167,
+        "mean_ms": 0.6976231111111112,
+        "p50_ms": 0.379,
+        "p90_ms": 1.527,
+        "p95_ms": 2.255,
+        "p99_ms": 4.223,
+        "p999_ms": 6.079,
+        "max_ms": 7.653
+      },
+      "latency_service": {
+        "count": 10125,
+        "min_ms": 0.166,
+        "mean_ms": 0.6557065679012346,
+        "p50_ms": 0.363,
+        "p90_ms": 1.431,
+        "p95_ms": 2.143,
+        "p99_ms": 4.095,
+        "p999_ms": 6.079,
+        "max_ms": 7.634
+      },
+      "client_schedule_lag": {
+        "count": 10125,
+        "min_ms": 0,
+        "mean_ms": 0.038468839506172844,
+        "p50_ms": 0,
+        "p90_ms": 0.032,
+        "p95_ms": 0.17,
+        "p99_ms": 0.947,
+        "p999_ms": 2.479,
+        "max_ms": 4.872
+      },
+      "ops": {
+        "board_top100": {
+          "count": 10125,
+          "ok": 10125,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 10125,
+            "min_ms": 0.167,
+            "mean_ms": 0.6976231111111112,
+            "p50_ms": 0.379,
+            "p90_ms": 1.527,
+            "p95_ms": 2.255,
+            "p99_ms": 4.223,
+            "p999_ms": 6.079,
+            "max_ms": 7.653
+          }
+        }
+      },
+      "budget_measured_ms": 2.255,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217136,
+        "rss_max_kib": 217136,
+        "rss_end_kib": 217088,
+        "cpu_seconds": 2.6899999999999977,
+        "cpu_util": 0.17927565885991412
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 5,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "board",
+      "description": "GET /boards/main?limit=100 (anonymous Top-100, 100k-row current season, 1M-row table)",
+      "budget": {
+        "prd": "§23 Top 100 榜单",
+        "target_rps": 200,
+        "percentile": 0.95,
+        "limit_ms": 20,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 1012.5,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:21:04.7508+08:00",
+      "scheduled": 15187,
+      "completed": 15187,
+      "achieved_rps": 1012.4666666666667,
+      "ok": 15187,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 15187,
+        "min_ms": 0.163,
+        "mean_ms": 0.5850650556396919,
+        "p50_ms": 0.345,
+        "p90_ms": 1.255,
+        "p95_ms": 1.815,
+        "p99_ms": 3.535,
+        "p999_ms": 6.751,
+        "max_ms": 13.043
+      },
+      "latency_service": {
+        "count": 15187,
+        "min_ms": 0.161,
+        "mean_ms": 0.5484646078883255,
+        "p50_ms": 0.331,
+        "p90_ms": 1.151,
+        "p95_ms": 1.711,
+        "p99_ms": 3.231,
+        "p999_ms": 6.015,
+        "max_ms": 12.962
+      },
+      "client_schedule_lag": {
+        "count": 15187,
+        "min_ms": 0,
+        "mean_ms": 0.032734773161256336,
+        "p50_ms": 0,
+        "p90_ms": 0.028,
+        "p95_ms": 0.13,
+        "p99_ms": 0.755,
+        "p999_ms": 2.223,
+        "max_ms": 8.769
+      },
+      "ops": {
+        "board_top100": {
+          "count": 15187,
+          "ok": 15187,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 15187,
+            "min_ms": 0.163,
+            "mean_ms": 0.5850650556396919,
+            "p50_ms": 0.345,
+            "p90_ms": 1.255,
+            "p95_ms": 1.815,
+            "p99_ms": 3.535,
+            "p999_ms": 6.751,
+            "max_ms": 13.043
+          }
+        }
+      },
+      "budget_measured_ms": 1.815,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217088,
+        "rss_max_kib": 217088,
+        "rss_end_kib": 217088,
+        "cpu_seconds": 3.680000000000007,
+        "cpu_util": 0.2452832744346353
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 11,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "board",
+      "description": "GET /boards/main?limit=100 (anonymous Top-100, 100k-row current season, 1M-row table)",
+      "budget": {
+        "prd": "§23 Top 100 榜单",
+        "target_rps": 200,
+        "percentile": 0.95,
+        "limit_ms": 20,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 1518.75,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:21:24.800664+08:00",
+      "scheduled": 22781,
+      "completed": 22781,
+      "achieved_rps": 1518.7333333333333,
+      "ok": 22781,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 22781,
+        "min_ms": 0.161,
+        "mean_ms": 0.6921324788200693,
+        "p50_ms": 0.333,
+        "p90_ms": 1.671,
+        "p95_ms": 2.447,
+        "p99_ms": 4.255,
+        "p999_ms": 6.399,
+        "max_ms": 9.714
+      },
+      "latency_service": {
+        "count": 22781,
+        "min_ms": 0.159,
+        "mean_ms": 0.643881699661999,
+        "p50_ms": 0.319,
+        "p90_ms": 1.527,
+        "p95_ms": 2.255,
+        "p99_ms": 4.015,
+        "p999_ms": 6.335,
+        "max_ms": 9.711
+      },
+      "client_schedule_lag": {
+        "count": 22781,
+        "min_ms": 0,
+        "mean_ms": 0.044822527544883896,
+        "p50_ms": 0,
+        "p90_ms": 0.035,
+        "p95_ms": 0.224,
+        "p99_ms": 1.063,
+        "p999_ms": 2.719,
+        "max_ms": 4.92
+      },
+      "ops": {
+        "board_top100": {
+          "count": 22781,
+          "ok": 22781,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 22781,
+            "min_ms": 0.161,
+            "mean_ms": 0.6921324788200693,
+            "p50_ms": 0.333,
+            "p90_ms": 1.671,
+            "p95_ms": 2.447,
+            "p99_ms": 4.255,
+            "p999_ms": 6.399,
+            "max_ms": 9.714
+          }
+        }
+      },
+      "budget_measured_ms": 2.447,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217088,
+        "rss_max_kib": 217104,
+        "rss_end_kib": 217104,
+        "cpu_seconds": 5.099999999999966,
+        "cpu_util": 0.3398975690350893
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 16,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "board",
+      "description": "GET /boards/main?limit=100 (anonymous Top-100, 100k-row current season, 1M-row table)",
+      "budget": {
+        "prd": "§23 Top 100 榜单",
+        "target_rps": 200,
+        "percentile": 0.95,
+        "limit_ms": 20,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 2278.125,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:21:44.853735+08:00",
+      "scheduled": 34172,
+      "completed": 34172,
+      "achieved_rps": 2278.133333333333,
+      "ok": 34172,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 34172,
+        "min_ms": 0.154,
+        "mean_ms": 0.6404058293339576,
+        "p50_ms": 0.335,
+        "p90_ms": 1.471,
+        "p95_ms": 2.079,
+        "p99_ms": 4.127,
+        "p999_ms": 6.751,
+        "max_ms": 10.897
+      },
+      "latency_service": {
+        "count": 34172,
+        "min_ms": 0.152,
+        "mean_ms": 0.5983070057356901,
+        "p50_ms": 0.323,
+        "p90_ms": 1.359,
+        "p95_ms": 1.919,
+        "p99_ms": 3.855,
+        "p999_ms": 6.335,
+        "max_ms": 7.856
+      },
+      "client_schedule_lag": {
+        "count": 34172,
+        "min_ms": 0,
+        "mean_ms": 0.038245259276600725,
+        "p50_ms": 0,
+        "p90_ms": 0.04,
+        "p95_ms": 0.171,
+        "p99_ms": 0.939,
+        "p999_ms": 2.383,
+        "max_ms": 4.354
+      },
+      "ops": {
+        "board_top100": {
+          "count": 34172,
+          "ok": 34172,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 34172,
+            "min_ms": 0.154,
+            "mean_ms": 0.6404058293339576,
+            "p50_ms": 0.335,
+            "p90_ms": 1.471,
+            "p95_ms": 2.079,
+            "p99_ms": 4.127,
+            "p999_ms": 6.751,
+            "max_ms": 10.897
+          }
+        }
+      },
+      "budget_measured_ms": 2.079,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217120,
+        "rss_max_kib": 217120,
+        "rss_end_kib": 217120,
+        "cpu_seconds": 7.170000000000016,
+        "cpu_util": 0.4778477232147792
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 21,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "board",
+      "description": "GET /boards/main?limit=100 (anonymous Top-100, 100k-row current season, 1M-row table)",
+      "budget": {
+        "prd": "§23 Top 100 榜单",
+        "target_rps": 200,
+        "percentile": 0.95,
+        "limit_ms": 20,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 3417.1875,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:22:04.907722+08:00",
+      "scheduled": 51258,
+      "completed": 51258,
+      "achieved_rps": 3417.2,
+      "ok": 51258,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 51258,
+        "min_ms": 0.13,
+        "mean_ms": 0.6194445354871435,
+        "p50_ms": 0.305,
+        "p90_ms": 1.463,
+        "p95_ms": 2.111,
+        "p99_ms": 3.871,
+        "p999_ms": 6.463,
+        "max_ms": 17.356
+      },
+      "latency_service": {
+        "count": 51258,
+        "min_ms": 0.129,
+        "mean_ms": 0.5707976315892154,
+        "p50_ms": 0.291,
+        "p90_ms": 1.319,
+        "p95_ms": 1.911,
+        "p99_ms": 3.439,
+        "p999_ms": 5.791,
+        "max_ms": 17.355
+      },
+      "client_schedule_lag": {
+        "count": 51258,
+        "min_ms": 0,
+        "mean_ms": 0.04340233719614499,
+        "p50_ms": 0,
+        "p90_ms": 0.048,
+        "p95_ms": 0.204,
+        "p99_ms": 1.031,
+        "p999_ms": 2.591,
+        "max_ms": 5.015
+      },
+      "ops": {
+        "board_top100": {
+          "count": 51258,
+          "ok": 51258,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 51258,
+            "min_ms": 0.13,
+            "mean_ms": 0.6194445354871435,
+            "p50_ms": 0.305,
+            "p90_ms": 1.463,
+            "p95_ms": 2.111,
+            "p99_ms": 3.871,
+            "p999_ms": 6.463,
+            "max_ms": 17.356
+          }
+        }
+      },
+      "budget_measured_ms": 2.111,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217120,
+        "rss_max_kib": 217136,
+        "rss_end_kib": 217136,
+        "cpu_seconds": 9.370000000000005,
+        "cpu_util": 0.6245072195650584
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 39,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "board",
+      "description": "GET /boards/main?limit=100 (anonymous Top-100, 100k-row current season, 1M-row table)",
+      "budget": {
+        "prd": "§23 Top 100 榜单",
+        "target_rps": 200,
+        "percentile": 0.95,
+        "limit_ms": 20,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 5125.78125,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:22:24.959113+08:00",
+      "scheduled": 76887,
+      "completed": 76887,
+      "achieved_rps": 5125.8,
+      "ok": 76785,
+      "expected_rejections": 0,
+      "errors": 102,
+      "error_rate": 0.0013266221858051427,
+      "error_kinds": {
+        "transport": 102
+      },
+      "latency_corrected": {
+        "count": 76887,
+        "min_ms": 0.049,
+        "mean_ms": 2.3802733882190745,
+        "p50_ms": 0.631,
+        "p90_ms": 3.631,
+        "p95_ms": 6.079,
+        "p99_ms": 34.815,
+        "p999_ms": 168.959,
+        "max_ms": 258.068
+      },
+      "latency_service": {
+        "count": 76887,
+        "min_ms": 0.048,
+        "mean_ms": 2.3289351906043936,
+        "p50_ms": 0.599,
+        "p90_ms": 3.503,
+        "p95_ms": 5.855,
+        "p99_ms": 34.815,
+        "p999_ms": 168.959,
+        "max_ms": 258.066
+      },
+      "client_schedule_lag": {
+        "count": 76887,
+        "min_ms": 0,
+        "mean_ms": 0.04441164306059542,
+        "p50_ms": 0,
+        "p90_ms": 0.052,
+        "p95_ms": 0.195,
+        "p99_ms": 1.023,
+        "p999_ms": 2.943,
+        "max_ms": 5.119
+      },
+      "ops": {
+        "board_top100": {
+          "count": 76887,
+          "ok": 76785,
+          "expected_rejections": 0,
+          "errors": 102,
+          "latency": {
+            "count": 76887,
+            "min_ms": 0.049,
+            "mean_ms": 2.3802733882190745,
+            "p50_ms": 0.631,
+            "p90_ms": 3.631,
+            "p95_ms": 6.079,
+            "p99_ms": 34.815,
+            "p999_ms": 168.959,
+            "max_ms": 258.068
+          },
+          "kinds": {
+            "transport": 102
+          }
+        }
+      },
+      "budget_measured_ms": 6.079,
+      "pass_local": false,
+      "fail_reasons": [
+        "error rate 0.0013 \u003e 0.0010"
+      ],
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 217136,
+        "rss_max_kib": 217136,
+        "rss_end_kib": 217136,
+        "cpu_seconds": 12.439999999999998,
+        "cpu_util": 0.8289928245306573
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 270,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    }
+  ]
+}

@@ -1,0 +1,837 @@
+{
+  "budget": {
+    "prd": "§13 索引点查",
+    "target_rps": 500,
+    "percentile": 0.99,
+    "limit_ms": 50,
+    "max_error_rate": 0.001
+  },
+  "highest_passing_rps": 8542.96875,
+  "label": "local, not acceptance",
+  "mode": "saturation",
+  "scenario": "pointread",
+  "step_factor": 1.5,
+  "step_steady_s": 15,
+  "step_warmup_s": 5,
+  "steps": [
+    {
+      "label": "local, not acceptance",
+      "scenario": "pointread",
+      "description": "GET /saves/profile: session lookup + PK read of a 1 KiB save",
+      "budget": {
+        "prd": "§13 索引点查",
+        "target_rps": 500,
+        "percentile": 0.99,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 500,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:10:22.106845+08:00",
+      "scheduled": 7500,
+      "completed": 7500,
+      "achieved_rps": 500,
+      "ok": 7500,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 7500,
+        "min_ms": 0.137,
+        "mean_ms": 0.6909088,
+        "p50_ms": 0.349,
+        "p90_ms": 1.615,
+        "p95_ms": 2.399,
+        "p99_ms": 3.919,
+        "p999_ms": 5.759,
+        "max_ms": 8.011
+      },
+      "latency_service": {
+        "count": 7500,
+        "min_ms": 0.135,
+        "mean_ms": 0.6432976,
+        "p50_ms": 0.331,
+        "p90_ms": 1.511,
+        "p95_ms": 2.175,
+        "p99_ms": 3.759,
+        "p999_ms": 5.439,
+        "max_ms": 8.009
+      },
+      "client_schedule_lag": {
+        "count": 7500,
+        "min_ms": 0,
+        "mean_ms": 0.04376306666666667,
+        "p50_ms": 0,
+        "p90_ms": 0.033,
+        "p95_ms": 0.191,
+        "p99_ms": 1.127,
+        "p999_ms": 2.799,
+        "max_ms": 4.413
+      },
+      "ops": {
+        "save_get_1k": {
+          "count": 7500,
+          "ok": 7500,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 7500,
+            "min_ms": 0.137,
+            "mean_ms": 0.6909088,
+            "p50_ms": 0.349,
+            "p90_ms": 1.615,
+            "p95_ms": 2.399,
+            "p99_ms": 3.919,
+            "p999_ms": 5.759,
+            "max_ms": 8.011
+          }
+        }
+      },
+      "budget_measured_ms": 3.919,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 201488,
+        "rss_max_kib": 201552,
+        "rss_end_kib": 201552,
+        "cpu_seconds": 1.5699999999999932,
+        "cpu_util": 0.10465096524049193
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 5,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "pointread",
+      "description": "GET /saves/profile: session lookup + PK read of a 1 KiB save",
+      "budget": {
+        "prd": "§13 索引点查",
+        "target_rps": 500,
+        "percentile": 0.99,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 750,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:10:42.133796+08:00",
+      "scheduled": 11250,
+      "completed": 11250,
+      "achieved_rps": 750,
+      "ok": 11250,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 11250,
+        "min_ms": 0.131,
+        "mean_ms": 0.6361866666666666,
+        "p50_ms": 0.321,
+        "p90_ms": 1.463,
+        "p95_ms": 2.191,
+        "p99_ms": 3.807,
+        "p999_ms": 5.887,
+        "max_ms": 7.934
+      },
+      "latency_service": {
+        "count": 11250,
+        "min_ms": 0.13,
+        "mean_ms": 0.5853432888888889,
+        "p50_ms": 0.305,
+        "p90_ms": 1.319,
+        "p95_ms": 2.007,
+        "p99_ms": 3.567,
+        "p999_ms": 5.151,
+        "max_ms": 7.5
+      },
+      "client_schedule_lag": {
+        "count": 11250,
+        "min_ms": 0,
+        "mean_ms": 0.04729884444444444,
+        "p50_ms": 0,
+        "p90_ms": 0.04,
+        "p95_ms": 0.224,
+        "p99_ms": 1.103,
+        "p999_ms": 3.071,
+        "max_ms": 5.064
+      },
+      "ops": {
+        "save_get_1k": {
+          "count": 11250,
+          "ok": 11250,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 11250,
+            "min_ms": 0.131,
+            "mean_ms": 0.6361866666666666,
+            "p50_ms": 0.321,
+            "p90_ms": 1.463,
+            "p95_ms": 2.191,
+            "p99_ms": 3.807,
+            "p999_ms": 5.887,
+            "max_ms": 7.934
+          }
+        }
+      },
+      "budget_measured_ms": 3.807,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 201552,
+        "rss_max_kib": 201552,
+        "rss_end_kib": 201552,
+        "cpu_seconds": 2.1899999999999977,
+        "cpu_util": 0.145964598310722
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 6,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "pointread",
+      "description": "GET /saves/profile: session lookup + PK read of a 1 KiB save",
+      "budget": {
+        "prd": "§13 索引点查",
+        "target_rps": 500,
+        "percentile": 0.99,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 1125,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:11:02.161869+08:00",
+      "scheduled": 16875,
+      "completed": 16875,
+      "achieved_rps": 1125,
+      "ok": 16875,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 16875,
+        "min_ms": 0.13,
+        "mean_ms": 0.6141450666666667,
+        "p50_ms": 0.295,
+        "p90_ms": 1.447,
+        "p95_ms": 2.159,
+        "p99_ms": 4.287,
+        "p999_ms": 11.135,
+        "max_ms": 17.69
+      },
+      "latency_service": {
+        "count": 16875,
+        "min_ms": 0.128,
+        "mean_ms": 0.5670907851851852,
+        "p50_ms": 0.283,
+        "p90_ms": 1.303,
+        "p95_ms": 1.943,
+        "p99_ms": 3.951,
+        "p999_ms": 8.831,
+        "max_ms": 17.688
+      },
+      "client_schedule_lag": {
+        "count": 16875,
+        "min_ms": 0,
+        "mean_ms": 0.043151348148148146,
+        "p50_ms": 0,
+        "p90_ms": 0.036,
+        "p95_ms": 0.18,
+        "p99_ms": 1.047,
+        "p999_ms": 2.927,
+        "max_ms": 6.399
+      },
+      "ops": {
+        "save_get_1k": {
+          "count": 16875,
+          "ok": 16875,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 16875,
+            "min_ms": 0.13,
+            "mean_ms": 0.6141450666666667,
+            "p50_ms": 0.295,
+            "p90_ms": 1.447,
+            "p95_ms": 2.159,
+            "p99_ms": 4.287,
+            "p999_ms": 11.135,
+            "max_ms": 17.69
+          }
+        }
+      },
+      "budget_measured_ms": 4.287,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 201552,
+        "rss_max_kib": 201568,
+        "rss_end_kib": 201568,
+        "cpu_seconds": 3.1100000000000136,
+        "cpu_util": 0.20721744697611286
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 20,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "pointread",
+      "description": "GET /saves/profile: session lookup + PK read of a 1 KiB save",
+      "budget": {
+        "prd": "§13 索引点查",
+        "target_rps": 500,
+        "percentile": 0.99,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 1687.5,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:11:22.194619+08:00",
+      "scheduled": 25312,
+      "completed": 25312,
+      "achieved_rps": 1687.4666666666667,
+      "ok": 25312,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 25312,
+        "min_ms": 0.124,
+        "mean_ms": 0.66650600505689,
+        "p50_ms": 0.283,
+        "p90_ms": 1.647,
+        "p95_ms": 2.463,
+        "p99_ms": 4.671,
+        "p999_ms": 7.455,
+        "max_ms": 9.592
+      },
+      "latency_service": {
+        "count": 25312,
+        "min_ms": 0.118,
+        "mean_ms": 0.6097504740834387,
+        "p50_ms": 0.269,
+        "p90_ms": 1.479,
+        "p95_ms": 2.207,
+        "p99_ms": 4.255,
+        "p999_ms": 6.655,
+        "max_ms": 8.955
+      },
+      "client_schedule_lag": {
+        "count": 25312,
+        "min_ms": 0,
+        "mean_ms": 0.05252014854614412,
+        "p50_ms": 0,
+        "p90_ms": 0.05,
+        "p95_ms": 0.245,
+        "p99_ms": 1.231,
+        "p999_ms": 3.327,
+        "max_ms": 6.106
+      },
+      "ops": {
+        "save_get_1k": {
+          "count": 25312,
+          "ok": 25312,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 25312,
+            "min_ms": 0.124,
+            "mean_ms": 0.66650600505689,
+            "p50_ms": 0.283,
+            "p90_ms": 1.647,
+            "p95_ms": 2.463,
+            "p99_ms": 4.671,
+            "p999_ms": 7.455,
+            "max_ms": 9.592
+          }
+        }
+      },
+      "budget_measured_ms": 4.671,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 201568,
+        "rss_max_kib": 201568,
+        "rss_end_kib": 201568,
+        "cpu_seconds": 4.039999999999992,
+        "cpu_util": 0.26914495653537907
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 16,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "pointread",
+      "description": "GET /saves/profile: session lookup + PK read of a 1 KiB save",
+      "budget": {
+        "prd": "§13 索引点查",
+        "target_rps": 500,
+        "percentile": 0.99,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 2531.25,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:11:42.228597+08:00",
+      "scheduled": 37968,
+      "completed": 37968,
+      "achieved_rps": 2531.2,
+      "ok": 37968,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 37968,
+        "min_ms": 0.116,
+        "mean_ms": 0.6687867941424357,
+        "p50_ms": 0.269,
+        "p90_ms": 1.671,
+        "p95_ms": 2.591,
+        "p99_ms": 5.055,
+        "p999_ms": 7.903,
+        "max_ms": 12.467
+      },
+      "latency_service": {
+        "count": 37968,
+        "min_ms": 0.115,
+        "mean_ms": 0.6089058154235146,
+        "p50_ms": 0.254,
+        "p90_ms": 1.503,
+        "p95_ms": 2.335,
+        "p99_ms": 4.607,
+        "p999_ms": 7.391,
+        "max_ms": 12.465
+      },
+      "client_schedule_lag": {
+        "count": 37968,
+        "min_ms": 0,
+        "mean_ms": 0.05426925305520438,
+        "p50_ms": 0,
+        "p90_ms": 0.06,
+        "p95_ms": 0.277,
+        "p99_ms": 1.271,
+        "p999_ms": 3.199,
+        "max_ms": 6.221
+      },
+      "ops": {
+        "save_get_1k": {
+          "count": 37968,
+          "ok": 37968,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 37968,
+            "min_ms": 0.116,
+            "mean_ms": 0.6687867941424357,
+            "p50_ms": 0.269,
+            "p90_ms": 1.671,
+            "p95_ms": 2.591,
+            "p99_ms": 5.055,
+            "p999_ms": 7.903,
+            "max_ms": 12.467
+          }
+        }
+      },
+      "budget_measured_ms": 5.055,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 201568,
+        "rss_max_kib": 201568,
+        "rss_end_kib": 201568,
+        "cpu_seconds": 5.660000000000025,
+        "cpu_util": 0.3772637721814743
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 28,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "pointread",
+      "description": "GET /saves/profile: session lookup + PK read of a 1 KiB save",
+      "budget": {
+        "prd": "§13 索引点查",
+        "target_rps": 500,
+        "percentile": 0.99,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 3796.875,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:12:02.25616+08:00",
+      "scheduled": 56953,
+      "completed": 56953,
+      "achieved_rps": 3796.866666666667,
+      "ok": 56953,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 56953,
+        "min_ms": 0.087,
+        "mean_ms": 0.5382240443874774,
+        "p50_ms": 0.23,
+        "p90_ms": 1.287,
+        "p95_ms": 2.023,
+        "p99_ms": 4.351,
+        "p999_ms": 7.935,
+        "max_ms": 18.19
+      },
+      "latency_service": {
+        "count": 56953,
+        "min_ms": 0.086,
+        "mean_ms": 0.4791639597562903,
+        "p50_ms": 0.219,
+        "p90_ms": 1.111,
+        "p95_ms": 1.751,
+        "p99_ms": 3.775,
+        "p999_ms": 7.359,
+        "max_ms": 18.188
+      },
+      "client_schedule_lag": {
+        "count": 56953,
+        "min_ms": 0,
+        "mean_ms": 0.05225624637859288,
+        "p50_ms": 0,
+        "p90_ms": 0.053,
+        "p95_ms": 0.237,
+        "p99_ms": 1.223,
+        "p999_ms": 3.375,
+        "max_ms": 8.693
+      },
+      "ops": {
+        "save_get_1k": {
+          "count": 56953,
+          "ok": 56953,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 56953,
+            "min_ms": 0.087,
+            "mean_ms": 0.5382240443874774,
+            "p50_ms": 0.23,
+            "p90_ms": 1.287,
+            "p95_ms": 2.023,
+            "p99_ms": 4.351,
+            "p999_ms": 7.935,
+            "max_ms": 18.19
+          }
+        }
+      },
+      "budget_measured_ms": 4.351,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 201568,
+        "rss_max_kib": 201568,
+        "rss_end_kib": 201568,
+        "cpu_seconds": 7.470000000000027,
+        "cpu_util": 0.49779895974178545
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 56,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "pointread",
+      "description": "GET /saves/profile: session lookup + PK read of a 1 KiB save",
+      "budget": {
+        "prd": "§13 索引点查",
+        "target_rps": 500,
+        "percentile": 0.99,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 5695.3125,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:12:22.286586+08:00",
+      "scheduled": 85430,
+      "completed": 85430,
+      "achieved_rps": 5695.333333333333,
+      "ok": 85430,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 85430,
+        "min_ms": 0.085,
+        "mean_ms": 0.6280633852276718,
+        "p50_ms": 0.231,
+        "p90_ms": 1.519,
+        "p95_ms": 2.479,
+        "p99_ms": 5.343,
+        "p999_ms": 12.351,
+        "max_ms": 20.429
+      },
+      "latency_service": {
+        "count": 85430,
+        "min_ms": 0.085,
+        "mean_ms": 0.5490702680557181,
+        "p50_ms": 0.22,
+        "p90_ms": 1.295,
+        "p95_ms": 2.063,
+        "p99_ms": 4.415,
+        "p999_ms": 11.455,
+        "max_ms": 17.386
+      },
+      "client_schedule_lag": {
+        "count": 85430,
+        "min_ms": 0,
+        "mean_ms": 0.0616697296031839,
+        "p50_ms": 0,
+        "p90_ms": 0.075,
+        "p95_ms": 0.303,
+        "p99_ms": 1.407,
+        "p999_ms": 3.471,
+        "max_ms": 6.633
+      },
+      "ops": {
+        "save_get_1k": {
+          "count": 85430,
+          "ok": 85430,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 85430,
+            "min_ms": 0.085,
+            "mean_ms": 0.6280633852276718,
+            "p50_ms": 0.231,
+            "p90_ms": 1.519,
+            "p95_ms": 2.479,
+            "p99_ms": 5.343,
+            "p999_ms": 12.351,
+            "max_ms": 20.429
+          }
+        }
+      },
+      "budget_measured_ms": 5.343,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 201568,
+        "rss_max_kib": 201568,
+        "rss_end_kib": 201568,
+        "cpu_seconds": 9.669999999999987,
+        "cpu_util": 0.644505277174384
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 77,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "pointread",
+      "description": "GET /saves/profile: session lookup + PK read of a 1 KiB save",
+      "budget": {
+        "prd": "§13 索引点查",
+        "target_rps": 500,
+        "percentile": 0.99,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 8542.96875,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:12:42.314895+08:00",
+      "scheduled": 128145,
+      "completed": 128145,
+      "achieved_rps": 8543,
+      "ok": 128145,
+      "expected_rejections": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "error_kinds": {},
+      "latency_corrected": {
+        "count": 128145,
+        "min_ms": 0.08,
+        "mean_ms": 0.5555395840649264,
+        "p50_ms": 0.212,
+        "p90_ms": 1.223,
+        "p95_ms": 1.943,
+        "p99_ms": 4.639,
+        "p999_ms": 19.455,
+        "max_ms": 38.487
+      },
+      "latency_service": {
+        "count": 128145,
+        "min_ms": 0.079,
+        "mean_ms": 0.5340086932771471,
+        "p50_ms": 0.203,
+        "p90_ms": 1.159,
+        "p95_ms": 1.863,
+        "p99_ms": 4.511,
+        "p999_ms": 18.943,
+        "max_ms": 38.486
+      },
+      "client_schedule_lag": {
+        "count": 128145,
+        "min_ms": 0,
+        "mean_ms": 0.016656576534394632,
+        "p50_ms": 0,
+        "p90_ms": 0.018,
+        "p95_ms": 0.054,
+        "p99_ms": 0.367,
+        "p999_ms": 1.255,
+        "max_ms": 5.568
+      },
+      "ops": {
+        "save_get_1k": {
+          "count": 128145,
+          "ok": 128145,
+          "expected_rejections": 0,
+          "errors": 0,
+          "latency": {
+            "count": 128145,
+            "min_ms": 0.08,
+            "mean_ms": 0.5555395840649264,
+            "p50_ms": 0.212,
+            "p90_ms": 1.223,
+            "p95_ms": 1.943,
+            "p99_ms": 4.639,
+            "p999_ms": 19.455,
+            "max_ms": 38.487
+          }
+        }
+      },
+      "budget_measured_ms": 4.639,
+      "pass_local": true,
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 201568,
+        "rss_max_kib": 201568,
+        "rss_end_kib": 201568,
+        "cpu_seconds": 12.139999999999986,
+        "cpu_util": 0.8091208986413941
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 93,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    },
+    {
+      "label": "local, not acceptance",
+      "scenario": "pointread",
+      "description": "GET /saves/profile: session lookup + PK read of a 1 KiB save",
+      "budget": {
+        "prd": "§13 索引点查",
+        "target_rps": 500,
+        "percentile": 0.99,
+        "limit_ms": 50,
+        "max_error_rate": 0.001
+      },
+      "offered_rps": 12814.453125,
+      "warmup_s": 5,
+      "steady_s": 15,
+      "started_at": "2026-11-25T10:13:02.342996+08:00",
+      "scheduled": 192217,
+      "completed": 192217,
+      "achieved_rps": 12814.466666666667,
+      "ok": 151474,
+      "expected_rejections": 0,
+      "errors": 40743,
+      "error_rate": 0.21196356201584668,
+      "error_kinds": {
+        "transport": 40743
+      },
+      "latency_corrected": {
+        "count": 192217,
+        "min_ms": 0.033,
+        "mean_ms": 164.78114023213348,
+        "p50_ms": 2.287,
+        "p90_ms": 6.591,
+        "p95_ms": 1327.103,
+        "p99_ms": 3178.495,
+        "p999_ms": 5865.471,
+        "max_ms": 11525.981
+      },
+      "latency_service": {
+        "count": 192217,
+        "min_ms": 0.03,
+        "mean_ms": 164.6757291342597,
+        "p50_ms": 2.223,
+        "p90_ms": 6.399,
+        "p95_ms": 1327.103,
+        "p99_ms": 3178.495,
+        "p999_ms": 5865.471,
+        "max_ms": 11525.981
+      },
+      "client_schedule_lag": {
+        "count": 192217,
+        "min_ms": 0,
+        "mean_ms": 0.07399887106759548,
+        "p50_ms": 0,
+        "p90_ms": 0.11,
+        "p95_ms": 0.365,
+        "p99_ms": 1.543,
+        "p999_ms": 4.319,
+        "max_ms": 9.128
+      },
+      "ops": {
+        "save_get_1k": {
+          "count": 192217,
+          "ok": 151474,
+          "expected_rejections": 0,
+          "errors": 40743,
+          "latency": {
+            "count": 192217,
+            "min_ms": 0.033,
+            "mean_ms": 164.78114023213348,
+            "p50_ms": 2.287,
+            "p90_ms": 6.591,
+            "p95_ms": 1327.103,
+            "p99_ms": 3178.495,
+            "p999_ms": 5865.471,
+            "max_ms": 11525.981
+          },
+          "kinds": {
+            "transport": 40743
+          }
+        }
+      },
+      "budget_measured_ms": 3178.495,
+      "pass_local": false,
+      "fail_reasons": [
+        "p99 3178.5ms \u003e 50ms",
+        "error rate 0.2120 \u003e 0.0010"
+      ],
+      "server": {
+        "pid": 54127,
+        "rss_start_kib": 201664,
+        "rss_max_kib": 215728,
+        "rss_end_kib": 215728,
+        "cpu_seconds": 13.890000000000015,
+        "cpu_util": 0.9097967598330655
+      },
+      "client_dropped": 0,
+      "client_max_inflight": 2712,
+      "client_go": "go1.27.1",
+      "client_gomaxprocs": 15
+    }
+  ]
+}

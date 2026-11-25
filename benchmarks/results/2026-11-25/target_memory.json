@@ -1,0 +1,90 @@
+{
+  "label": "local, not acceptance",
+  "scenario": "memory",
+  "description": "GET /healthz (no storage access)",
+  "budget": {
+    "prd": "§13 内存 API",
+    "target_rps": 1000,
+    "percentile": 0.99,
+    "limit_ms": 30,
+    "max_error_rate": 0.001
+  },
+  "offered_rps": 1000,
+  "warmup_s": 30,
+  "steady_s": 90,
+  "started_at": "2026-11-25T09:40:27.73579+08:00",
+  "scheduled": 90000,
+  "completed": 90000,
+  "achieved_rps": 1000,
+  "ok": 90000,
+  "expected_rejections": 0,
+  "errors": 0,
+  "error_rate": 0,
+  "error_kinds": {},
+  "latency_corrected": {
+    "count": 90000,
+    "min_ms": 0.061,
+    "mean_ms": 0.5585844666666667,
+    "p50_ms": 0.186,
+    "p90_ms": 1.527,
+    "p95_ms": 2.271,
+    "p99_ms": 4.079,
+    "p999_ms": 6.783,
+    "max_ms": 14.354
+  },
+  "latency_service": {
+    "count": 90000,
+    "min_ms": 0.06,
+    "mean_ms": 0.5066593444444445,
+    "p50_ms": 0.174,
+    "p90_ms": 1.359,
+    "p95_ms": 2.079,
+    "p99_ms": 3.871,
+    "p999_ms": 6.271,
+    "max_ms": 14.353
+  },
+  "client_schedule_lag": {
+    "count": 90000,
+    "min_ms": 0,
+    "mean_ms": 0.048561655555555555,
+    "p50_ms": 0,
+    "p90_ms": 0.033,
+    "p95_ms": 0.219,
+    "p99_ms": 1.199,
+    "p999_ms": 3.007,
+    "max_ms": 5.746
+  },
+  "ops": {
+    "healthz": {
+      "count": 90000,
+      "ok": 90000,
+      "expected_rejections": 0,
+      "errors": 0,
+      "latency": {
+        "count": 90000,
+        "min_ms": 0.061,
+        "mean_ms": 0.5585844666666667,
+        "p50_ms": 0.186,
+        "p90_ms": 1.527,
+        "p95_ms": 2.271,
+        "p99_ms": 4.079,
+        "p999_ms": 6.783,
+        "max_ms": 14.354
+      }
+    }
+  },
+  "budget_measured_ms": 4.079,
+  "pass_local": true,
+  "server": {
+    "pid": 16361,
+    "rss_start_kib": 27520,
+    "rss_max_kib": 27696,
+    "rss_end_kib": 27696,
+    "cpu_seconds": 8.09,
+    "cpu_util": 0.08988578125479006
+  },
+  "client_dropped": 0,
+  "client_max_inflight": 17,
+  "client_go": "go1.27.1",
+  "client_gomaxprocs": 15
+}
