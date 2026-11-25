@@ -54,19 +54,20 @@ func summarize(st []store.MigrationStatus, ms []store.Migration) schemaSummary {
 	return s
 }
 
-const backupUsage = "usage: backup snapshot --to FILE | backup verify FILE | backup restore --from FILE --to PATH"
+const backupUsage = "usage: backup snapshot --to FILE | backup verify [--dsn-ref REF] FILE | backup restore --from FILE (--to PATH | --to-dsn-ref REF [--analytics-to-dsn-ref REF])"
 
 func backupCmd(ctx context.Context, cfg config.Config, cfgErr error, args []string, asJSON bool, env Env) error {
 	if len(args) == 0 {
 		return UsageError{backupUsage}
 	}
-	if cfgErr == nil && cfg.Database.Driver == store.Postgres {
-		return errors.New("backup snapshot/verify/restore work on SQLite files only; back up PostgreSQL with pg_dump or base backups + WAL archiving (PITR), see docs/adr/0003-postgres-scale.md")
-	}
+	isPG := cfgErr == nil && cfg.Database.Driver == store.Postgres
 	fs := flag.NewFlagSet("backup", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	to := fs.String("to", "", "target path")
 	from := fs.String("from", "", "backup file")
+	toRef := fs.String("to-dsn-ref", "", "PostgreSQL restore target (env:NAME or file:/path)")
+	anRef := fs.String("analytics-to-dsn-ref", "", "PostgreSQL analytics restore target")
+	dsnRef := fs.String("dsn-ref", "", "PostgreSQL server used for the temporary verify database")
 	switch args[0] {
 	case "snapshot":
 		if err := fs.Parse(args[1:]); err != nil || *to == "" || fs.NArg() != 0 {
@@ -74,6 +75,21 @@ func backupCmd(ctx context.Context, cfg config.Config, cfgErr error, args []stri
 		}
 		if cfgErr != nil {
 			return fmt.Errorf("invalid configuration:\n%w", cfgErr)
+		}
+		if isPG {
+			info, err := SnapshotPostgres(ctx, cfg.Database, *to)
+			if err != nil {
+				return err
+			}
+			if asJSON {
+				PrintJSON(env.Stdout, info)
+			} else {
+				fmt.Fprintf(env.Stdout, "snapshot %s (pg_dump custom format, %d bytes, sha256 %s), manifest %s\n", info.Path, info.Info.Main.Bytes, info.Info.Main.SHA256, info.Manifest)
+				if info.Analytics != "" {
+					fmt.Fprintf(env.Stdout, "analytics %s (%d bytes)\n", info.Analytics, info.Info.Analytics.Bytes)
+				}
+			}
+			return nil
 		}
 		info, err := Snapshot(ctx, cfg.Database.Path, *to)
 		if err != nil {
@@ -86,10 +102,42 @@ func backupCmd(ctx context.Context, cfg config.Config, cfgErr error, args []stri
 		}
 		return nil
 	case "verify":
-		if len(args) != 2 {
-			return UsageError{"usage: backup verify FILE"}
+		// FILE may come before or after --dsn-ref.
+		rest := args[1:]
+		var files []string
+		for len(rest) > 0 {
+			if err := fs.Parse(rest); err != nil {
+				return UsageError{"usage: backup verify [--dsn-ref REF] FILE"}
+			}
+			if fs.NArg() == 0 {
+				break
+			}
+			files = append(files, fs.Arg(0))
+			rest = fs.Args()[1:]
 		}
-		rep, err := VerifyBackup(ctx, args[1])
+		if len(files) != 1 {
+			return UsageError{"usage: backup verify [--dsn-ref REF] FILE"}
+		}
+		file := files[0]
+		if isPG || *dsnRef != "" || IsPGDump(file) {
+			ref := *dsnRef
+			if ref == "" {
+				if !isPG {
+					return errors.New("verifying a PostgreSQL backup needs a server: configure profile scale (database.dsn_ref) or pass --dsn-ref env:NAME")
+				}
+				ref = cfg.Database.DSNRef
+			}
+			rep, err := VerifyPostgresBackup(ctx, ref, file)
+			if err != nil {
+				return err
+			}
+			printPGReport(env, rep, asJSON)
+			if !rep.OK {
+				return CheckFailed{"backup verification failed: " + strings.Join(rep.Problems, "; ")}
+			}
+			return nil
+		}
+		rep, err := VerifyBackup(ctx, file)
 		if err != nil {
 			return err
 		}
@@ -99,8 +147,33 @@ func backupCmd(ctx context.Context, cfg config.Config, cfgErr error, args []stri
 		}
 		return nil
 	case "restore":
-		if err := fs.Parse(args[1:]); err != nil || *to == "" || *from == "" || fs.NArg() != 0 {
-			return UsageError{"usage: backup restore --from FILE --to PATH"}
+		if err := fs.Parse(args[1:]); err != nil || *from == "" || fs.NArg() != 0 || (*to == "") == (*toRef == "") {
+			return UsageError{"usage: backup restore --from FILE (--to PATH | --to-dsn-ref REF [--analytics-to-dsn-ref REF])"}
+		}
+		if *toRef != "" {
+			if !config.IsSecretRef(*toRef) || (*anRef != "" && !config.IsSecretRef(*anRef)) {
+				return UsageError{"--to-dsn-ref and --analytics-to-dsn-ref take env:NAME or file:/path (never a literal DSN)"}
+			}
+			rep, err := RestorePostgresBackup(ctx, *from, *toRef, *anRef)
+			if err != nil {
+				if rep.Restore != "" || len(rep.Problems) > 0 {
+					printPGReport(env, rep, asJSON)
+					if !rep.OK {
+						return CheckFailed{err.Error()}
+					}
+				}
+				return err
+			}
+			if asJSON {
+				PrintJSON(env.Stdout, map[string]any{"restored": rep.Database, "verify": rep})
+			} else {
+				printPGReport(env, rep, false)
+				fmt.Fprintf(env.Stdout, "restored %s -> database %q (verified). Point database.dsn_ref at it and start the service.\n", *from, rep.Database)
+			}
+			return nil
+		}
+		if isPG {
+			return UsageError{"profile scale: restore into an empty PostgreSQL database with --to-dsn-ref env:NAME"}
 		}
 		rep, err := RestoreBackup(ctx, *from, *to)
 		if err != nil {

@@ -164,8 +164,14 @@ func TestMigrateSQLiteToPostgresEndToEnd(t *testing.T) {
 	if code, out, errs := cliRunCfg(t, cfg, "game", "reconcile"); code != 0 {
 		t.Fatalf("game reconcile on postgres: %d %s %s", code, out, errs)
 	}
-	if code, _, errs := cliRunCfg(t, cfg, "backup", "snapshot", "--to", t.TempDir()+"/x.db"); code == 0 || !strings.Contains(errs, "pg_dump") {
-		t.Fatalf("backup on postgres must be refused with guidance: %d %s", code, errs)
+	// backup snapshot/verify on PostgreSQL use pg_dump/pg_restore (app/backup_pg.go).
+	snap := t.TempDir() + "/x.dump"
+	if code, _, errs := cliRunCfg(t, cfg, "backup", "snapshot", "--to", snap); code != 0 {
+		if !strings.Contains(errs, "pg_dump not found") {
+			t.Fatalf("backup snapshot on postgres: %d %s", code, errs)
+		}
+	} else if code, out, errs := cliRunCfg(t, cfg, "backup", "verify", snap); code != 0 {
+		t.Fatalf("backup verify of the migrated database: %d %s %s", code, out, errs)
 	}
 	if code, out, errs := cliRunCfg(t, cfg, "doctor"); code != 0 || !strings.Contains(out, "postgres") {
 		t.Fatalf("doctor on postgres: %d %s %s", code, out, errs)

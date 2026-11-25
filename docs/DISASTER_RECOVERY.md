@@ -111,3 +111,99 @@ DRILL_REPLICA=file RUNS=2 DURATION=30s WORKERS=8 PAYLOAD=8192 SEED_PLAYERS=60000
 - Litestream → **Cloudflare R2**（及 AWS S3）的复制与恢复；R2 上的 RPO/RTO、费用与网络中断行为。MinIO（本机回环）已演练，见上。
 - 1C1G 目标机上的吞吐、WAL 增长与恢复时间；本表的数据来自高配开发机与本地 SSD，不能代表目标环境。
 - `restore.sh --timestamp`（时间点恢复）与 `--owner` 未在真实 Litestream 下演练；恢复后重新启用复制（第 6 步）未演练。
+
+---
+
+# PostgreSQL（profile scale，PRD §11/§12「Scale 使用 PG 备份/PITR」）
+
+两层手段，互补而非替代：
+
+| 手段 | 作用 | 恢复点 | 实现 |
+|---|---|---|---|
+| 逻辑备份 `backup snapshot/verify/restore` | 可移植的一致性快照（跨机器/跨小版本、抽查、归档） | 快照时刻 | `app/backup_pg.go`（pg_dump/pg_restore 自定义格式 + JSON 清单） |
+| 物理备份 + WAL 归档（PITR） | 机器丢失、误删/误改后回到任意时间点 | 归档覆盖范围内任意时刻 | `deploy/postgres/`（服务器配置片段与脚本，PostgreSQL 自带工具） |
+
+## 逻辑备份命令
+
+```bash
+APP --config CFG [--json] backup snapshot --to /backups/app-<ts>.dump
+#   写出 app-<ts>.dump（pg_dump -Fc，主库全部 schema，含 gostack_analytics）、
+#   app-<ts>.dump.json（清单）；analytics_dsn_ref 指向独立库时另写 app-<ts>.dump.analytics。
+#   任一目标已存在即拒绝；先写临时文件再链接发布。
+APP --config CFG [--json] backup verify [--dsn-ref env:SCRATCH] /backups/app-<ts>.dump
+APP --config CFG [--json] backup restore --from /backups/app-<ts>.dump --to-dsn-ref env:NEW_DB [--analytics-to-dsn-ref env:NEW_AN]
+```
+
+- **一致性**：snapshot 在一个 `REPEATABLE READ READ ONLY` 事务中执行 `pg_export_snapshot()`，在同一快照内统计每张表行数、各 schema 最高迁移版本、`game_ledger` 按资产求和、`billing_ledger_entries` 的 `delta_available/delta_reserved` 求和，再以 `pg_dump --snapshot=<id>` 导出。清单与归档描述的是**同一份数据**，因此恢复后必须逐项相等。独立 analytics 库是另一个快照（P2 数据，不与主库严格一致）。
+- **口令**：DSN 只经 `database.dsn_ref`（env:/file:）解析；传给 pg_dump/pg_restore 的 `--dbname` 去掉口令，口令经子进程环境变量 `PGPASSWORD` 传递，不出现在 argv/`ps` 中；错误信息不回显 DSN。单测 `TestPGDSNKeepsPasswordOutOfArgs` 覆盖 URL（userinfo 与 `?password=`）与 key=value（含引号转义）两种形式。
+- **verify**：校验归档 sha256/大小与清单一致 → 在 `--dsn-ref`（默认 `database.dsn_ref`）所在服务器 `CREATE DATABASE gs_verify_<随机> TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'`（角色需 CREATEDB）→ `pg_restore --single-transaction --exit-on-error --no-owner --no-privileges` → 主库与 analytics schema 的迁移状态对比本二进制（待处理可接受，未知/漂移失败）→ GameKit 钱包/账本对账 → 计费对账 → 与清单比较行数、账本和、schema 版本 → `DROP DATABASE … WITH (FORCE)`（失败路径同样删除）。文件以 `PGDMP` 开头时自动按 PG 处理；非 PG 配置下需 `--dsn-ref`。
+- **restore**：目标库必须已创建（C 排序）且为空（无任何用户关系；独立 analytics 目标不得已有 `gostack_analytics`），否则拒绝；先校验清单与校验和，再单事务 `pg_restore`（失败则目标保持为空），然后在目标库上原地执行与 verify 相同的检查。对象属主为连接角色（`--no-owner`）。
+- **退出码**与 SQLite 版一致：0 通过；3 检查失败（归档截断/篡改、缺清单、pg_restore 失败、对账不平、清单不符、schema 比本二进制新或漂移）；1 运行错误（目标非空、无 pg_dump/pg_restore、连接失败、角色无 CREATEDB）；2 用法错误（含 `--to-dsn-ref` 传字面 DSN）。
+- `--json` 字段：`ok`、`file`、`bytes`、`sha256`、`database`、`restore`、`schema`、`analytics_schema`、`reconcile_mismatches`、`billing_reconcile_mismatches`、`manifest_differences`、`problems`。
+- 需要 PostgreSQL 客户端工具在 PATH 中，主版本 ≥ 服务器（pg_dump 拒绝导出更新的服务器）。
+- 代价：snapshot 对每张表做一次 `count(*)`；verify 需要与库同量级的临时空间与时间。大库上请在低峰执行，并为 verify 准备单独的服务器（`--dsn-ref`）。
+
+测试（`GOSTACK_TEST_POSTGRES_DSN` 已设置且 PATH 中有 pg_dump/pg_restore 时运行，否则跳过）：`app/backup_pg_test.go` — 快照 → 拒绝覆盖（含只存在清单）→ verify 通过且临时库已删除 → `--dsn-ref` 无 PG 配置也可验证 → 清单行数被改、归档截断（清单同步/不同步两种）、缺清单、垃圾文件均退出 3，且不残留临时库 → restore 拒绝非空目标与字面 DSN → 截断归档的 restore 失败后目标仍为空 → 正常 restore 后应用在新库上启动、余额/计费账户正确、可继续写入 → 二次 restore 被拒 → 源库钱包被篡改且有未知迁移 9999 时 verify 报 `1 mismatches` 与 `unknown=[9999]`；独立 analytics 库的快照/验证/分别恢复与缺失 analytics 归档检测。`tests/scale` 的 SQLite→PG 迁移测试在迁移后对 PG 运行 snapshot + verify。
+
+## PITR：WAL 归档 + 基础备份
+
+文件（`deploy/postgres/`）：
+- `postgresql.pitr.conf`：`wal_level=replica`、`archive_mode=on`、`archive_command='…/wal-archive.sh %p %f ARCHIVE_DIR'`、`archive_timeout=60s`、`max_wal_senders=10`。`archive_mode` 需重启。
+- `wal-archive.sh`：复制到临时名 → fsync → rename；同名同内容视为成功（崩溃后重试），同名不同内容**拒绝**（防止两个集群写同一归档目录）；拒绝含路径的文件名。
+- `wal-restore.sh`：`restore_command` 助手，文件不存在时非零退出（归档结束）。
+- `base-backup.sh`：`pg_basebackup -Fp -X stream -c fast --manifest-checksums=SHA256` 到新目录，然后 `pg_verifybackup`；口令经 `PGPASSWORD`/`.pgpass`；失败时删除目标；输出 JSON（起始 LSN/时间）。角色需 REPLICATION。
+- `pitr-restore.sh`：把基础备份复制到**新的**数据目录，写 `recovery.signal`，在 `postgresql.auto.conf` 追加 `restore_command`、`recovery_target_action='promote'`、可选 `recovery_target_time`（`recovery_target_inclusive=on`），并设 `archive_mode=off`（避免恢复出的新时间线写回正在使用的归档）。不启动服务器。
+- `deploy/postgres_test.go` 在无服务器的情况下执行这些脚本（归档/重试/拒绝覆盖/恢复助手/恢复目录准备与拒绝）。
+
+生产建议：归档目录必须在数据库机器丢失后仍可用（另一台机器/磁盘）；更推荐 **pgBackRest** 或 **WAL-G**（推送到 S3/R2、保留策略、并行恢复、加密），GoStack 不依赖二者，替换 `archive_command`/`restore_command` 即可。需要「机器丢失零丢失」时，归档不够：使用同步备库或 `pg_receivewal --synchronous` + `synchronous_standby_names`（未在本项目中实现或演练）。
+
+### PITR 恢复流程
+
+1. 隔离旧主库（停止或在网络上切断），确保不会双写；停止所有应用实例。
+2. 选定目标时间 T（UTC，微秒），必须晚于所用基础备份结束时间；不指定则恢复到归档末尾。
+3. `deploy/postgres/pitr-restore.sh --base BASE --archive ARCHIVE --to NEWDATA [--target-time 'YYYY-MM-DD HH:MM:SS.ffffff+00']`
+4. `pg_ctl -D NEWDATA -o "-p PORT" -l NEWDATA/recovery.log start`；等待 `SELECT pg_is_in_recovery()` 为 `f`。日志中 `recovery stopping before commit …`/`last completed transaction was at log time …` 给出实际恢复点。
+5. 校验：`APP backup snapshot --to X && APP backup verify X`（或至少 `APP game reconcile`、`APP migrate status`）。
+6. 将 `database.dsn_ref` 指向新集群，启动应用，确认 `/readyz`。
+7. 为新集群配置**新的**归档目录、开启 `archive_mode`（重启）并立即做一次新的基础备份。
+
+### PITR 演练（`scripts/drill/pg_pitr.sh` → `tests/drill/pgpitr`）
+
+每次运行：`initdb`（scram-sha-256，随机口令，仅 127.0.0.1 TCP）→ 附加 `deploy/postgres/postgresql.pitr.conf`（路径替换、`archive_timeout` 可调）→ 创建 `gostack` 角色（CREATEDB）与 C 排序库 → `gostack init --kit game --gostack-path` 生成的应用以 profile scale（`dsn_ref: env:…`、`queue.driver: postgres`、`rate_limit.accept_per_instance: true`）运行 → N 个客户端经 HTTP 循环执行游客注册、`PUT /saves/main`、`POST /rewards/tick/claim`、`POST /boards/main/scores`，记录每个写入的**发送时刻与确认时刻** → 负载 3 s 后用 `base-backup.sh` 做基础备份，并做一次 `backup snapshot` + `backup verify`（负载中、scram 口令经环境变量）→ 负载中点记录 T → 负载结束时对 PostgreSQL **整个进程组 SIGKILL**（模拟机器丢失）并杀应用 → 分别用 `pitr-restore.sh` 恢复两个新集群：(a) 到 T，(b) 到归档末尾（latest）→ 各自启动应用，运行 `migrate status`、`game reconcile`、`backup snapshot` + `backup verify`，并用保存的游客凭据经 HTTP 回读存档 revision、coin 余额、榜单 `me.score`。
+
+判定（客户端与服务器同一时钟；PostgreSQL 提交时间戳精度 1 µs）：
+- 到 T：确认时刻 ≤ T 的写入必须存在（提交早于确认）；发送时刻 > T+1µs 的写入必须不存在（提交晚于发送）；两者之间为边界在途写入，任意结果都正确，单列统计。
+- latest：以日志中 `last completed transaction was at log time`（最后重放的提交时间 L）为界，确认时刻 ≤ L 的写入必须存在；`redo done` 的 LSN 必须进入最后一个已归档段（即已归档的 WAL 全部重放）。RPO = kill 时刻 − L。
+- RTO = `pitr-restore.sh`（复制基础备份）+ 启动到 promote 完成 + 应用 `/readyz`；不含人工决策、装机、切流。
+
+### 本地演练结果（2026-11-25，**本机 macOS 数据，不代表 1C1G 或生产环境**）
+
+环境：Apple M5 Pro（15 核）、64 GiB、macOS（Darwin 27.0.0, arm64）、本机 SSD；PostgreSQL 17.11（Homebrew）；Go 1.27.4。归档目录为**同一块本地 SSD 上的目录**（无网络/对象存储延迟），基础备份、归档、恢复集群都在同一台机器上；RTO 为下限。
+
+命令：
+```bash
+PG_BIN=/opt/homebrew/bin RUNS=2 DURATION=60s WORKERS=8 scripts/drill/pg_pitr.sh > drillA.json             # A1/A2
+PG_BIN=/opt/homebrew/bin RUNS=2 DURATION=60s WORKERS=4 THINK=20ms scripts/drill/pg_pitr.sh > drillB.json  # B1/B2
+```
+两条命令均退出 0（JSON `"ok": true`）。`archive_timeout=10s`。
+
+| 演练 | 负载 | 确认写入/s（总数） | 基础备份 | 负载中逻辑快照 + verify | 库目录@kill | 归档段（大小） | kill 时未归档 WAL（最后采样） | 到 T：RTO（复制/恢复/应用） | 到 T：必须存在/缺失 · 必须不存在/出现 · 在途 | latest：RTO | latest：必须存在/缺失 · 丢失确认写入 | latest：RPO |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| A1 | 8 并发无间隔，60 s | 3089（185368） | 0.65 s，92 MB | 4.51 s + 0.63 s，OK | 547 MB | 40（671 MB） | ≈13 MB | 2.38 s（0.40/1.87/0.11） | 102907/0 · 82453/0 · 8 | 3.66 s（0.41/3.14/0.11） | 180794/0 · 4572 | 1.41 s |
+| A2 | 同上 | 3933（235967） | 0.71 s，87 MB | 3.27 s + 0.66 s，OK | 683 MB | 52（872 MB） | ≈7 MB | 2.23 s（0.34/1.79/0.11） | 121419/0 · 114540/0 · 8 | 3.72 s（0.32/3.36/0.04） | 233156/0 · 2809 | 0.77 s |
+| B1 | 4 并发、每操作间隔 20 ms，60 s | 177（10595） | 0.52 s，53 MB | 0.24 s + 0.31 s，OK | 63 MB | 7（117 MB） | ≈3 MB | 1.71 s（0.78/0.82/0.11） | 5377/0 · 5215/0 · 3 | 2.27 s（1.18/0.99/0.10） | 9566/0 · 1028 | 5.87 s |
+| B2 | 同上 | 177（10636） | 0.52 s，53 MB | 0.25 s + 0.26 s，OK | 63 MB | 7（117 MB） | ≈4 MB | 0.87 s（0.42/0.40/0.05） | 5411/0 · 5222/0 · 3 | 1.02 s（0.41/0.55/0.07） | 9402/0 · 1233 | 6.90 s |
+
+所有 8 次恢复：`migrate status` 12/12 无漂移、`game reconcile` 0 差异、`backup verify` 通过（清单 0 差异）；到 T 的恢复日志为 `recovery stopping before commit of transaction …`，**0 个 T 前确认的写入缺失、0 个 T 后发送的写入出现**；latest 恢复全部重放到最后一个已归档段，T/L 之前确认的写入 0 缺失。
+
+结论（仅限本环境）：
+- 时间点恢复按提交时间精确截断，可用于“回到误操作之前”。恢复后客户端在 T 之后收到成功的写入（含领奖账本、新注册玩家）全部回退，需要业务上的补偿/公告流程。
+- 机器丢失时（只剩基础备份 + 归档）**会丢数据**：丢失的是尚未归档的当前 WAL 段。高写入下段约每 1 s 写满，RPO 0.8–1.4 s；低写入下由 `archive_timeout` 决定，10 s 时观测 5.9–6.9 s（上界约为 archive_timeout）。生产默认 60 s 意味着低峰期最多约 1 分钟的已确认写入可能丢失；更小的 RPO 需要更小的 `archive_timeout`（每次切换归档整段 16 MB）或流式复制/`pg_receivewal`。
+- RTO 主要是 WAL 重放；本次 36–48 个段重放 3.1–3.4 s。实际 RTO 取决于基础备份大小与基础备份后的 WAL 量（应定期做基础备份）以及归档所在存储的读取速度。
+
+### 仍未验证（PostgreSQL）
+
+- 远程/对象存储归档（pgBackRest、WAL-G、NFS）及其网络中断行为；1C1G 目标机上的备份/恢复时间；大库（GB 级以上）的 pg_dump/verify 与基础备份耗时。
+- tar 格式/压缩基础备份（脚本只做 plain 格式）；跨主版本恢复；`backup restore` 到托管 PG（权限受限、无 CREATEDB 时 verify 需 `--dsn-ref` 指向其他服务器）。
+- 恢复后重新开启归档并做新基础备份（流程第 7 步）未在演练中执行。
+- HA/同步复制、`pg_receivewal` 零丢失方案未实现。
